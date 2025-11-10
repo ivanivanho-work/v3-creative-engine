@@ -1,0 +1,16 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Allow public read access to all files (for CDN)
+    match /{allPaths=**} {
+      allow read: if true;
+    }
+
+    // Only allow writes from Cloud Functions (via admin SDK)
+    match /{allPaths=**} {
+      allow write: if false;
+    }
+  }
+}
