@@ -5,11 +5,12 @@ service cloud.firestore {
 
     // Jobs collection
     match /jobs/{jobId} {
-      // Allow read for authenticated users
-      allow read: if request.auth != null;
+      // Allow read for everyone (for testing)
+      // TODO: Add authentication in Phase 2
+      allow read: if true;
 
-      // Allow create for authenticated users and cloud functions
-      allow create: if request.auth != null;
+      // Allow create for everyone (Cloud Functions use admin SDK which bypasses rules)
+      allow create: if true;
 
       // Allow update/delete only for cloud functions (via admin SDK)
       allow update, delete: if false;

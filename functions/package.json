@@ -4,7 +4,7 @@
   "description": "Cloud Functions for V3 Creative Engine",
   "main": "src/index.js",
   "engines": {
-    "node": "18"
+    "node": "20"
   },
   "scripts": {
     "serve": "firebase emulators:start --only functions",
