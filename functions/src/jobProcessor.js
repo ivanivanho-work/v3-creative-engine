@@ -34,11 +34,12 @@ async function processJob(snap, context) {
     }
 
     const processingTimeMs = Date.now() - startTime;
-    const storageUrl = await uploadToStorage(jobId, job.type, result);
 
+    // Phase 1: Use the placeholder URL directly from Gemini
+    // Phase 2: Download the actual image/video and upload to our storage
     await jobRef.update({
       status: 'complete',
-      result: { url: storageUrl, metadata: result.metadata },
+      result: { url: result.url, metadata: result.metadata },
       processedAt: admin.firestore.FieldValue.serverTimestamp(),
       processingTimeMs,
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
