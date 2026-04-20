@@ -1,306 +1,211 @@
-import { useState } from 'react';
-import { Calendar, ChevronDown, ChevronUp } from 'lucide-react';
-
-interface ArchivedTrend {
-  id: string;
-  topicName: string;
-  description: string;
-  targetDemo: string;
-  rank: number;
-  score: number;
-  source: string;
-}
-
-interface WeeklyArchive {
-  weekLabel: string;
-  weekStart: string;
-  weekEnd: string;
-  market: string;
-  trends: ArchivedTrend[];
-}
-
-// Mock archived data
-const mockArchives: Record<string, WeeklyArchive[]> = {
-  JP: [
-    {
-      weekLabel: 'Week of January 6-12, 2026',
-      weekStart: '2026-01-06',
-      weekEnd: '2026-01-12',
-      market: 'Japan',
-      trends: [
-        {
-          id: 'arch-jp-1',
-          topicName: 'New Year Temple Visits',
-          description: 'Traditional first shrine visits of the year trending across all demographics.',
-          targetDemo: 'All 18-44',
-          rank: 1,
-          score: 97,
-          source: 'Nyan Cat',
-        },
-        {
-          id: 'arch-jp-2',
-          topicName: 'Winter Sale Hauls',
-          description: 'Department store winter sale shopping hauls gaining traction.',
-          targetDemo: 'Females 18-34',
-          rank: 2,
-          score: 94,
-          source: 'Agency',
-        },
-        {
-          id: 'arch-jp-3',
-          topicName: 'Osechi Cooking Tutorial',
-          description: 'Traditional New Year food preparation videos.',
-          targetDemo: 'Females 25-44',
-          rank: 3,
-          score: 89,
-          source: 'Search',
-        },
-      ],
-    },
-    {
-      weekLabel: 'Week of December 30, 2025 - January 5, 2026',
-      weekStart: '2025-12-30',
-      weekEnd: '2026-01-05',
-      market: 'Japan',
-      trends: [
-        {
-          id: 'arch-jp-4',
-          topicName: 'Year-End Countdown Events',
-          description: 'Live countdown celebrations from major cities.',
-          targetDemo: 'All 18-34',
-          rank: 1,
-          score: 99,
-          source: 'Nyan Cat',
-        },
-        {
-          id: 'arch-jp-5',
-          topicName: '2025 Recap Videos',
-          description: 'Personal year-in-review montages trending.',
-          targetDemo: 'All 18-44',
-          rank: 2,
-          score: 95,
-          source: 'Search',
-        },
-        {
-          id: 'arch-jp-6',
-          topicName: 'Kohaku Uta Gassen Reactions',
-          description: 'Reactions to NHK\'s annual music show.',
-          targetDemo: 'All 25-54',
-          rank: 3,
-          score: 91,
-          source: 'Music',
-        },
-      ],
-    },
-  ],
-  KR: [
-    {
-      weekLabel: 'Week of January 6-12, 2026',
-      weekStart: '2026-01-06',
-      weekEnd: '2026-01-12',
-      market: 'South Korea',
-      trends: [
-        {
-          id: 'arch-kr-1',
-          topicName: 'Lunar New Year Prep',
-          description: 'Traditional Seollal preparation and gift ideas.',
-          targetDemo: 'All 25-44',
-          rank: 1,
-          score: 96,
-          source: 'Search',
-        },
-        {
-          id: 'arch-kr-2',
-          topicName: 'K-Drama Winter Fashion',
-          description: 'Fashion inspired by hit winter dramas.',
-          targetDemo: 'Females 18-34',
-          rank: 2,
-          score: 93,
-          source: 'Agency',
-        },
-      ],
-    },
-  ],
-  IN: [
-    {
-      weekLabel: 'Week of January 6-12, 2026',
-      weekStart: '2026-01-06',
-      weekEnd: '2026-01-12',
-      market: 'India',
-      trends: [
-        {
-          id: 'arch-in-1',
-          topicName: 'Republic Day Preparations',
-          description: 'Patriotic content leading up to Republic Day celebrations.',
-          targetDemo: 'All 18-44',
-          rank: 1,
-          score: 95,
-          source: 'Search',
-        },
-      ],
-    },
-  ],
-  ID: [
-    {
-      weekLabel: 'Week of January 6-12, 2026',
-      weekStart: '2026-01-06',
-      weekEnd: '2026-01-12',
-      market: 'Indonesia',
-      trends: [
-        {
-          id: 'arch-id-1',
-          topicName: 'New Year Beach Getaways',
-          description: 'Beach vacation content trending post-holidays.',
-          targetDemo: 'All 18-34',
-          rank: 1,
-          score: 92,
-          source: 'Nyan Cat',
-        },
-      ],
-    },
-  ],
-  AUNZ: [
-    {
-      weekLabel: 'Week of January 6-12, 2026',
-      weekStart: '2026-01-06',
-      weekEnd: '2026-01-12',
-      market: 'Australia & New Zealand',
-      trends: [
-        {
-          id: 'arch-aunz-1',
-          topicName: 'Australia Day Planning',
-          description: 'BBQ recipes and celebration ideas gaining momentum.',
-          targetDemo: 'All 25-44',
-          rank: 1,
-          score: 88,
-          source: 'Search',
-        },
-      ],
-    },
-  ],
-};
+import { useEffect, useState } from 'react';
+import { Calendar, ChevronDown, ChevronUp, Trash2, ExternalLink } from 'lucide-react';
+import {
+  getArchives,
+  deleteArchive,
+  entryTopTrends,
+  type ArchiveEntry,
+} from '@/services/archiveStore';
 
 interface ArchiveViewProps {
   market: string;
 }
 
+const MARKET_NAMES: Record<string, string> = {
+  JP: 'Japan',
+  KR: 'South Korea',
+  IN: 'India',
+  ID: 'Indonesia',
+  AUNZ: 'Australia & New Zealand',
+};
+
+function formatSavedAt(iso: string) {
+  try {
+    const d = new Date(iso);
+    return d.toLocaleString(undefined, {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    });
+  } catch {
+    return iso;
+  }
+}
+
+function getSourceBadgeColor(source: string) {
+  switch (source) {
+    case 'Nyan Cat':
+      return 'bg-purple-500/20 text-purple-400 border border-purple-500/30';
+    case 'Vayner':
+      return 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30';
+    default:
+      return 'bg-gray-500/20 text-gray-400 border border-gray-500/30';
+  }
+}
+
 export function ArchiveView({ market }: ArchiveViewProps) {
-  const [expandedWeeks, setExpandedWeeks] = useState<Set<string>>(new Set([mockArchives[market]?.[0]?.weekLabel]));
+  const [entries, setEntries] = useState<ArchiveEntry[]>([]);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
-  const archives = mockArchives[market] || [];
-
-  const toggleWeek = (weekLabel: string) => {
-    const newExpanded = new Set(expandedWeeks);
-    if (newExpanded.has(weekLabel)) {
-      newExpanded.delete(weekLabel);
-    } else {
-      newExpanded.add(weekLabel);
-    }
-    setExpandedWeeks(newExpanded);
+  const refresh = () => {
+    const all = getArchives(market);
+    setEntries(all);
+    // Auto-expand the newest entry so the user sees content immediately.
+    if (all[0]) setExpandedIds(new Set([all[0].id]));
   };
 
-  const getSourceBadgeColor = (source: string) => {
-    switch (source) {
-      case 'Search':
-        return 'bg-blue-500/20 text-blue-400 border border-blue-500/30';
-      case 'Nyan Cat':
-        return 'bg-purple-500/20 text-purple-400 border border-purple-500/30';
-      case 'Agency':
-        return 'bg-orange-500/20 text-orange-400 border border-orange-500/30';
-      case 'Music':
-        return 'bg-pink-500/20 text-pink-400 border border-pink-500/30';
-      default:
-        return 'bg-gray-500/20 text-gray-400 border border-gray-500/30';
-    }
+  useEffect(() => {
+    refresh();
+  }, [market]);
+
+  const toggle = (id: string) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   };
+
+  const handleDelete = (id: string) => {
+    deleteArchive(id);
+    refresh();
+  };
+
+  const marketName = MARKET_NAMES[market] ?? market;
 
   return (
     <div>
-      {/* Info */}
       <div className="mb-6 p-4 bg-card border border-border rounded-lg flex gap-3">
         <Calendar className="size-5 text-primary flex-shrink-0 mt-0.5" />
         <div>
           <h4 className="text-foreground font-medium mb-1">Historical Archive</h4>
           <p className="text-muted-foreground text-sm">
-            Browse past weeks' top topics and trends. Data is archived weekly and retained for 12 weeks.
+            Every successful matching run is auto-saved here. Switch the market
+            filter above to browse archives for a different region.
           </p>
         </div>
       </div>
 
-      {/* Archive List */}
-      {archives.length === 0 ? (
+      {entries.length === 0 ? (
         <div className="p-8 text-center bg-card rounded-lg border border-border">
           <Calendar className="size-12 mx-auto mb-4 text-muted-foreground" />
-          <p className="text-muted-foreground">No archived data available for {market}</p>
+          <p className="text-muted-foreground">
+            No archived runs yet for {marketName}. Run matching on the Top Topics
+            & Trends tab to create an archive entry.
+          </p>
         </div>
       ) : (
         <div className="space-y-4">
-          {archives.map((archive) => {
-            const isExpanded = expandedWeeks.has(archive.weekLabel);
-            
-            return (
-              <div key={archive.weekLabel} className="bg-card border border-border rounded-lg overflow-hidden">
-                {/* Week Header */}
-                <button
-                  onClick={() => toggleWeek(archive.weekLabel)}
-                  className="w-full px-5 py-4 flex items-center justify-between hover:bg-muted/50 transition-colors"
-                >
-                  <div className="flex items-center gap-3">
-                    <Calendar className="size-5 text-muted-foreground" />
-                    <div className="text-left">
-                      <h3 className="text-foreground font-medium">{archive.weekLabel}</h3>
-                      <p className="text-sm text-muted-foreground">{archive.trends.length} top trends</p>
-                    </div>
-                  </div>
-                  {isExpanded ? (
-                    <ChevronUp className="size-5 text-muted-foreground" />
-                  ) : (
-                    <ChevronDown className="size-5 text-muted-foreground" />
-                  )}
-                </button>
+          {entries.map((entry) => {
+            const isExpanded = expandedIds.has(entry.id);
+            const top = entryTopTrends(entry, 10);
+            const stats = entry.result.stats;
 
-                {/* Week Content */}
+            return (
+              <div
+                key={entry.id}
+                className="bg-card border border-border rounded-lg overflow-hidden"
+              >
+                <div className="w-full px-5 py-4 flex items-center justify-between gap-3">
+                  <button
+                    onClick={() => toggle(entry.id)}
+                    className="flex items-center gap-3 flex-1 text-left hover:opacity-80 transition-opacity"
+                  >
+                    <Calendar className="size-5 text-muted-foreground" />
+                    <div>
+                      <h3 className="text-foreground font-medium">
+                        {formatSavedAt(entry.savedAt)} — {marketName}
+                      </h3>
+                      <p className="text-sm text-muted-foreground">
+                        {stats.internalParsed} internal · {stats.externalParsed} external ·{' '}
+                        {stats.matched} matched
+                      </p>
+                    </div>
+                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleDelete(entry.id)}
+                      className="p-2 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                      aria-label="Delete archive entry"
+                    >
+                      <Trash2 className="size-4" />
+                    </button>
+                    <button
+                      onClick={() => toggle(entry.id)}
+                      className="p-1 rounded hover:bg-muted text-muted-foreground"
+                      aria-label={isExpanded ? 'Collapse' : 'Expand'}
+                    >
+                      {isExpanded ? <ChevronUp className="size-5" /> : <ChevronDown className="size-5" />}
+                    </button>
+                  </div>
+                </div>
+
                 {isExpanded && (
-                  <div className="border-t border-border">
-                    <div className="p-5 space-y-3">
-                      {archive.trends.map((trend) => (
-                        <div
-                          key={trend.id}
-                          className="p-4 bg-muted/50 rounded-lg hover:bg-muted transition-colors"
-                        >
-                          <div className="flex items-start gap-4">
-                            {/* Rank */}
-                            <div className="flex-shrink-0">
-                              <div className="size-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-semibold">
+                  <div className="border-t border-border p-5">
+                    {(entry.nyanCatFileName || entry.vaynerFileName) && (
+                      <div className="mb-4 text-xs text-muted-foreground">
+                        {entry.nyanCatFileName && <div>Nyan Cat: {entry.nyanCatFileName}</div>}
+                        {entry.vaynerFileName && <div>Vayner: {entry.vaynerFileName}</div>}
+                      </div>
+                    )}
+
+                    {top.length === 0 ? (
+                      <p className="text-sm text-muted-foreground italic">
+                        This run had no visible trends.
+                      </p>
+                    ) : (
+                      <div className="space-y-3">
+                        {top.map((trend) => (
+                          <div
+                            key={trend.id}
+                            className="p-4 bg-muted/50 rounded-lg"
+                          >
+                            <div className="flex items-start gap-4">
+                              <div className="flex-shrink-0 size-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-semibold">
                                 #{trend.rank}
                               </div>
-                            </div>
-
-                            {/* Content */}
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-start justify-between gap-4 mb-2">
-                                <h4 className="text-foreground font-medium">{trend.topicName}</h4>
-                                <div className="text-right flex-shrink-0">
-                                  <div className="text-xl font-bold text-foreground">{trend.score}</div>
-                                  <div className="text-xs text-muted-foreground">Score</div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-start justify-between gap-4 mb-2">
+                                  <h4 className="text-foreground font-medium">{trend.topicName}</h4>
+                                  <div className="text-right flex-shrink-0">
+                                    <div className="text-xl font-bold text-foreground">
+                                      {typeof trend.score === 'number' ? Math.round(trend.score) : '—'}
+                                    </div>
+                                    <div className="text-xs text-muted-foreground">Score</div>
+                                  </div>
                                 </div>
-                              </div>
-
-                              <p className="text-foreground text-sm mb-3">{trend.description}</p>
-
-                              <div className="flex flex-wrap items-center gap-2">
-                                <span className={`px-2 py-1 rounded-full text-sm ${getSourceBadgeColor(trend.source)}`}>
-                                  {trend.source}
-                                </span>
-                                <span className="px-2 py-1 rounded-full bg-secondary text-secondary-foreground text-sm">
-                                  {trend.targetDemo}
-                                </span>
+                                {trend.description && (
+                                  <p className="text-foreground text-sm mb-3 line-clamp-2">
+                                    {trend.description}
+                                  </p>
+                                )}
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className={`px-2 py-1 rounded-full text-xs ${getSourceBadgeColor(trend.source)}`}>
+                                    {trend.source}
+                                  </span>
+                                  {trend.targetDemo && (
+                                    <span className="px-2 py-1 rounded-full bg-secondary text-secondary-foreground text-xs">
+                                      {trend.targetDemo}
+                                    </span>
+                                  )}
+                                  {trend.referenceLink && (
+                                    <a
+                                      href={trend.referenceLink}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-1 text-primary hover:underline text-xs"
+                                    >
+                                      <ExternalLink className="size-3" />
+                                      View reference
+                                    </a>
+                                  )}
+                                </div>
                               </div>
                             </div>
                           </div>
-                        </div>
-                      ))}
-                    </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

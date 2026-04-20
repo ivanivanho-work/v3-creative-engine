@@ -4,6 +4,7 @@ import {
   ChevronDown, ChevronRight, Music, Hash, Users, Globe, Zap, ShieldCheck, ShieldOff,
 } from 'lucide-react';
 import { matchAndRank, type MatchAndRankResponse, type MatchPair } from '@/services/api';
+import { addArchive } from '@/services/archiveStore';
 import type { Trend } from '@/types';
 
 function formatCompact(n: number | undefined): string | null {
@@ -293,9 +294,10 @@ function TrackColumn({ title, count, accentClass, accentText, children }: {
 interface ThreeTrackViewProps {
   nyanCatFile: File | null;
   vaynerFile: File | null;
+  market: string;
 }
 
-export function ThreeTrackView({ nyanCatFile, vaynerFile }: ThreeTrackViewProps) {
+export function ThreeTrackView({ nyanCatFile, vaynerFile, market }: ThreeTrackViewProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<MatchAndRankResponse | null>(null);
@@ -314,6 +316,12 @@ export function ThreeTrackView({ nyanCatFile, vaynerFile }: ThreeTrackViewProps)
     try {
       const res = await matchAndRank(nyanCatFile, vaynerFile);
       setResult(res);
+      addArchive({
+        market,
+        nyanCatFileName: nyanCatFile?.name ?? null,
+        vaynerFileName: vaynerFile?.name ?? null,
+        result: res,
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Matching failed');
     } finally {

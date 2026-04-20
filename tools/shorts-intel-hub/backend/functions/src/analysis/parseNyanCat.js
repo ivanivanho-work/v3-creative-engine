@@ -177,6 +177,9 @@ export function parseNyanCatRows(rows) {
       videoCount: videos.length,
       audioId,
 
+      // Raw per-video rows — preserved so IRS can score per-video then aggregate.
+      videos,
+
       // Legacy fields used by existing UI
       rank: 0,
       score: 0,

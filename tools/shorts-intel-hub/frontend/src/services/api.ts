@@ -9,32 +9,9 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000
 // TYPE DEFINITIONS
 // ============================================================================
 
-export interface Trend {
-  id: string;
-  topicName: string;
-  description: string;
-  targetDemo: string;
-  referenceLink: string;
-  hashtags?: string[];
-  audio?: string;
-  rank: number;
-  score: number;
-  velocity: 'increasing' | 'stable' | 'decreasing';
-  ageInWeeks: number;
-  source: 'Search' | 'Nyan Cat' | 'Agency' | 'Music';
-  viewsVolume?: string;
-  viewsVelocity?: string;
-  creationRate?: string;
-  watchtimeVolume?: string;
-  watchtimeVelocity?: string;
-  
-  // Backend fields
-  createdAt?: string;
-  updatedAt?: string;
-  approvedBy?: string;
-  approvedAt?: string;
-  archivedAt?: string;
-}
+// Re-export the canonical Trend from @/types so all call sites agree.
+export type { Trend } from '@/types';
+import type { Trend } from '@/types';
 
 export interface ScoringWeights {
   viewsVolume: number;

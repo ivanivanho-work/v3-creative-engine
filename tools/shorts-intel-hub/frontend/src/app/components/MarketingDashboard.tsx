@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { StatsDashboard } from '@/app/components/StatsDashboard';
-import { DeepDiveView } from '@/app/components/DeepDiveView';
 import { ScoringSettings } from '@/app/components/ScoringSettings';
 import { ArchiveView } from '@/app/components/ArchiveView';
 import { ThreeTrackView } from '@/app/components/ThreeTrackView';
@@ -21,8 +20,7 @@ interface MarketingDashboardProps {
 export function MarketingDashboard({ nyanCatFile, vaynerFile }: MarketingDashboardProps) {
   const [selectedMarket, setSelectedMarket] = useState('JP');
   const [approvedCount] = useState(0);
-  const [activeTab, setActiveTab] = useState<'summary' | 'deepdive' | 'scoring' | 'archive'>('summary');
-  const [selectedSource, setSelectedSource] = useState('All Sources');
+  const [activeTab, setActiveTab] = useState<'summary' | 'scoring' | 'archive'>('summary');
 
   return (
     <div className="px-6 py-6">
@@ -61,19 +59,6 @@ export function MarketingDashboard({ nyanCatFile, vaynerFile }: MarketingDashboa
               >
                 Top Topics & Trends
                 {activeTab === 'summary' && (
-                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
-                )}
-              </button>
-              <button
-                onClick={() => setActiveTab('deepdive')}
-                className={`px-4 py-3 font-medium transition-colors relative ${
-                  activeTab === 'deepdive'
-                    ? 'text-primary'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                Deep Dive
-                {activeTab === 'deepdive' && (
                   <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
                 )}
               </button>
@@ -118,12 +103,10 @@ export function MarketingDashboard({ nyanCatFile, vaynerFile }: MarketingDashboa
 
         {/* Tab Content */}
         {activeTab === 'summary' ? (
-          <ThreeTrackView nyanCatFile={nyanCatFile} vaynerFile={vaynerFile} />
-        ) : activeTab === 'deepdive' ? (
-          <DeepDiveView
-            trends={[]}
-            selectedSource={selectedSource}
-            onSourceChange={setSelectedSource}
+          <ThreeTrackView
+            nyanCatFile={nyanCatFile}
+            vaynerFile={vaynerFile}
+            market={selectedMarket}
           />
         ) : activeTab === 'scoring' ? (
           <ScoringSettings />

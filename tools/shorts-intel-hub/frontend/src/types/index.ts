@@ -115,8 +115,28 @@ export type TargetDemo =
   | 'Females 45+';
 
 // ============================================================================
-// SCORING TYPES — External Ranking Score (ERS)
+// SCORING TYPES — ERS (Vayner/external) + IRS (Nyan Cat/internal)
 // ============================================================================
+
+export interface IRSConfig {
+  monetization: {
+    commercialMultiplier: number;
+  };
+  stickiness: {
+    min: number;
+    max: number;
+  };
+  quality: {
+    defaultScore: number;
+  };
+  creation: {
+    bonusPerUpload: number;
+  };
+  boosters: {
+    tools: { threshold: number; multiplier: number };
+    geo: { perCountryBoost: number; maxMultiplier: number };
+  };
+}
 
 export interface ScoringConfig {
   velocity: {
@@ -155,7 +175,19 @@ export interface ScoringConfig {
   origin: {
     youtubeShortsBoost: number;
   };
+  irs: IRSConfig;
 }
+
+export const DEFAULT_IRS_CONFIG: IRSConfig = {
+  monetization: { commercialMultiplier: 1.15 },
+  stickiness: { min: 0.5, max: 1.5 },
+  quality: { defaultScore: 0.5 },
+  creation: { bonusPerUpload: 10 },
+  boosters: {
+    tools: { threshold: 100, multiplier: 1.25 },
+    geo: { perCountryBoost: 0.05, maxMultiplier: 1.5 },
+  },
+};
 
 export const DEFAULT_SCORING_CONFIG: ScoringConfig = {
   velocity: { trending: 2.5, emerging: 1.5, niche: 1.0 },
@@ -171,6 +203,7 @@ export const DEFAULT_SCORING_CONFIG: ScoringConfig = {
   freshness: { recentDays: 7, staleDays: 30, stalePenalty: 0.8 },
   quality: { potentialSlopMultiplier: 0.6, slopHidden: true },
   origin: { youtubeShortsBoost: 1.2 },
+  irs: DEFAULT_IRS_CONFIG,
 };
 
 // ============================================================================
@@ -254,7 +287,7 @@ export interface TrendFilters {
 // VIEW STATE TYPES
 // ============================================================================
 
-export type TabView = 'summary' | 'deepdive' | 'scoring' | 'archive';
+export type TabView = 'summary' | 'scoring' | 'archive';
 export type AppView = 'dashboard' | 'upload';
 
 // ============================================================================
