@@ -281,15 +281,12 @@ async function createSession() {
   marketSelect.disabled = true;
 }
 
-// Eagerly pre-create session so first send has zero wait
+// Session is created lazily on first send so the user can change market first.
 function ensureSession() {
   if (sessionId) return Promise.resolve();
   if (!sessionPromise) sessionPromise = createSession().catch(() => { sessionPromise = null; });
   return sessionPromise;
 }
-
-// Pre-create on load
-ensureSession();
 
 // =========================================================================
 // Event listeners
@@ -915,11 +912,10 @@ async function loadArchiveList() {
 }
 
 marketSelect.addEventListener("change", () => {
-  // Reset session for new market and pre-create eagerly
+  // Reset any pending session so the next send uses the newly chosen market.
   if (!marketSelect.disabled) {
     sessionId = null;
     sessionPromise = null;
-    ensureSession();
   }
   loadArchiveList();
 });
