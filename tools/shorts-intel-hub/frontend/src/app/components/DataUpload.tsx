@@ -1,82 +1,13 @@
 import { useRef, useState } from 'react';
 import { Upload, Download, FileText, X } from 'lucide-react';
-
-const templateMarkdown = `# Shorts Intel Hub - Data Upload Template
-
-Two CSV formats are supported. The server auto-detects format from the headers.
-
----
-
-## 1. Vayner (trend-level, curated)
-
-One row per trend. Required headers:
-
-\`\`\`
-Date Identified, GenAI/non-GenAI, Topic Name, Trend Velocity, Description,
-Creation Complexity (Ease of Participation), Trend Scale (Creation-led/Viewer-led),
-Trend Bucket, AI Tool, Brand Safe, Content Quality, Initial Trigger,
-Reference Links, Publication Date, Length of Video (sec), Creator Subscriber Count,
-Views, Likes, Comments, Reposts (IG or X), Shares (TT-only, Saves (TT-only),
-Engagement Rate, Hashtags (comma-separated), Audio Track, Audio Track URL,
-Creation Volume, Platform Origin, Platforms Trending, Primary Markets,
-Secondary Markets, Target Demo, User Sentiment, Score Ranking, Normalized
-\`\`\`
-
-### Quality gate values
-- **Brand Safe**: \`Yes\` | \`No\`
-- **Content Quality**: \`Not AI Slop\` | \`Potential AI Slop\` | \`AI Slop\` | (blank)
-- **User Sentiment**: \`Positive\` | \`Mix-Sentiment\` | \`Negative\`
-- **Trend Velocity**: \`Trending\` | \`Emerging\` | \`Niche\`
-- **Creation Complexity**: \`Easy\` | \`Medium\` | \`Hard\`
-- **Trend Scale**: \`Creation-Led\` | \`Viewer-led\`
-
-Trends with \`Brand Safe=No\`, \`Content Quality=AI Slop\`, or \`User Sentiment=Negative\`
-are scored as 0 and hidden by default. \`Potential AI Slop\` trends appear with a
-"For quality review" pill.
-
----
-
-## 2. Nyan Cat (video-level, raw)
-
-One row per YouTube Short. The server groups by \`audio_id\` and aggregates
-views, watchtime, and quality signals into trend-level rows.
-
-Required headers:
-
-\`\`\`
-external_video_id, Shorts_link, audio_id, Song_link, Song_title,
-shorts_video_published_date, title, description, Hashtags, Is_CPM_Creator,
-Is_influencer, shorts_video_upload_country, yearr, length_sec,
-has_video_shorts_creation, first_level_vertical_name, second_level_vertical_name,
-third_level_vertical_name, lego_level_1_name, lego_level_2_name, lego_level_3_name,
-creator_age_bucket, creator_gender, elmo_bucket, subs_bucket,
-downstream_uploads_1d_by_shorts_video_published_date,
-downstream_uploads_2d_by_shorts_video_published_date,
-downstream_uploads_3d_by_shorts_video_published_date,
-Views_1D, watch_time_hour_1D, potential_watch_time_hour_1D, engagement_1D,
-Views_2D, watch_time_hour_2D, potential_watch_time_hour_2D, engagement_2D,
-Views_3D, watch_time_hour_3D, potential_watch_time_hour_3D, engagement_3D,
-Total_followers_at_video_published_date, Net_Likes_at_video_published_date,
-visual_quality_score, audio_quality_score,
-Net_Likes_last_30d_from_video_published_date, monetization_enabled_avod,
-linear_reg_7d_pred
-\`\`\`
-
-### Inferred quality signals
-- \`elmo_bucket\` not in \`TRUSTED\`/\`LOW_RISK\` anywhere in the group → Brand Safe = No
-- Average \`visual_quality_score\` < 0.30 → AI Slop (hidden)
-- Average \`visual_quality_score\` < 0.45 → Potential AI Slop (flagged for review)
-
----
-
-## Tips
-
-1. Export directly from your pipeline — the server handles quoted/multi-line
-   fields per RFC 4180.
-2. CSV only. JSON support is deprecated for batch uploads.
-3. After uploading both files, switch to the Marketing Dashboard and click
-   "Run Matching + Ranking" to generate the three-track view.
-`;
+import {
+  NYANCAT_TEMPLATE,
+  VAYNER_TEMPLATE,
+  buildCsv,
+  buildMarkdownGuide,
+  downloadText,
+  type TemplateSpec,
+} from '@/services/uploadTemplates';
 
 interface CsvSlotProps {
   title: string;
@@ -158,24 +89,79 @@ interface DataUploadProps {
   onVaynerFileChange: (f: File | null) => void;
 }
 
+function FieldTable({ spec }: { spec: TemplateSpec }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-xs text-foreground">
+        <thead>
+          <tr className="border-b border-border text-muted-foreground">
+            <th className="text-left py-2 pr-3 font-medium">Column</th>
+            <th className="text-left py-2 pr-3 font-medium w-[70px]">Required</th>
+            <th className="text-left py-2 font-medium">Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          {spec.fields.map((f) => (
+            <tr key={f.name} className="border-b border-border/40 align-top">
+              <td className="py-2 pr-3 font-mono text-[11px] whitespace-nowrap">{f.name}</td>
+              <td className="py-2 pr-3">
+                {f.required ? (
+                  <span className="px-1.5 py-0.5 rounded bg-primary/15 text-primary text-[10px] font-medium">Yes</span>
+                ) : (
+                  <span className="text-muted-foreground text-[10px]">No</span>
+                )}
+              </td>
+              <td className="py-2 pr-3 text-muted-foreground">
+                {f.description}
+                {f.allowedValues && (
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {f.allowedValues.map((v) => (
+                      <code key={v} className="px-1 py-0.5 rounded bg-muted text-foreground text-[10px]">
+                        {v === '' ? '(blank)' : v}
+                      </code>
+                    ))}
+                  </div>
+                )}
+                {f.example && !f.allowedValues && (
+                  <div className="mt-1 text-[10px] text-muted-foreground/70">
+                    e.g. <code className="text-foreground">{f.example}</code>
+                  </div>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      {spec.notes.length > 0 && (
+        <div className="mt-4 space-y-1 text-xs text-muted-foreground">
+          {spec.notes.map((n, i) => (
+            <p key={i}>• {n}</p>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function DataUpload({
   nyanCatFile,
   vaynerFile,
   onNyanCatFileChange,
   onVaynerFileChange,
 }: DataUploadProps) {
-  const [showTemplate, setShowTemplate] = useState(false);
+  const [activeSpec, setActiveSpec] = useState<'nyancat' | 'vayner'>('nyancat');
+  const [showGuide, setShowGuide] = useState(false);
 
-  const downloadTemplate = () => {
-    const blob = new Blob([templateMarkdown], { type: 'text/markdown' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'intel-hub-upload-template.md';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+  const spec = activeSpec === 'nyancat' ? NYANCAT_TEMPLATE : VAYNER_TEMPLATE;
+  const guideMarkdown = buildMarkdownGuide();
+
+  const handleDownloadCsv = (s: TemplateSpec) => {
+    downloadText(buildCsv(s), s.filename, 'text/csv');
+  };
+
+  const handleDownloadGuide = () => {
+    downloadText(guideMarkdown, 'intel-hub-upload-guide.md', 'text/markdown');
   };
 
   return (
@@ -194,14 +180,14 @@ export function DataUpload({
         <div className="mb-6 flex flex-wrap gap-4">
           <CsvSlot
             title="Nyan Cat CSV (Internal)"
-            subtitle="Video-level export. Headers: video_id, audio_id, views, watchtime…"
+            subtitle={`Video-level export — ${NYANCAT_TEMPLATE.fields.length} columns, grouped by audio_id.`}
             accept=".csv,text/csv"
             file={nyanCatFile}
             onPick={onNyanCatFileChange}
           />
           <CsvSlot
             title="Vayner CSV (External)"
-            subtitle="Trend-level export. Headers: Topic Name, Trend Velocity, Content Quality…"
+            subtitle={`Trend-level export — ${VAYNER_TEMPLATE.fields.length} columns, one row per trend.`}
             accept=".csv,text/csv"
             file={vaynerFile}
             onPick={onVaynerFileChange}
@@ -209,32 +195,84 @@ export function DataUpload({
         </div>
 
         <div className="mb-6 bg-card border border-border rounded-lg p-5">
-          <div className="flex items-start justify-between mb-4">
-            <div>
-              <h3 className="text-foreground mb-2">Upload Template & Guidelines</h3>
-              <p className="text-muted-foreground">
-                Full column specs for both Vayner and Nyan Cat CSV formats.
+          <div className="flex items-start justify-between mb-4 gap-4 flex-wrap">
+            <div className="flex-1 min-w-[240px]">
+              <h3 className="text-foreground mb-2">Upload Templates & Field Reference</h3>
+              <p className="text-muted-foreground text-sm">
+                Two separate CSV templates — one per format. Each template includes the
+                exact header row the parser reads plus one example row. Column specs
+                below are generated from the parsers directly, so they stay in sync as
+                the schemas evolve.
               </p>
             </div>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => handleDownloadCsv(NYANCAT_TEMPLATE)}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:opacity-90 transition-opacity text-sm"
+              >
+                <Download className="size-4" />
+                Nyan Cat template (.csv)
+              </button>
+              <button
+                onClick={() => handleDownloadCsv(VAYNER_TEMPLATE)}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:opacity-90 transition-opacity text-sm"
+              >
+                <Download className="size-4" />
+                Vayner template (.csv)
+              </button>
+              <button
+                onClick={handleDownloadGuide}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-secondary text-secondary-foreground hover:bg-accent transition-colors text-sm"
+              >
+                <Download className="size-4" />
+                Full guide (.md)
+              </button>
+            </div>
+          </div>
+
+          {/* Tab switch between specs */}
+          <div className="mb-4 flex gap-2 border-b border-border">
             <button
-              onClick={downloadTemplate}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:opacity-90 transition-opacity"
+              onClick={() => setActiveSpec('nyancat')}
+              className={`px-3 py-2 text-sm font-medium transition-colors relative ${
+                activeSpec === 'nyancat' ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
+              }`}
             >
-              <Download className="size-4" />
-              Download Template
+              Nyan Cat ({NYANCAT_TEMPLATE.fields.length})
+              {activeSpec === 'nyancat' && (
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+              )}
+            </button>
+            <button
+              onClick={() => setActiveSpec('vayner')}
+              className={`px-3 py-2 text-sm font-medium transition-colors relative ${
+                activeSpec === 'vayner' ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              Vayner ({VAYNER_TEMPLATE.fields.length})
+              {activeSpec === 'vayner' && (
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+              )}
             </button>
           </div>
 
+          <div className="mb-4">
+            <h4 className="text-foreground text-sm font-medium mb-1">{spec.title}</h4>
+            <p className="text-xs text-muted-foreground">{spec.subtitle}</p>
+          </div>
+
+          <FieldTable spec={spec} />
+
           <button
-            onClick={() => setShowTemplate(!showTemplate)}
-            className="text-primary hover:underline"
+            onClick={() => setShowGuide(!showGuide)}
+            className="mt-4 text-primary hover:underline text-sm"
           >
-            {showTemplate ? 'Hide' : 'Show'} Template Preview
+            {showGuide ? 'Hide' : 'Show'} markdown guide preview
           </button>
 
-          {showTemplate && (
-            <div className="mt-4 p-4 bg-muted rounded-lg overflow-auto max-h-96">
-              <pre className="text-sm text-foreground whitespace-pre-wrap">{templateMarkdown}</pre>
+          {showGuide && (
+            <div className="mt-3 p-4 bg-muted rounded-lg overflow-auto max-h-96">
+              <pre className="text-xs text-foreground whitespace-pre-wrap">{guideMarkdown}</pre>
             </div>
           )}
         </div>
