@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { MarketingDashboard } from '@/app/components/MarketingDashboard';
-import { AgencyUpload } from '@/app/components/AgencyUpload';
+import { DataUpload } from '@/app/components/DataUpload';
 import { BarChart3, Upload, Youtube } from 'lucide-react';
 
 export default function App() {
   const [activeView, setActiveView] = useState<'dashboard' | 'upload'>('dashboard');
+  const [nyanCatFile, setNyanCatFile] = useState<File | null>(null);
+  const [vaynerFile, setVaynerFile] = useState<File | null>(null);
 
   return (
     <div className="size-full flex flex-col bg-background">
@@ -42,7 +44,7 @@ export default function App() {
                 }`}
               >
                 <Upload className="size-4" />
-                Agency Upload
+                Data Upload
               </button>
             </nav>
           </div>
@@ -51,7 +53,16 @@ export default function App() {
 
       {/* Main Content */}
       <main className="flex-1 overflow-auto">
-        {activeView === 'dashboard' ? <MarketingDashboard /> : <AgencyUpload />}
+        {activeView === 'dashboard' ? (
+          <MarketingDashboard nyanCatFile={nyanCatFile} vaynerFile={vaynerFile} />
+        ) : (
+          <DataUpload
+            nyanCatFile={nyanCatFile}
+            vaynerFile={vaynerFile}
+            onNyanCatFileChange={setNyanCatFile}
+            onVaynerFileChange={setVaynerFile}
+          />
+        )}
       </main>
     </div>
   );

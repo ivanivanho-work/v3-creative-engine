@@ -1,78 +1,260 @@
-import { useRef, useState } from 'react';
-import { Upload, Loader2, Sparkles, Link2, ChevronDown, ChevronUp } from 'lucide-react';
-import { TrendCard } from '@/app/components/TrendCard';
+import { useState } from 'react';
+import {
+  Loader2, Sparkles, Link2, ExternalLink, CheckCircle2, EyeOff, AlertTriangle,
+  ChevronDown, ChevronRight, Music, Hash, Users, Globe, Zap, ShieldCheck, ShieldOff,
+} from 'lucide-react';
 import { matchAndRank, type MatchAndRankResponse, type MatchPair } from '@/services/api';
 import type { Trend } from '@/types';
 
-interface FileSlotProps {
-  label: string;
-  accept: string;
-  file: File | null;
-  onPick: (f: File | null) => void;
-  hint?: string;
+function formatCompact(n: number | undefined): string | null {
+  if (n === undefined || n === null || !Number.isFinite(n)) return null;
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return String(Math.round(n));
 }
 
-function FileSlot({ label, accept, file, onPick, hint }: FileSlotProps) {
-  const inputRef = useRef<HTMLInputElement>(null);
+function SentimentPill({ s }: { s: Trend['sentiment'] }) {
+  if (!s) return null;
+  const cls =
+    s === 'positive' ? 'bg-green-500/20 text-green-400' :
+    s === 'negative' ? 'bg-red-500/20 text-red-400' :
+    s === 'mixed' ? 'bg-orange-500/20 text-orange-400' :
+    'bg-gray-500/20 text-gray-400';
+  return <span className={`px-1.5 py-0.5 rounded-full text-[10px] capitalize ${cls}`}>{s}</span>;
+}
+
+function VelocityPill({ v }: { v: Trend['trendVelocity'] }) {
+  if (!v) return null;
+  const cls =
+    v === 'Trending' ? 'bg-red-500/20 text-red-400' :
+    v === 'Emerging' ? 'bg-yellow-500/20 text-yellow-400' :
+    'bg-gray-500/20 text-gray-400';
+  return <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${cls}`}>{v}</span>;
+}
+
+function CompactTrendCard({ trend, onApprove, isApproved }: {
+  trend: Trend;
+  onApprove: (id: string) => void;
+  isApproved: boolean;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const needsReview = trend.contentQuality === 'potentiallyAISlop';
+  const borderClass = trend.hidden
+    ? 'border-dashed border-muted-foreground/40 opacity-70'
+    : isApproved
+    ? 'border-green-500 bg-green-500/5'
+    : 'border-border hover:border-primary/50';
+
+  const viewsStr = trend.viewsVolume || formatCompact(trend.views);
+  const watchtimeStr = trend.watchtimeVolume || formatCompact((trend as any).watchtimeHours);
+  const engagementPct = trend.engagementRate !== undefined
+    ? `${(trend.engagementRate * 100).toFixed(1)}%`
+    : null;
+
   return (
-    <div className="flex-1 min-w-[240px]">
-      <label className="block mb-2 text-foreground text-sm font-medium">{label}</label>
-      <div className="flex items-center gap-2 p-3 rounded-lg border border-dashed border-border bg-card hover:border-primary/50 transition-colors">
-        <input
-          ref={inputRef}
-          type="file"
-          accept={accept}
-          className="hidden"
-          onChange={(e) => onPick(e.target.files?.[0] ?? null)}
-        />
-        <button
-          type="button"
-          onClick={() => inputRef.current?.click()}
-          className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-secondary text-secondary-foreground hover:bg-accent text-sm"
-        >
-          <Upload className="size-4" />
-          Pick CSV
-        </button>
-        <span className="text-sm text-muted-foreground truncate">
-          {file ? file.name : hint || 'No file chosen'}
-        </span>
+    <div className={`bg-card border rounded-md transition-all ${borderClass}`}>
+      {/* Collapsed header — always visible, clickable to expand */}
+      <button
+        type="button"
+        onClick={() => setExpanded((e) => !e)}
+        className="w-full p-2.5 text-left"
+        aria-expanded={expanded}
+      >
+        <div className="flex items-start gap-2">
+          <div className="flex-shrink-0 size-7 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-semibold">
+            #{trend.rank}
+          </div>
+
+          <div className="flex-1 min-w-0">
+            <div className="flex items-start justify-between gap-2">
+              <h4 className="text-sm text-foreground font-medium leading-tight line-clamp-2 flex-1 min-w-0">
+                {trend.topicName}
+              </h4>
+              <div className="flex-shrink-0 flex items-center gap-1">
+                <div className="text-right">
+                  <div className="text-sm font-bold text-foreground leading-none">{trend.score}</div>
+                  <div className="text-[10px] text-muted-foreground">ERS</div>
+                </div>
+                {expanded
+                  ? <ChevronDown className="size-4 text-muted-foreground" />
+                  : <ChevronRight className="size-4 text-muted-foreground" />}
+              </div>
+            </div>
+
+            {/* Pills row — always shown, compact */}
+            <div className="flex flex-wrap gap-1 mt-1">
+              <VelocityPill v={trend.trendVelocity} />
+              <SentimentPill s={trend.sentiment} />
+              {trend.brandSafe === false && (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-red-500/20 text-red-400 text-[10px]">
+                  <ShieldOff className="size-2.5" />
+                  Unsafe
+                </span>
+              )}
+              {needsReview && (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-orange-500/20 text-orange-400 text-[10px]">
+                  <AlertTriangle className="size-2.5" />
+                  Review
+                </span>
+              )}
+              {trend.hidden && (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-red-500/10 text-red-400 text-[10px]">
+                  <EyeOff className="size-2.5" />
+                  Hidden
+                </span>
+              )}
+              {trend.genAI && (
+                <span className="px-1.5 py-0.5 rounded-full bg-purple-500/20 text-purple-400 text-[10px]">
+                  GenAI
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      </button>
+
+      {/* Expanded detail panel */}
+      {expanded && (
+        <div className="px-2.5 pb-2.5 pt-1 border-t border-border space-y-2 text-[11px]">
+          {trend.description && (
+            <p className="text-foreground leading-snug">{trend.description}</p>
+          )}
+
+          <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-muted-foreground">
+            {trend.targetDemo && (
+              <div className="flex items-center gap-1 min-w-0">
+                <Users className="size-3 flex-shrink-0" />
+                <span className="truncate">{trend.targetDemo}</span>
+              </div>
+            )}
+            {trend.primaryMarkets && trend.primaryMarkets.length > 0 && (
+              <div className="flex items-center gap-1 min-w-0">
+                <Globe className="size-3 flex-shrink-0" />
+                <span className="truncate">{trend.primaryMarkets.join(', ')}</span>
+              </div>
+            )}
+            {trend.audio && (
+              <div className="flex items-center gap-1 col-span-2 min-w-0">
+                <Music className="size-3 flex-shrink-0" />
+                <span className="truncate">{trend.audio}</span>
+              </div>
+            )}
+            {trend.brandSafe === true && (
+              <div className="flex items-center gap-1 text-green-400">
+                <ShieldCheck className="size-3 flex-shrink-0" />
+                Brand safe
+              </div>
+            )}
+            {trend.creationComplexity && (
+              <div className="flex items-center gap-1">
+                <Zap className="size-3 flex-shrink-0" />
+                {trend.creationComplexity}
+              </div>
+            )}
+          </div>
+
+          {(viewsStr || watchtimeStr || trend.creationRate || engagementPct) && (
+            <div className="grid grid-cols-4 gap-1 pt-1">
+              {viewsStr && <Metric label="Views" value={viewsStr} />}
+              {watchtimeStr && <Metric label="Watch" value={watchtimeStr} />}
+              {trend.creationRate && <Metric label="Creates" value={trend.creationRate} />}
+              {engagementPct && <Metric label="Eng." value={engagementPct} />}
+            </div>
+          )}
+
+          {trend.hashtags && trend.hashtags.length > 0 && (
+            <div className="flex items-start gap-1 text-muted-foreground">
+              <Hash className="size-3 flex-shrink-0 mt-0.5" />
+              <span className="leading-snug break-words">
+                {trend.hashtags.slice(0, 6).map((h) => h.replace(/^#/, '')).join(' · ')}
+              </span>
+            </div>
+          )}
+
+          {trend.trendBucket && (
+            <div className="text-muted-foreground">
+              <span className="text-[10px] uppercase">Bucket:</span> {trend.trendBucket}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Actions — always visible */}
+      <div className="flex items-center gap-1 px-2.5 pb-2.5">
+        {trend.referenceLink && (
+          <a
+            href={trend.referenceLink}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="View reference"
+            onClick={(e) => e.stopPropagation()}
+            className="inline-flex items-center gap-1 px-2 py-1 rounded bg-secondary text-secondary-foreground hover:bg-accent text-[11px]"
+          >
+            <ExternalLink className="size-3" />
+            Ref
+          </a>
+        )}
+        {isApproved ? (
+          <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-green-600 text-white text-[11px]">
+            <CheckCircle2 className="size-3" />
+            Approved
+          </span>
+        ) : (
+          <button
+            onClick={(e) => { e.stopPropagation(); onApprove(trend.id); }}
+            title="Approve for campaign"
+            className="inline-flex items-center gap-1 px-2 py-1 rounded bg-primary text-primary-foreground hover:opacity-90 text-[11px]"
+          >
+            <CheckCircle2 className="size-3" />
+            Approve
+          </button>
+        )}
       </div>
     </div>
   );
 }
 
-function MatchingCard({ pair, onApprove, approvedIds }: {
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="p-1 rounded bg-muted/50 text-center">
+      <div className="text-[9px] uppercase text-muted-foreground">{label}</div>
+      <div className="text-[11px] text-foreground font-medium leading-tight">{value}</div>
+    </div>
+  );
+}
+
+function MatchedPairCard({ pair, onApprove, approvedIds }: {
   pair: MatchPair;
   onApprove: (id: string) => void;
   approvedIds: Set<string>;
 }) {
   return (
-    <div className="bg-card border border-cyan-500/30 rounded-lg p-4">
-      <div className="flex items-center gap-2 mb-3">
-        <div className="size-9 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-semibold">
+    <div className="rounded-md border border-cyan-500/30 bg-card p-2">
+      <div className="flex items-center gap-2 mb-2">
+        <div className="size-7 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-semibold">
           #{pair.rank}
         </div>
-        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 text-xs">
-          <Link2 className="size-3" />
-          Matched by {pair.matchStage} ({Math.round(pair.matchScore * 100)}%)
+        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-400 text-[10px]">
+          <Link2 className="size-2.5" />
+          {pair.matchStage} · {Math.round(pair.matchScore * 100)}%
         </span>
         <div className="ml-auto text-right">
-          <div className="text-lg font-bold text-foreground">{pair.combinedScore.toFixed(2)}</div>
-          <div className="text-xs text-muted-foreground">Combined ERS</div>
+          <div className="text-sm font-bold text-foreground leading-none">{pair.combinedScore.toFixed(1)}</div>
+          <div className="text-[10px] text-muted-foreground">Combined</div>
         </div>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div className="space-y-1.5">
         <div>
-          <div className="text-xs uppercase text-muted-foreground mb-2">Internal (Nyan Cat)</div>
-          <TrendCard
+          <div className="text-[10px] uppercase text-purple-400 mb-0.5">Internal</div>
+          <CompactTrendCard
             trend={pair.internal}
             onApprove={onApprove}
             isApproved={approvedIds.has(pair.internal.id)}
           />
         </div>
         <div>
-          <div className="text-xs uppercase text-muted-foreground mb-2">External (Vayner)</div>
-          <TrendCard
+          <div className="text-[10px] uppercase text-cyan-400 mb-0.5">External</div>
+          <CompactTrendCard
             trend={pair.external}
             onApprove={onApprove}
             isApproved={approvedIds.has(pair.external.id)}
@@ -83,55 +265,37 @@ function MatchingCard({ pair, onApprove, approvedIds }: {
   );
 }
 
-function TrackSection({ title, subtitle, trends, onApprove, approvedIds, accentClass }: {
+function TrackColumn({ title, count, accentClass, accentText, children }: {
   title: string;
-  subtitle: string;
-  trends: Trend[];
-  onApprove: (id: string) => void;
-  approvedIds: Set<string>;
+  count: number;
   accentClass: string;
+  accentText: string;
+  children: React.ReactNode;
 }) {
-  const [expanded, setExpanded] = useState(true);
-  if (!trends.length) {
-    return (
-      <div className={`mb-6 p-5 rounded-lg border ${accentClass} bg-card`}>
-        <h3 className="text-foreground font-medium mb-1">{title}</h3>
-        <p className="text-sm text-muted-foreground">{subtitle}</p>
-        <p className="mt-3 text-sm text-muted-foreground italic">No trends in this track.</p>
-      </div>
-    );
-  }
   return (
-    <div className={`mb-6 rounded-lg border ${accentClass} bg-card`}>
-      <button
-        onClick={() => setExpanded((v) => !v)}
-        className="w-full flex items-center justify-between p-5 hover:bg-muted/30 transition-colors"
-      >
-        <div className="text-left">
-          <h3 className="text-foreground font-medium mb-1">{title} ({trends.length})</h3>
-          <p className="text-sm text-muted-foreground">{subtitle}</p>
-        </div>
-        {expanded ? <ChevronUp className="size-5" /> : <ChevronDown className="size-5" />}
-      </button>
-      {expanded && (
-        <div className="px-5 pb-5 space-y-3">
-          {trends.map((t) => (
-            <TrendCard
-              key={t.id}
-              trend={t}
-              onApprove={onApprove}
-              isApproved={approvedIds.has(t.id)}
-            />
-          ))}
-        </div>
-      )}
+    <div className={`flex flex-col rounded-lg border ${accentClass} bg-card min-h-0`}>
+      <div className="px-3 py-2.5 border-b border-border flex-shrink-0">
+        <h3 className={`font-medium text-sm ${accentText}`}>
+          {title} <span className="text-muted-foreground font-normal">({count})</span>
+        </h3>
+      </div>
+      <div className="p-2 space-y-2 overflow-y-auto flex-1 min-h-0">
+        {count === 0 ? (
+          <p className="text-xs text-muted-foreground italic text-center py-6">No trends in this track.</p>
+        ) : (
+          children
+        )}
+      </div>
     </div>
   );
 }
 
-export function ThreeTrackView() {
-  const [nyanCatFile, setNyanCatFile] = useState<File | null>(null);
-  const [vaynerFile, setVaynerFile] = useState<File | null>(null);
+interface ThreeTrackViewProps {
+  nyanCatFile: File | null;
+  vaynerFile: File | null;
+}
+
+export function ThreeTrackView({ nyanCatFile, vaynerFile }: ThreeTrackViewProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<MatchAndRankResponse | null>(null);
@@ -142,7 +306,7 @@ export function ThreeTrackView() {
 
   const handleRun = async () => {
     if (!nyanCatFile && !vaynerFile) {
-      setError('Pick at least one CSV (ideally both for matching to work).');
+      setError('Upload at least one CSV on the Data Upload page (ideally both for matching to work).');
       return;
     }
     setLoading(true);
@@ -159,39 +323,27 @@ export function ThreeTrackView() {
 
   const filterVisible = (trends: Trend[]) => showHidden ? trends : trends.filter((t) => !t.hidden);
 
+  const fileStatus = (() => {
+    const parts: string[] = [];
+    if (nyanCatFile) parts.push(`Nyan Cat: ${nyanCatFile.name}`);
+    if (vaynerFile) parts.push(`Vayner: ${vaynerFile.name}`);
+    return parts.length ? parts.join(' · ') : 'No CSVs uploaded yet — head to the Data Upload tab.';
+  })();
+
   return (
     <div>
-      {/* Uploader */}
-      <div className="mb-6 p-5 rounded-lg border border-border bg-card">
-        <div className="flex items-center gap-2 mb-4">
+      {/* Run controls */}
+      <div className="mb-4 p-4 rounded-lg border border-border bg-card">
+        <div className="flex items-center gap-2 mb-2">
           <Sparkles className="size-5 text-primary" />
           <h3 className="text-foreground font-medium">Run Topic Matching + ERS</h3>
         </div>
-        <p className="text-sm text-muted-foreground mb-4">
-          Upload the Nyan Cat (internal) and Vayner (external) CSVs. The backend runs a two-stage
-          matcher (keyword → semantic) and splits results into three ranked tracks.
-        </p>
-        <div className="flex flex-wrap gap-4 mb-4">
-          <FileSlot
-            label="Nyan Cat CSV (Internal)"
-            accept=".csv,text/csv"
-            file={nyanCatFile}
-            onPick={setNyanCatFile}
-            hint="video_id, audio_id, views, watchtime…"
-          />
-          <FileSlot
-            label="Vayner CSV (External)"
-            accept=".csv,text/csv"
-            file={vaynerFile}
-            onPick={setVaynerFile}
-            hint="Topic Name, Trend Velocity, Content Quality…"
-          />
-        </div>
-        <div className="flex items-center gap-3">
+        <p className="text-sm text-muted-foreground mb-3">{fileStatus}</p>
+        <div className="flex items-center gap-3 flex-wrap">
           <button
             onClick={handleRun}
-            disabled={loading}
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50"
+            disabled={loading || (!nyanCatFile && !vaynerFile)}
+            className="inline-flex items-center gap-2 px-5 py-2 rounded-lg bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50"
           >
             {loading ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
             {loading ? 'Matching + ranking…' : 'Run Matching + Ranking'}
@@ -216,62 +368,74 @@ export function ThreeTrackView() {
       {/* Results */}
       {result && (
         <>
-          {/* Stats strip */}
-          <div className="mb-6 grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="mb-4 grid grid-cols-2 md:grid-cols-4 gap-2">
             <Stat label="Internal parsed" value={result.stats.internalParsed} />
             <Stat label="External parsed" value={result.stats.externalParsed} />
             <Stat
               label="Matched"
               value={result.stats.matched}
-              sub={`${result.stats.matchedByKeyword} keyword · ${result.stats.matchedBySemantic} semantic`}
+              sub={`${result.stats.matchedByKeyword} kw · ${result.stats.matchedBySemantic} sem`}
             />
             <Stat
-              label="Unique to one source"
+              label="Unique"
               value={result.stats.internalOnly + result.stats.externalOnly}
-              sub={`${result.stats.internalOnly} internal · ${result.stats.externalOnly} external`}
+              sub={`${result.stats.internalOnly} int · ${result.stats.externalOnly} ext`}
             />
           </div>
 
-          <div className="mb-6 rounded-lg border border-cyan-500/30 bg-card p-5">
-            <h3 className="text-foreground font-medium mb-1">
-              Matching Topics ({result.matching.length})
-            </h3>
-            <p className="text-sm text-muted-foreground mb-4">
-              High rank internally AND externally — strongest signal. Shown as side-by-side pairs, sorted by combined ERS.
-            </p>
-            {result.matching.length === 0 ? (
-              <p className="text-sm text-muted-foreground italic">No overlapping topics found.</p>
-            ) : (
-              <div className="space-y-4">
-                {result.matching.map((pair) => (
-                  <MatchingCard
-                    key={`${pair.internal.id}::${pair.external.id}`}
-                    pair={pair}
-                    onApprove={handleApprove}
-                    approvedIds={approvedIds}
-                  />
-                ))}
-              </div>
-            )}
+          {/* Three vertical tracks */}
+          <div
+            className="grid grid-cols-1 md:grid-cols-3 gap-3"
+            style={{ height: 'calc(100vh - 320px)', minHeight: '500px' }}
+          >
+            <TrackColumn
+              title="Internal (Nyan Cat)"
+              count={filterVisible(result.internal).length}
+              accentClass="border-purple-500/30"
+              accentText="text-purple-400"
+            >
+              {filterVisible(result.internal).map((t) => (
+                <CompactTrendCard
+                  key={t.id}
+                  trend={t}
+                  onApprove={handleApprove}
+                  isApproved={approvedIds.has(t.id)}
+                />
+              ))}
+            </TrackColumn>
+
+            <TrackColumn
+              title="Matched Topics"
+              count={result.matching.length}
+              accentClass="border-cyan-500/30"
+              accentText="text-cyan-400"
+            >
+              {result.matching.map((pair) => (
+                <MatchedPairCard
+                  key={`${pair.internal.id}::${pair.external.id}`}
+                  pair={pair}
+                  onApprove={handleApprove}
+                  approvedIds={approvedIds}
+                />
+              ))}
+            </TrackColumn>
+
+            <TrackColumn
+              title="External (Vayner)"
+              count={filterVisible(result.external).length}
+              accentClass="border-cyan-500/30"
+              accentText="text-cyan-400"
+            >
+              {filterVisible(result.external).map((t) => (
+                <CompactTrendCard
+                  key={t.id}
+                  trend={t}
+                  onApprove={handleApprove}
+                  isApproved={approvedIds.has(t.id)}
+                />
+              ))}
+            </TrackColumn>
           </div>
-
-          <TrackSection
-            title="Internal Only (Nyan Cat)"
-            subtitle="High rank internally — not flagged by external source."
-            trends={filterVisible(result.internal)}
-            onApprove={handleApprove}
-            approvedIds={approvedIds}
-            accentClass="border-purple-500/30"
-          />
-
-          <TrackSection
-            title="External Only (Vayner)"
-            subtitle="High rank externally — not surfaced internally yet."
-            trends={filterVisible(result.external)}
-            onApprove={handleApprove}
-            approvedIds={approvedIds}
-            accentClass="border-cyan-500/30"
-          />
         </>
       )}
     </div>
@@ -280,10 +444,10 @@ export function ThreeTrackView() {
 
 function Stat({ label, value, sub }: { label: string; value: number; sub?: string }) {
   return (
-    <div className="p-4 rounded-lg bg-muted">
-      <div className="text-xs uppercase text-muted-foreground mb-1">{label}</div>
-      <div className="text-2xl font-bold text-foreground">{value}</div>
-      {sub && <div className="text-xs text-muted-foreground mt-1">{sub}</div>}
+    <div className="p-3 rounded-lg bg-muted">
+      <div className="text-[10px] uppercase text-muted-foreground mb-1">{label}</div>
+      <div className="text-xl font-bold text-foreground leading-none">{value}</div>
+      {sub && <div className="text-[10px] text-muted-foreground mt-1">{sub}</div>}
     </div>
   );
 }
