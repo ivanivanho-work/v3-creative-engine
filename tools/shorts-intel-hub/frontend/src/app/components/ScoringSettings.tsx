@@ -1,7 +1,40 @@
 import { useEffect, useState } from 'react';
 import { Save, RotateCcw, Info } from 'lucide-react';
-import { DEFAULT_SCORING_CONFIG, type ScoringConfig } from '@/types';
+import { DEFAULT_SCORING_CONFIG, DEFAULT_IRS_CONFIG, type ScoringConfig } from '@/types';
 import { getRankingConfig, updateRankingConfig } from '@/services/api';
+
+/**
+ * Merge a server-returned config over the defaults so newly-added sections
+ * (e.g. `irs`) still render when the backend hasn't been upgraded to emit them.
+ */
+function hydrateConfig(raw: Partial<ScoringConfig> | undefined | null): ScoringConfig {
+  const base = DEFAULT_SCORING_CONFIG;
+  if (!raw) return base;
+  return {
+    ...base,
+    ...raw,
+    velocity: { ...base.velocity, ...raw.velocity },
+    breakout: { ...base.breakout, ...raw.breakout },
+    scale: { ...base.scale, ...raw.scale },
+    complexity: { ...base.complexity, ...raw.complexity },
+    distribution: { ...base.distribution, ...raw.distribution },
+    freshness: { ...base.freshness, ...raw.freshness },
+    quality: { ...base.quality, ...raw.quality },
+    origin: { ...base.origin, ...raw.origin },
+    irs: {
+      ...DEFAULT_IRS_CONFIG,
+      ...(raw.irs ?? {}),
+      monetization: { ...DEFAULT_IRS_CONFIG.monetization, ...(raw.irs?.monetization ?? {}) },
+      stickiness: { ...DEFAULT_IRS_CONFIG.stickiness, ...(raw.irs?.stickiness ?? {}) },
+      quality: { ...DEFAULT_IRS_CONFIG.quality, ...(raw.irs?.quality ?? {}) },
+      creation: { ...DEFAULT_IRS_CONFIG.creation, ...(raw.irs?.creation ?? {}) },
+      boosters: {
+        tools: { ...DEFAULT_IRS_CONFIG.boosters.tools, ...(raw.irs?.boosters?.tools ?? {}) },
+        geo: { ...DEFAULT_IRS_CONFIG.boosters.geo, ...(raw.irs?.boosters?.geo ?? {}) },
+      },
+    },
+  };
+}
 
 type NumberField = {
   label: string;
@@ -164,8 +197,9 @@ export function ScoringSettings() {
     getRankingConfig()
       .then((res) => {
         if (cancelled) return;
-        setConfig(res.config);
-        setInitial(res.config);
+        const hydrated = hydrateConfig(res.config);
+        setConfig(hydrated);
+        setInitial(hydrated);
       })
       .catch(() => {
         // Offline / backend unavailable — fall back to defaults silently.
@@ -194,8 +228,9 @@ export function ScoringSettings() {
     setNotice(null);
     try {
       const res = await updateRankingConfig(config);
-      setInitial(res.config);
-      setConfig(res.config);
+      const hydrated = hydrateConfig(res.config);
+      setInitial(hydrated);
+      setConfig(hydrated);
       setHasChanges(false);
       setNotice('Scoring config saved — ranking will update on next upload.');
     } catch (err) {
