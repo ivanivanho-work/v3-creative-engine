@@ -7,7 +7,25 @@ import { parseCSV, detectFormat } from '../analysis/csv.js';
 import { parseVaynerRows } from '../analysis/parseVayner.js';
 import { parseNyanCatRows } from '../analysis/parseNyanCat.js';
 import { rankTrends, DEFAULT_SCORING_CONFIG } from '../ranking/calculate.js';
+import { rankInternalTrends } from '../ranking/calculate_irs.js';
 import { matchTopics } from '../analysis/matchTopics.js';
+
+/**
+ * Source-aware ranking. Nyan Cat (internal) → IRS; Vayner (external) → ERS.
+ * Accepts a list of already-normalized trend rows and infers source from the
+ * `source` field set by each parser.
+ */
+function rankBySource(trends, config = DEFAULT_SCORING_CONFIG, irsOpts = {}) {
+  if (!trends.length) return [];
+  const isNyanCat = trends.every((t) => t?.source === 'Nyan Cat');
+  if (isNyanCat) {
+    // Pull the IRS config out of the unified ScoringConfig if present. Keeps
+    // the ScoringSettings UI as a single source of truth for both scores.
+    const merged = config?.irs ? { ...irsOpts, config: config.irs } : irsOpts;
+    return rankInternalTrends(trends, merged);
+  }
+  return rankTrends(trends, config);
+}
 
 /**
  * Accepts raw CSV text, detects the source format, normalizes rows, applies
@@ -28,7 +46,7 @@ export function processUpload(csvText, config = DEFAULT_SCORING_CONFIG) {
     );
   }
 
-  const ranked = rankTrends(normalized, config);
+  const ranked = rankBySource(normalized, config);
   const stats = {
     total: ranked.length,
     visible: ranked.filter((t) => !t.hidden).length,
@@ -76,8 +94,8 @@ export async function processBatch({ nyanCatCsv, vaynerCsv, config = DEFAULT_SCO
   const internalById = new Map(internalTrends.map((t) => [t.id, t]));
   const externalById = new Map(externalTrends.map((t) => [t.id, t]));
 
-  const internalOnly = rankTrends(internalOnlyIds.map((id) => internalById.get(id)), config);
-  const externalOnly = rankTrends(externalOnlyIds.map((id) => externalById.get(id)), config);
+  const internalOnly = rankBySource(internalOnlyIds.map((id) => internalById.get(id)), config);
+  const externalOnly = rankBySource(externalOnlyIds.map((id) => externalById.get(id)), config);
 
   // Matching: rank the union (internal + external copies), then pair them up preserving combined rank order.
   const matchingPairs = matches.map((m) => {
@@ -87,8 +105,8 @@ export async function processBatch({ nyanCatCsv, vaynerCsv, config = DEFAULT_SCO
   });
 
   // Rank matching track by combined ERS (internal + external) so most impactful overlap floats up.
-  const rankedInternalInMatches = rankTrends(matchingPairs.map((p) => p.internal), config);
-  const rankedExternalInMatches = rankTrends(matchingPairs.map((p) => p.external), config);
+  const rankedInternalInMatches = rankBySource(matchingPairs.map((p) => p.internal), config);
+  const rankedExternalInMatches = rankBySource(matchingPairs.map((p) => p.external), config);
 
   const rankedIntById = new Map(rankedInternalInMatches.map((t) => [t.id, t]));
   const rankedExtById = new Map(rankedExternalInMatches.map((t) => [t.id, t]));
