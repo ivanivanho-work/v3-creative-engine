@@ -9,7 +9,6 @@ const markets = [
   { code: 'KR', name: 'South Korea' },
   { code: 'IN', name: 'India' },
   { code: 'ID', name: 'Indonesia' },
-  { code: 'AUNZ', name: 'Australia & New Zealand' },
 ];
 
 interface MarketingDashboardProps {

@@ -1,10 +1,15 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Loader2, Sparkles, Link2, ExternalLink, CheckCircle2, EyeOff, AlertTriangle,
   ChevronDown, ChevronRight, Music, Hash, Users, Globe, Zap, ShieldCheck, ShieldOff,
 } from 'lucide-react';
 import { matchAndRank, type MatchAndRankResponse, type MatchPair } from '@/services/api';
 import { addArchive } from '@/services/archiveStore';
+import {
+  approveTrend as storeApprove,
+  getCurrentBatch,
+} from '@/services/approvedStore';
+import { ApprovedSidebar } from '@/app/components/ApprovedSidebar';
 import type { Trend } from '@/types';
 
 function formatCompact(n: number | undefined): string | null {
@@ -301,10 +306,36 @@ export function ThreeTrackView({ nyanCatFile, vaynerFile, market }: ThreeTrackVi
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<MatchAndRankResponse | null>(null);
-  const [approvedIds, setApprovedIds] = useState<Set<string>>(new Set());
   const [showHidden, setShowHidden] = useState(false);
+  // Bump to force re-reads of the approved store after mutations.
+  const [approvedVersion, setApprovedVersion] = useState(0);
 
-  const handleApprove = (id: string) => setApprovedIds((prev) => new Set(prev).add(id));
+  const approvedIds = useMemo(() => {
+    const batch = getCurrentBatch(market);
+    return new Set(batch.trends.map((t) => t.id));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [market, approvedVersion]);
+  const isFrozen = !!getCurrentBatch(market).sentAt;
+
+  const allTrends = useMemo(() => {
+    if (!result) return new Map<string, Trend>();
+    const map = new Map<string, Trend>();
+    for (const t of result.internal) map.set(t.id, t);
+    for (const t of result.external) map.set(t.id, t);
+    for (const p of result.matching) {
+      map.set(p.internal.id, p.internal);
+      map.set(p.external.id, p.external);
+    }
+    return map;
+  }, [result]);
+
+  const handleApprove = (id: string) => {
+    if (isFrozen) return;
+    const trend = allTrends.get(id);
+    if (!trend) return;
+    storeApprove(market, trend);
+    setApprovedVersion((v) => v + 1);
+  };
 
   const handleRun = async () => {
     if (!nyanCatFile && !vaynerFile) {
@@ -339,7 +370,8 @@ export function ThreeTrackView({ nyanCatFile, vaynerFile, market }: ThreeTrackVi
   })();
 
   return (
-    <div>
+    <div className="flex gap-3 items-start">
+      <div className="flex-1 min-w-0">
       {/* Run controls */}
       <div className="mb-4 p-4 rounded-lg border border-border bg-card">
         <div className="flex items-center gap-2 mb-2">
@@ -446,6 +478,13 @@ export function ThreeTrackView({ nyanCatFile, vaynerFile, market }: ThreeTrackVi
           </div>
         </>
       )}
+      </div>
+
+      <ApprovedSidebar
+        market={market}
+        version={approvedVersion}
+        onChanged={() => setApprovedVersion((v) => v + 1)}
+      />
     </div>
   );
 }

@@ -73,7 +73,7 @@ export function setupRoutes(app) {
    * Get topics with filtering and pagination
    *
    * Query params:
-   * - market: JP|KR|IN|ID|AUNZ
+   * - market: JP|KR|IN|ID
    * - gender: male|female
    * - age: 18-24|25-34|35-44
    * - status: active|expired|approved|archived
@@ -86,7 +86,7 @@ export function setupRoutes(app) {
     '/topics',
     standardLimiter,
     [
-      query('market').optional().isIn(['JP', 'KR', 'IN', 'ID', 'AUNZ']),
+      query('market').optional().isIn(['JP', 'KR', 'IN', 'ID']),
       query('gender').optional().isIn(['male', 'female']),
       query('age').optional().isIn(['18-24', '25-34', '35-44']),
       query('status').optional().isIn(['raw', 'processing', 'active', 'expired', 'archived', 'approved']),
@@ -121,7 +121,7 @@ export function setupRoutes(app) {
     '/topics/top10',
     standardLimiter,
     [
-      query('market').isIn(['JP', 'KR', 'IN', 'ID', 'AUNZ']),
+      query('market').isIn(['JP', 'KR', 'IN', 'ID']),
       query('gender').isIn(['male', 'female']),
       query('age').isIn(['18-24', '25-34', '35-44']),
       validate
@@ -211,7 +211,7 @@ export function setupRoutes(app) {
       body('filename').isString(),
       body('content').isString(), // Base64 encoded CSV
       body('source').optional().isString(),
-      body('market').optional().isIn(['JP', 'KR', 'IN', 'ID', 'AUNZ']),
+      body('market').optional().isIn(['JP', 'KR', 'IN', 'ID']),
       validate
     ],
     async (req, res, next) => {
@@ -369,7 +369,7 @@ export function setupRoutes(app) {
     '/schedules/:market',
     standardLimiter,
     [
-      param('market').isIn(['JP', 'KR', 'IN', 'ID', 'AUNZ']),
+      param('market').isIn(['JP', 'KR', 'IN', 'ID']),
       body('cronExpression').isString(),
       body('timezone').isString(),
       body('updatedBy').isEmail(),
@@ -406,8 +406,7 @@ export function setupRoutes(app) {
         { code: 'JP', name: 'Japan', timezone: 'Asia/Tokyo' },
         { code: 'KR', name: 'Korea', timezone: 'Asia/Seoul' },
         { code: 'IN', name: 'India', timezone: 'Asia/Kolkata' },
-        { code: 'ID', name: 'Indonesia', timezone: 'Asia/Jakarta' },
-        { code: 'AUNZ', name: 'Australia/New Zealand', timezone: 'Australia/Sydney' }
+        { code: 'ID', name: 'Indonesia', timezone: 'Asia/Jakarta' }
       ]
     });
   });
@@ -441,7 +440,7 @@ export function setupRoutes(app) {
     '/stats',
     standardLimiter,
     [
-      query('market').optional().isIn(['JP', 'KR', 'IN', 'ID', 'AUNZ']),
+      query('market').optional().isIn(['JP', 'KR', 'IN', 'ID']),
       validate
     ],
     async (req, res, next) => {

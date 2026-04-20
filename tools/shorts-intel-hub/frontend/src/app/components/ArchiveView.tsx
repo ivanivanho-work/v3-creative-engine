@@ -16,7 +16,6 @@ const MARKET_NAMES: Record<string, string> = {
   KR: 'South Korea',
   IN: 'India',
   ID: 'Indonesia',
-  AUNZ: 'Australia & New Zealand',
 };
 
 function formatSavedAt(iso: string) {

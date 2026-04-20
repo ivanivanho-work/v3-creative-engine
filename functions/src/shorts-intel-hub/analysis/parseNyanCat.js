@@ -22,8 +22,6 @@ const COUNTRY_MAP = {
   KR: 'KR',
   IN: 'IN',
   ID: 'ID',
-  AU: 'AUNZ',
-  NZ: 'AUNZ',
 };
 
 const num = (v, fallback = 0) => {
