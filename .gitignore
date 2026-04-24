@@ -92,3 +92,7 @@ logs/
 # Firebase Functions build artefacts
 functions/node_modules/
 functions/lib/
+
+# Agent Collective V2 local dev
+services/agent-collective-v2/.venv/
+services/agent-collective-v2/agent_collective/kb/
