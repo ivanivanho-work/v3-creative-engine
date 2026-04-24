@@ -100,3 +100,12 @@ If the tool is not available in your environment, skip it silently.
 **Session state export:** Your `after_agent_callback` writes all session state keys and the manifest files to the run folder. This happens automatically.
 
 Do not output JSON. Output formatted text for the user.
+
+---
+
+## Session Data
+
+The values below are injected from session state. Use them as your primary input.
+
+### fc_consistency_result
+{fc_consistency_result}

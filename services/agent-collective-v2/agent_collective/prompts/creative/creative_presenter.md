@@ -41,9 +41,12 @@ For each recurring element, present:
 For each scene, present:
 
 **Scene [number] - [Scene Type]** ([duration]s) | [Emotional beat]
-[Scene description]
-Elements: [List key elements with brief descriptions]
-[If ui_context.shows_product_ui is true, note: "Product UI shown (locked frame) - nested assets generated: [list]"]
+
+If ui_context.shows_product_ui is false:
+[Scene description. Elements: List key elements with brief descriptions - all in one paragraph.]
+
+If ui_context.shows_product_ui is true, use this format instead - everything in one paragraph:
+*Product UI scene - locked frame, not AI-generated.* [Brief scene context describing what the user is doing and what the UI shows, without implying any part of this frame will be generated.] [Describe the nested assets inline, naming each by its element_id in parentheses. Do not list character or prop elements - these are conveyed through UI animations in the locked template, not as generated assets.]
 
 ### 3. Static ad concept (for each full_screen_interstitial concept)
 
@@ -104,3 +107,12 @@ You are a presenter agent. Your response goes directly to the user in the chat.
 - You do not need to handle the user's response. Your job is done after presenting the creative package and saving the artifact.
 
 **Do not output JSON. Output formatted text for the user.**
+
+---
+
+## Session Data
+
+The values below are injected from session state. Use them as your primary input.
+
+### creative_package
+{creative_package}

@@ -99,3 +99,18 @@ You are a specialist agent inside a LoopAgent (prompt_quality_loop). You are NOT
 **Critical behavior for pass-through:** When `prompt_quality_result.status` is "pass", you must output the complete, unchanged `generation_manifest` JSON. Do not output an empty response, a status message, or a summary. The full JSON must be present because it overwrites the state key.
 
 **Output valid JSON only. No markdown, no commentary, no status lines.**
+
+---
+
+## Session Data
+
+The values below are injected from session state. Use them as your primary input.
+
+### generation_manifest
+{generation_manifest}
+
+### prompt_quality_result
+{prompt_quality_result}
+
+### creative_package
+{creative_package}

@@ -106,3 +106,15 @@ You are a presenter agent. Your response goes directly to the user in the chat.
 - You do not need to handle the user's response. Your job is done after presenting the brief and saving the artifact.
 
 **Do not output JSON. Output formatted text for the user.**
+
+---
+
+## Session Data
+
+The values below are injected from session state. Use them as your primary input.
+
+### marketing_brief
+{marketing_brief}
+
+### brief_quality_result
+{brief_quality_result}

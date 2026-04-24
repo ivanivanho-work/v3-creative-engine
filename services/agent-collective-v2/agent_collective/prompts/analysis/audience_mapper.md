@@ -187,3 +187,15 @@ If `kb_insights` is empty or unavailable, fall back to general demographic reaso
 Output your complete JSON as specified in the OUTPUT FORMAT section above. Your JSON response will be captured in session state under `audience_profiles` for the Strategy Generator and Analysis Presenter to read.
 
 Do not add commentary or status lines. Output only your JSON.
+
+---
+
+## Session Data
+
+The values below are injected from session state. Use them as your primary input.
+
+### scene_map
+{scene_map}
+
+### kb_insights
+{kb_insights}

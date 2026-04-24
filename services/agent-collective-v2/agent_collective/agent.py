@@ -107,7 +107,10 @@ def _load_kb_documents(market: str) -> str:
     if not docs:
         return "\n\n--- NO KB DOCUMENTS FOUND ---\n"
 
-    return "\n\n--- KNOWLEDGE BASE DOCUMENTS ---\n\n" + "\n\n".join(docs)
+    current_date = datetime.now().strftime("%Y-%m-%d")
+    metadata = f"--- SYSTEM METADATA ---\ncurrent_date: {current_date}\n--- END SYSTEM METADATA ---"
+
+    return "\n\n" + metadata + "\n\n--- KNOWLEDGE BASE DOCUMENTS ---\n\n" + "\n\n".join(docs)
 
 
 # =========================================================================
@@ -117,6 +120,9 @@ def _load_kb_documents(market: str) -> str:
 # Tracks the current run's output folder for this server process.
 # Reset this to None if you want a new folder per invocation.
 _current_run_dir: Path | None = None
+_run_start_time: datetime | None = None
+_agent_timings: list[dict] = []
+_agent_start_times: dict[str, datetime] = {}
 
 
 def _get_run_dir() -> Path:
@@ -125,7 +131,7 @@ def _get_run_dir() -> Path:
     Folders are named: outputs/run_YYYY-MM-DD_NNN/
     where NNN is a sequential number per day.
     """
-    global _current_run_dir
+    global _current_run_dir, _run_start_time
     if _current_run_dir is not None:
         return _current_run_dir
 
@@ -135,27 +141,64 @@ def _get_run_dir() -> Path:
     next_num = len(existing) + 1
     _current_run_dir = MARKET_OUTPUT_DIR / f"run_{today}_{next_num:03d}"
     _current_run_dir.mkdir(parents=True, exist_ok=True)
+    _run_start_time = datetime.now()
     return _current_run_dir
 
 
 def _reset_run_dir():
     """Reset so the next pipeline run creates a fresh folder."""
-    global _current_run_dir
+    global _current_run_dir, _run_start_time, _agent_timings, _agent_start_times
     _current_run_dir = None
+    _run_start_time = None
+    _agent_timings = []
+    _agent_start_times = {}
 
 
 def _parse_state_value(value):
-    """Safely parse a state value that might be a JSON string or dict."""
+    """Safely parse a state value that might be a JSON string or dict.
+
+    Strips markdown code fences (```json ... ```) before parsing, since
+    Gemini occasionally wraps JSON output in fences even in JSON mode.
+    """
     if value is None:
         return None
     if isinstance(value, dict) or isinstance(value, list):
         return value
     if isinstance(value, str):
+        cleaned = value.strip()
+        if cleaned.startswith("```"):
+            cleaned = re.sub(r"^```[a-z]*\n?", "", cleaned)
+            cleaned = re.sub(r"\n?```$", "", cleaned).strip()
         try:
-            return json.loads(value)
+            return json.loads(cleaned)
         except (json.JSONDecodeError, ValueError):
             return value
     return value
+
+
+def _build_strategy_presenter_bundle(strategy: dict, scene_map: dict) -> dict:
+    """Extract a condensed presenter bundle from the full strategy and scene map."""
+    scenes = scene_map.get("scene_map", [])
+    descriptions = [
+        sc["description"]
+        for sc in scenes
+        if sc.get("swappability") != "LOCKED" and sc.get("description")
+    ]
+    original_ad_description = " ".join(descriptions[:3])
+
+    audiences = []
+    for aud in strategy.get("audience_strategies", []):
+        audiences.append({
+            "audience_id": aud.get("audience_id"),
+            "segment_name": aud.get("segment_name"),
+            "concept_summary": aud.get("creative_concept", {}).get("summary", ""),
+            "key_changes": aud.get("key_changes", []),
+        })
+
+    return {
+        "original_ad_description": original_ad_description,
+        "audiences": audiences,
+    }
 
 
 # =========================================================================
@@ -174,8 +217,9 @@ def _parse_state_value(value):
 
 
 def _compute_kb_fingerprint(model: str, market: str) -> str:
-    """Hash KB file contents (global + market) and the model name into a
-    single fingerprint. Any change to either folder invalidates the cache.
+    """Hash KB file contents (global + market), the model name, and the
+    kb_analyzer prompt into a single fingerprint. Any change to KB files,
+    the model, or the prompt invalidates the cache.
     """
     hasher = hashlib.sha256()
     hasher.update(model.encode("utf-8"))
@@ -184,6 +228,9 @@ def _compute_kb_fingerprint(model: str, market: str) -> str:
             if f.is_file():
                 hasher.update(f.name.encode("utf-8"))
                 hasher.update(f.read_bytes())
+    kb_analyzer_prompt = PROMPTS_DIR / "discovery" / "kb_analyzer.md"
+    if kb_analyzer_prompt.exists():
+        hasher.update(kb_analyzer_prompt.read_bytes())
     return hasher.hexdigest()
 
 
@@ -307,6 +354,7 @@ def _make_kb_cache_before_callback(agent_name: str, model: str):
     callback can persist it, then returns None to let ADK proceed.
     """
     async def callback(callback_context) -> types.Content | None:
+        _record_agent_start(agent_name)
         session_market = callback_context.state.get("market", MARKET)
 
         # If KB files are absent (e.g. gitignored on a fresh clone), fall back
@@ -323,6 +371,7 @@ def _make_kb_cache_before_callback(agent_name: str, model: str):
                 callback_context.state["kb_insights"] = json.dumps(
                     cached_insights, ensure_ascii=False
                 )
+                _record_agent_timing(agent_name)
                 return types.Content(
                     role="model",
                     parts=[types.Part(text=json.dumps(cached_insights, ensure_ascii=False))],
@@ -346,6 +395,7 @@ def _make_kb_cache_before_callback(agent_name: str, model: str):
                 callback_context.state["kb_insights"] = json.dumps(
                     cached_insights, ensure_ascii=False
                 )
+                _record_agent_timing(agent_name)
                 return types.Content(
                     role="model",
                     parts=[types.Part(text=json.dumps(cached_insights, ensure_ascii=False))],
@@ -380,7 +430,95 @@ def _make_kb_cache_after_callback(agent_name: str):
         if fingerprint and market:
             _save_kb_cache(market, fingerprint, parsed)
 
+        _record_agent_timing(agent_name)
+
     return callback
+
+
+# =========================================================================
+# Run timing helpers
+# =========================================================================
+
+
+def _record_agent_start(agent_name: str):
+    """Record the start timestamp for an agent in the current run."""
+    _agent_start_times[agent_name] = datetime.now()
+
+
+def _make_timing_before_callback(agent_name: str):
+    """Factory: before_agent_callback that records when an agent starts."""
+    async def callback(callback_context):
+        _record_agent_start(agent_name)
+    return callback
+
+
+def _make_strategy_before_callback(agent_name: str):
+    """Factory: before_agent_callback for strategy generators.
+
+    Records agent start timing and extracts the brand_voice section from
+    kb_insights into a lean strategy_brand_voice state key. Injecting only
+    brand_voice (not the full kb_insights blob) keeps the strategy generator
+    prompt compact and reduces latency.
+    """
+    async def callback(callback_context):
+        _record_agent_start(agent_name)
+        kb_raw = callback_context.state.get("kb_insights")
+        brand_voice = {}
+        if kb_raw:
+            try:
+                kb_data = json.loads(kb_raw) if isinstance(kb_raw, str) else kb_raw
+                brand_voice = kb_data.get("brand_voice", {})
+            except (json.JSONDecodeError, AttributeError):
+                pass
+        callback_context.state["strategy_brand_voice"] = json.dumps(
+            brand_voice, ensure_ascii=False
+        )
+    return callback
+
+
+def _record_agent_timing(agent_name: str):
+    """Record the completion timestamp and duration for an agent in the current run."""
+    completed_at = datetime.now()
+    start = _agent_start_times.get(agent_name)
+    duration_seconds = round((completed_at - start).total_seconds()) if start else 0
+    _agent_timings.append({
+        "name": agent_name,
+        "completed_at": completed_at.isoformat(timespec="seconds"),
+        "duration_seconds": duration_seconds,
+    })
+
+
+def _write_run_timing(run_dir: Path):
+    """Write run_timing.json to the run folder.
+
+    Total processing time is the sum of individual agent durations,
+    which excludes time spent waiting for operator responses at gates.
+    """
+    if _run_start_time is None:
+        return
+
+    now = datetime.now()
+    total_processing_seconds = 0
+    agents = []
+    for entry in _agent_timings:
+        duration_seconds = entry.get("duration_seconds", 0)
+        total_processing_seconds += duration_seconds
+        agents.append({
+            "name": entry["name"],
+            "completed_at": entry["completed_at"],
+            "duration_seconds": duration_seconds,
+            "duration_minutes": round(duration_seconds / 60, 1),
+        })
+
+    timing = {
+        "run_start": _run_start_time.isoformat(timespec="seconds"),
+        "run_end": now.isoformat(timespec="seconds"),
+        "total_processing_minutes": round(total_processing_seconds / 60, 1),
+        "agents": agents,
+    }
+
+    with open(run_dir / "run_timing.json", "w", encoding="utf-8") as f:
+        json.dump(timing, f, indent=2, ensure_ascii=False)
 
 
 # =========================================================================
@@ -412,9 +550,15 @@ def _make_quality_check_callback(agent_name: str, state_key: str):
         with open(out_path, "w", encoding="utf-8") as f:
             json.dump(parsed, f, indent=2, ensure_ascii=False)
 
-        # Escalate (exit loop) if quality check passed
+        _record_agent_timing(agent_name)
+
+        # Escalate (exit loop) if quality check passed.
+        # The state write is required: _handle_after_agent_callback only yields
+        # an event (carrying the escalate flag) when state.has_delta() is True
+        # or the callback returns content. Without it, escalate is dropped.
         if isinstance(parsed, dict) and parsed.get("status") == "pass":
             callback_context.actions.escalate = True
+            callback_context.state[f"_{agent_name}_escalated"] = True
 
     return callback
 
@@ -436,6 +580,43 @@ def _make_auto_save_callback(agent_name: str, state_key: str):
 
         with open(out_path, "w", encoding="utf-8") as f:
             json.dump(parsed, f, indent=2, ensure_ascii=False)
+
+        _record_agent_timing(agent_name)
+
+    return callback
+
+
+def _make_strategy_save_and_project_callback(
+    agent_name: str,
+    strategy_key: str,
+    scene_map_key: str,
+    presenter_key: str,
+):
+    """Factory: creates an after_agent_callback for a strategy generator agent.
+
+    Performs the same disk-save as _make_auto_save_callback, then builds a
+    condensed presenter bundle via _build_strategy_presenter_bundle and writes
+    it to presenter_key in session state for the strategy presenter to consume.
+    """
+    async def callback(callback_context):
+        strategy_data = callback_context.state.get(strategy_key)
+        if strategy_data is None:
+            return
+
+        run_dir = _get_run_dir()
+        parsed_strategy = _parse_state_value(strategy_data)
+        if not isinstance(parsed_strategy, dict):
+            return
+        with open(run_dir / f"{agent_name}.json", "w", encoding="utf-8") as f:
+            json.dump(parsed_strategy, f, indent=2, ensure_ascii=False)
+
+        _record_agent_timing(agent_name)
+
+        scene_map_data = callback_context.state.get(scene_map_key)
+        parsed_scene_map = _parse_state_value(scene_map_data) or {}
+
+        bundle = _build_strategy_presenter_bundle(parsed_strategy, parsed_scene_map)
+        callback_context.state[presenter_key] = json.dumps(bundle, ensure_ascii=False)
 
     return callback
 
@@ -485,6 +666,8 @@ def _make_latest_brief_markdown_callback():
         run_dir = _get_run_dir()
         with open(run_dir / "marketing_brief.md", "w", encoding="utf-8") as f:
             f.write(md_content)
+
+        _record_agent_timing("brief_presenter")
 
     return callback
 
@@ -547,6 +730,9 @@ async def _session_state_export_callback(callback_context):
         with open(run_dir / "creative_package.md", "w", encoding="utf-8") as f:
             f.write(md_content)
 
+    _record_agent_timing("results_presenter")
+    _write_run_timing(run_dir)
+
 
 # =========================================================================
 # Root agent tool: write_selected_concept
@@ -573,6 +759,37 @@ async def write_selected_concept(
     }
     tool_context.state["selected_concept"] = selected
     return f"Saved selection: Concept {concept_id}."
+
+
+# =========================================================================
+# Root agent tool: write_campaign_constraints
+# =========================================================================
+# The root agent calls this on the initial campaign request when the user
+# specifies a particular Shorts Creation Tool to focus the campaign on.
+# Written to state before discovery_phase runs so concept_generator can
+# lock all three concepts to the requested tool.
+
+
+async def write_campaign_constraints(
+    featured_tool: str,
+    tool_context,
+):
+    """Write user-specified campaign constraints to session state.
+
+    Called before transferring to discovery_phase. Captures any specific
+    Shorts Creation Tool the user wants all concepts to feature.
+
+    Args:
+        featured_tool: The tool name as the user stated it, or empty string
+            if the user did not specify a particular tool.
+    """
+    import json
+
+    constraints = {
+        "featured_tool": featured_tool if featured_tool else None,
+    }
+    tool_context.state["campaign_constraints"] = json.dumps(constraints)
+    return "Saved campaign constraints."
 
 
 # =========================================================================
@@ -1438,6 +1655,9 @@ async def _adaptation_session_state_export_callback(callback_context):
         ) as f:
             f.write(md_content)
 
+    _record_agent_timing("adapt_results_presenter")
+    _write_run_timing(run_dir)
+
 
 # =========================================================================
 # Adaptation path: quality check escalation callback
@@ -1462,7 +1682,12 @@ def _make_adapt_quality_check_callback(agent_name: str, state_key: str):
         with open(out_path, "w", encoding="utf-8") as f:
             json.dump(parsed, f, indent=2, ensure_ascii=False)
 
-        # Escalate if all audiences passed
+        _record_agent_timing(agent_name)
+
+        # Escalate if all audiences passed.
+        # The state write is required: _handle_after_agent_callback only yields
+        # an event (carrying the escalate flag) when state.has_delta() is True
+        # or the callback returns content. Without it, escalate is dropped.
         if isinstance(parsed, dict):
             verdicts = parsed.get("audience_verdicts", [])
             if verdicts and all(
@@ -1472,6 +1697,7 @@ def _make_adapt_quality_check_callback(agent_name: str, state_key: str):
                 if isinstance(v, dict)
             ):
                 callback_context.actions.escalate = True
+                callback_context.state[f"_{agent_name}_escalated"] = True
 
     return callback
 
@@ -1489,6 +1715,15 @@ JSON_MODE_CONFIG = types.GenerateContentConfig(
 # internal reasoning time adds latency with no benefit.
 TEXT_MODE_NO_THINK_CONFIG = types.GenerateContentConfig(
     thinking_config=types.ThinkingConfig(thinking_budget=0),
+)
+
+# Bounded thinking budget for quality checkers. Checkers run a fixed
+# checklist and return structured JSON verdicts - they do not need
+# open-ended reasoning. 2048 tokens is enough to weigh each check without
+# letting the model spiral into long chains of thought.
+QUALITY_CHECK_CONFIG = types.GenerateContentConfig(
+    response_mime_type="application/json",
+    thinking_config=types.ThinkingConfig(thinking_budget=2048),
 )
 
 
@@ -1521,6 +1756,7 @@ kb_analyzer = LlmAgent(
     instruction=_make_dynamic_kb_instruction(_load_prompt("discovery/kb_analyzer.md")),
     output_key="kb_insights",
     generate_content_config=JSON_MODE_CONFIG,
+    include_contents="none",
     before_agent_callback=_make_kb_cache_before_callback("kb_analyzer", MODEL_PRO),
     after_agent_callback=_make_kb_cache_after_callback("kb_analyzer"),
 )
@@ -1531,6 +1767,8 @@ concept_generator = LlmAgent(
     instruction=_load_prompt("discovery/concept_generator.md"),
     output_key="campaign_concepts",
     generate_content_config=JSON_MODE_CONFIG,
+    include_contents="none",
+    before_agent_callback=_make_timing_before_callback("concept_generator"),
     after_agent_callback=_make_auto_save_callback(
         "concept_generator", "campaign_concepts",
     ),
@@ -1541,6 +1779,7 @@ concept_presenter = LlmAgent(
     model=MODEL_FLASH,
     instruction=_load_prompt("discovery/concept_presenter.md"),
     generate_content_config=TEXT_MODE_NO_THINK_CONFIG,
+    include_contents="none",
     # No output_key: response goes directly to the user
 )
 
@@ -1559,6 +1798,8 @@ brief_generator = LlmAgent(
     instruction=_load_prompt("brief/brief_generator.md"),
     output_key="marketing_brief",
     generate_content_config=JSON_MODE_CONFIG,
+    include_contents="none",
+    before_agent_callback=_make_timing_before_callback("brief_generator"),
     after_agent_callback=_make_auto_save_callback(
         "brief_generator", "marketing_brief",
     ),
@@ -1569,7 +1810,9 @@ brief_quality_checker = LlmAgent(
     model=MODEL_FLASH,
     instruction=_load_prompt("brief/brief_quality_checker.md"),
     output_key="brief_quality_result",
-    generate_content_config=JSON_MODE_CONFIG,
+    generate_content_config=QUALITY_CHECK_CONFIG,
+    include_contents="none",
+    before_agent_callback=_make_timing_before_callback("brief_quality_checker"),
     after_agent_callback=_make_quality_check_callback(
         "brief_quality_checker", "brief_quality_result",
     ),
@@ -1581,18 +1824,21 @@ brief_reviser = LlmAgent(
     instruction=_load_prompt("brief/brief_reviser.md"),
     output_key="marketing_brief",
     generate_content_config=JSON_MODE_CONFIG,
+    include_contents="none",
+    before_agent_callback=_make_timing_before_callback("brief_reviser"),
     after_agent_callback=_make_auto_save_callback(
         "brief_reviser", "marketing_brief",
     ),
 )
 
-# Quality loop: checker then reviser, max 2 iterations.
+# Quality loop: checker then reviser, max 1 iteration.
 # Checker and reviser are direct sub_agents so ADK checks the escalate flag
 # after the checker runs - if the brief passes, the reviser is skipped entirely.
+# 1 iteration: if the checker fails, the reviser runs once and the loop exits.
 brief_quality_loop = LoopAgent(
     name="brief_quality_loop",
     sub_agents=[brief_quality_checker, brief_reviser],
-    max_iterations=2,
+    max_iterations=1,
 )
 
 brief_presenter = LlmAgent(
@@ -1600,7 +1846,9 @@ brief_presenter = LlmAgent(
     model=MODEL_FLASH,
     instruction=_load_prompt("brief/brief_presenter.md"),
     generate_content_config=TEXT_MODE_NO_THINK_CONFIG,
+    include_contents="none",
     tools=[save_marketing_brief_artifact],
+    before_agent_callback=_make_timing_before_callback("brief_presenter"),
     after_agent_callback=_make_latest_brief_markdown_callback(),
 )
 
@@ -1618,6 +1866,8 @@ creative_director = LlmAgent(
     instruction=_load_prompt("creative/creative_director.md"),
     output_key="creative_package",
     generate_content_config=JSON_MODE_CONFIG,
+    include_contents="none",
+    before_agent_callback=_make_timing_before_callback("creative_director"),
     after_agent_callback=_make_auto_save_callback(
         "creative_director", "creative_package",
     ),
@@ -1628,6 +1878,7 @@ creative_presenter = LlmAgent(
     model=MODEL_FLASH,
     instruction=_load_prompt("creative/creative_presenter.md"),
     generate_content_config=TEXT_MODE_NO_THINK_CONFIG,
+    include_contents="none",
 )
 
 creative_phase = SequentialAgent(
@@ -1644,6 +1895,8 @@ creative_prompter = LlmAgent(
     instruction=_load_prompt("production/creative_prompter.md"),
     output_key="generation_manifest",
     generate_content_config=JSON_MODE_CONFIG,
+    include_contents="none",
+    before_agent_callback=_make_timing_before_callback("creative_prompter"),
     after_agent_callback=_make_auto_save_callback(
         "creative_prompter", "generation_manifest",
     ),
@@ -1654,7 +1907,9 @@ prompt_quality_checker = LlmAgent(
     model=MODEL_FLASH,
     instruction=_load_prompt("production/prompt_quality_checker.md"),
     output_key="prompt_quality_result",
-    generate_content_config=JSON_MODE_CONFIG,
+    generate_content_config=QUALITY_CHECK_CONFIG,
+    include_contents="none",
+    before_agent_callback=_make_timing_before_callback("prompt_quality_checker"),
     after_agent_callback=_make_quality_check_callback(
         "prompt_quality_checker", "prompt_quality_result",
     ),
@@ -1666,18 +1921,21 @@ prompt_regenerator = LlmAgent(
     instruction=_load_prompt("production/prompt_regenerator.md"),
     output_key="generation_manifest",
     generate_content_config=JSON_MODE_CONFIG,
+    include_contents="none",
+    before_agent_callback=_make_timing_before_callback("prompt_regenerator"),
     after_agent_callback=_make_auto_save_callback(
         "prompt_regenerator", "generation_manifest",
     ),
 )
 
-# Quality loop: checker then regenerator, max 2 iterations.
+# Quality loop: checker then regenerator, max 1 iteration.
 # Same pattern as brief_quality_loop - checker and regenerator are direct
 # sub_agents so the regenerator is skipped when the checker escalates on pass.
+# 1 iteration: if the checker fails, the regenerator runs once and the loop exits.
 prompt_quality_loop = LoopAgent(
     name="prompt_quality_loop",
     sub_agents=[prompt_quality_checker, prompt_regenerator],
-    max_iterations=2,
+    max_iterations=1,
 )
 
 results_presenter = LlmAgent(
@@ -1685,7 +1943,9 @@ results_presenter = LlmAgent(
     model=MODEL_FLASH,
     instruction=_load_prompt("production/results_presenter.md"),
     generate_content_config=TEXT_MODE_NO_THINK_CONFIG,
+    include_contents="none",
     tools=[save_creative_package_artifact, save_generation_manifest_artifact],
+    before_agent_callback=_make_timing_before_callback("results_presenter"),
     after_agent_callback=_session_state_export_callback,
 )
 
@@ -1710,6 +1970,7 @@ adapt_kb_analyzer = LlmAgent(
     instruction=_make_dynamic_kb_instruction(_load_prompt("discovery/kb_analyzer.md")),
     output_key="kb_insights",
     generate_content_config=JSON_MODE_CONFIG,
+    include_contents="none",
     before_agent_callback=_make_kb_cache_before_callback("adapt_kb_analyzer", MODEL_PRO),
     after_agent_callback=_make_kb_cache_after_callback("adapt_kb_analyzer"),
 )
@@ -1723,6 +1984,7 @@ adapt_preprocessor = LlmAgent(
     instruction=_load_prompt("analysis/preprocessor.md"),
     output_key="preprocessor_output",
     generate_content_config=JSON_MODE_CONFIG,
+    before_agent_callback=_make_timing_before_callback("adapt_preprocessor"),
     after_agent_callback=_make_auto_save_callback(
         "adapt_preprocessor", "preprocessor_output",
     ),
@@ -1734,6 +1996,8 @@ adapt_deconstructor = LlmAgent(
     instruction=_load_prompt("analysis/deconstructor.md"),
     output_key="scene_map",
     generate_content_config=JSON_MODE_CONFIG,
+    include_contents="none",
+    before_agent_callback=_make_timing_before_callback("adapt_deconstructor"),
     after_agent_callback=_make_auto_save_callback(
         "adapt_deconstructor", "scene_map",
     ),
@@ -1747,6 +2011,8 @@ adapt_audience_mapper = LlmAgent(
     ),
     output_key="audience_profiles",
     generate_content_config=JSON_MODE_CONFIG,
+    include_contents="none",
+    before_agent_callback=_make_timing_before_callback("adapt_audience_mapper"),
     after_agent_callback=_make_auto_save_callback(
         "adapt_audience_mapper", "audience_profiles",
     ),
@@ -1768,8 +2034,13 @@ adapt_strategy_generator = LlmAgent(
     instruction=_load_prompt("adaptation/strategy_generator.md"),
     output_key="approved_strategy",
     generate_content_config=JSON_MODE_CONFIG,
-    after_agent_callback=_make_auto_save_callback(
-        "adapt_strategy_generator", "approved_strategy",
+    include_contents="none",
+    before_agent_callback=_make_strategy_before_callback("adapt_strategy_generator"),
+    after_agent_callback=_make_strategy_save_and_project_callback(
+        "adapt_strategy_generator",
+        strategy_key="approved_strategy",
+        scene_map_key="scene_map",
+        presenter_key="approved_strategy_presenter",
     ),
 )
 
@@ -1778,6 +2049,7 @@ adapt_strategy_presenter = LlmAgent(
     model=MODEL_FLASH,
     instruction=_load_prompt("adaptation/strategy_presenter.md"),
     generate_content_config=TEXT_MODE_NO_THINK_CONFIG,
+    include_contents="none",
 )
 
 
@@ -1789,18 +2061,25 @@ adapt_strategy_presenter = LlmAgent(
 # empty Content to skip the LLM call entirely.
 def _make_audience_target_callback(index: int):
     async def callback(callback_context) -> types.Content | None:
+        _record_agent_start(f"adapt_variation_generator_{index}")
         strategy = _parse_state_value(
             callback_context.state.get("approved_strategy", {})
         )
         strategies = strategy.get("audience_strategies", []) if strategy else []
         if index < len(strategies):
-            # Write to a slot-specific key so parallel steps don't overwrite each other
+            # Write to slot-specific keys so parallel steps don't overwrite each other.
+            # target_audience_strategy_{index} contains only this audience's slice so
+            # the generator receives ~3K tokens instead of the full approved_strategy.
             callback_context.state[f"target_audience_id_{index}"] = strategies[index].get(
                 "audience_id"
+            )
+            callback_context.state[f"target_audience_strategy_{index}"] = json.dumps(
+                strategies[index], ensure_ascii=False
             )
             return None  # proceed normally
         # No audience at this index - skip the LLM call
         callback_context.state[f"target_audience_id_{index}"] = None
+        callback_context.state[f"target_audience_strategy_{index}"] = None
         return types.Content(parts=[types.Part(text="")], role="model")
     return callback
 
@@ -1865,9 +2144,12 @@ def _merge_variation_outputs(callback_context):
 _VARIATION_PROMPT = _load_prompt("delivery/variation_generator.md")
 def _make_variation_step(index: int) -> SequentialAgent:
     # Substitute slot-specific state keys so each parallel step reads
-    # its own target_audience_id_{index} and variation_output_{index}.
+    # its own target_audience_id_{index}, target_audience_strategy_{index},
+    # and variation_output_{index}.
     variation_prompt = _VARIATION_PROMPT.replace(
         "target_audience_id", f"target_audience_id_{index}"
+    ).replace(
+        "target_audience_strategy", f"target_audience_strategy_{index}"
     )
     generator = LlmAgent(
         name=f"adapt_variation_generator_{index}",
@@ -1875,6 +2157,7 @@ def _make_variation_step(index: int) -> SequentialAgent:
         instruction=variation_prompt,
         output_key=f"variation_output_{index}",
         generate_content_config=JSON_MODE_CONFIG,
+        include_contents="none",
         before_agent_callback=_make_audience_target_callback(index),
         after_agent_callback=_make_auto_save_callback(
             f"adapt_variation_generator_{index}", f"variation_output_{index}",
@@ -1896,7 +2179,9 @@ adapt_consistency_checker = LlmAgent(
     model=MODEL_FLASH,
     instruction=_load_prompt("delivery/consistency_checker.md"),
     output_key="consistency_result",
-    generate_content_config=JSON_MODE_CONFIG,
+    generate_content_config=QUALITY_CHECK_CONFIG,
+    include_contents="none",
+    before_agent_callback=_make_timing_before_callback("adapt_consistency_checker"),
     after_agent_callback=_make_adapt_quality_check_callback(
         "adapt_consistency_checker", "consistency_result",
     ),
@@ -1908,6 +2193,8 @@ adapt_variation_regenerator = LlmAgent(
     instruction=_load_prompt("delivery/variation_regenerator.md"),
     output_key="variation_output",
     generate_content_config=JSON_MODE_CONFIG,
+    include_contents="none",
+    before_agent_callback=_make_timing_before_callback("adapt_variation_regenerator"),
     after_agent_callback=_make_auto_save_callback(
         "adapt_variation_regenerator", "variation_output",
     ),
@@ -1918,7 +2205,9 @@ adapt_results_presenter = LlmAgent(
     model=MODEL_FLASH,
     instruction=_load_prompt("delivery/results_presenter.md"),
     generate_content_config=TEXT_MODE_NO_THINK_CONFIG,
+    include_contents="none",
     tools=[save_variation_artifact],
+    before_agent_callback=_make_timing_before_callback("adapt_results_presenter"),
     after_agent_callback=_adaptation_session_state_export_callback,
 )
 
@@ -1979,7 +2268,7 @@ adapt_variation_scatter = ParallelAgent(
 adapt_quality_loop = LoopAgent(
     name="adapt_quality_loop",
     sub_agents=[adapt_consistency_checker, adapt_variation_regenerator],
-    max_iterations=2,
+    max_iterations=1,
     before_agent_callback=_merge_variation_outputs,
 )
 
@@ -2192,18 +2481,49 @@ async def _fc_build_manifest_before_callback(callback_context):
     Builds the unified full_campaign_manifest and writes it to state so the
     presenter agent can read it and the artifact tool can save it.
     """
+    _record_agent_start("fc_results_presenter")
     state = callback_context.state
+
+    fc_vo = _parse_state_value(state.get("fc_variation_output"))
+    # The regenerator sometimes produces malformed JSON (e.g. bracket mismatch
+    # on large outputs). If the parsed result is not a usable dict, fall back
+    # to re-merging from the individual per-audience slots.
+    if not isinstance(fc_vo, dict) or not fc_vo.get("variations"):
+        logger.warning(
+            "_fc_build_manifest_before_callback: fc_variation_output not a "
+            "valid dict -- falling back to re-merging from per-audience slots"
+        )
+        fc_vo = _remerge_fc_slots(state)
+
     export = {
         "generation_manifest": _parse_state_value(
             state.get("generation_manifest"),
         ),
-        "fc_variation_output": _parse_state_value(
-            state.get("fc_variation_output"),
-        ),
+        "fc_variation_output": fc_vo,
     }
     manifest = _build_full_campaign_manifest(export)
     if manifest:
         callback_context.state["full_campaign_manifest"] = manifest
+
+
+def _remerge_fc_slots(state) -> dict:
+    """Re-merge fc_variation_output_0..3 from state into a single dict.
+
+    Used as a fallback when the regenerator's fc_variation_output is malformed.
+    """
+    merged = {"variations": {}, "audiences_processed": [], "status": "complete"}
+    for i in range(4):
+        slot = _parse_state_value(state.get(f"fc_variation_output_{i}"))
+        if not slot or not isinstance(slot, dict):
+            continue
+        aud_id = slot.get("audience_id")
+        if not aud_id:
+            continue
+        merged["variations"][aud_id] = slot
+        merged["audiences_processed"].append(aud_id)
+        merged.setdefault("pipeline_run_id", slot.get("pipeline_run_id"))
+        merged.setdefault("source_asset_id", slot.get("source_asset_id"))
+    return merged
 
 
 async def _fc_session_state_export_callback(callback_context):
@@ -2242,6 +2562,9 @@ async def _fc_session_state_export_callback(callback_context):
         with open(run_dir / "full_campaign_manifest.json", "w", encoding="utf-8") as f:
             json.dump(manifest, f, indent=2, ensure_ascii=False)
 
+    _record_agent_timing("fc_results_presenter")
+    _write_run_timing(run_dir)
+
 
 async def save_full_campaign_manifest_artifact(tool_context):
     """Save the unified full campaign manifest as a downloadable JSON file.
@@ -2269,6 +2592,7 @@ def _make_fc_audience_target_callback(index: int):
     Skips with empty Content if no audience exists at this index.
     """
     async def callback(callback_context) -> types.Content | None:
+        _record_agent_start(f"fc_variation_generator_{index}")
         strategy = _parse_state_value(
             callback_context.state.get("fc_approved_strategy", {})
         )
@@ -2277,8 +2601,12 @@ def _make_fc_audience_target_callback(index: int):
             callback_context.state[f"fc_target_audience_id_{index}"] = (
                 strategies[index].get("audience_id")
             )
+            callback_context.state[f"fc_target_audience_strategy_{index}"] = json.dumps(
+                strategies[index], ensure_ascii=False
+            )
             return None
         callback_context.state[f"fc_target_audience_id_{index}"] = None
+        callback_context.state[f"fc_target_audience_strategy_{index}"] = None
         return types.Content(parts=[types.Part(text="")], role="model")
     return callback
 
@@ -2367,8 +2695,7 @@ _FC_STRATEGY_GENERATOR_PROMPT = (
 
 _FC_STRATEGY_PRESENTER_PROMPT = (
     _load_prompt("adaptation/strategy_presenter.md")
-    .replace("approved_strategy", "fc_approved_strategy")
-    .replace("scene_map", "fc_scene_map")
+    .replace("approved_strategy_presenter", "fc_approved_strategy_presenter")
 )
 
 _FC_CONSISTENCY_CHECKER_PROMPT = (
@@ -2391,6 +2718,7 @@ _FC_VARIATION_REGENERATOR_PROMPT = (
 _FC_VARIATION_BASE_PROMPT = (
     _load_prompt("delivery/variation_generator.md")
     .replace("target_audience_id", "fc_target_audience_id")
+    .replace("target_audience_strategy", "fc_target_audience_strategy")
     .replace("approved_strategy", "fc_approved_strategy")
     .replace("scene_map", "fc_scene_map")
 )
@@ -2405,11 +2733,32 @@ fc_kb_analyzer = LlmAgent(
     ),
     output_key="kb_insights",
     generate_content_config=JSON_MODE_CONFIG,
+    include_contents="none",
     before_agent_callback=_make_kb_cache_before_callback(
         "fc_kb_analyzer", MODEL_PRO,
     ),
     after_agent_callback=_make_kb_cache_after_callback("fc_kb_analyzer"),
 )
+
+def _fc_creative_bridge_before_callback(callback_context):
+    """Records start time and extracts end card copy from generation_manifest
+    into a compact fc_end_card_copy state key for the creative bridge."""
+    _record_agent_start("fc_creative_bridge")
+    manifest = _parse_state_value(
+        callback_context.state.get("generation_manifest", {})
+    )
+    text_items = manifest.get("text_items", []) if manifest else []
+    copy = {}
+    for item in text_items:
+        if item.get("language") != "en":
+            continue
+        purpose = item.get("purpose", "")
+        if purpose == "end_card_tagline":
+            copy["end_card_tagline"] = item.get("final_text", "")
+        elif purpose == "end_card_cta":
+            copy["end_card_cta"] = item.get("final_text", "")
+    callback_context.state["fc_end_card_copy"] = json.dumps(copy, ensure_ascii=False)
+
 
 fc_creative_bridge = LlmAgent(
     name="fc_creative_bridge",
@@ -2417,6 +2766,8 @@ fc_creative_bridge = LlmAgent(
     instruction=_load_prompt("full_campaign/creative_bridge.md"),
     output_key="fc_scene_map",
     generate_content_config=JSON_MODE_CONFIG,
+    include_contents="none",
+    before_agent_callback=_fc_creative_bridge_before_callback,
     after_agent_callback=_make_auto_save_callback(
         "fc_creative_bridge", "fc_scene_map",
     ),
@@ -2430,6 +2781,8 @@ fc_audience_mapper = LlmAgent(
     ),
     output_key="fc_audience_profiles",
     generate_content_config=JSON_MODE_CONFIG,
+    include_contents="none",
+    before_agent_callback=_make_timing_before_callback("fc_audience_mapper"),
     after_agent_callback=_make_auto_save_callback(
         "fc_audience_mapper", "fc_audience_profiles",
     ),
@@ -2440,6 +2793,7 @@ fc_analysis_presenter = LlmAgent(
     model=MODEL_FLASH,
     instruction=_FC_ANALYSIS_PRESENTER_PROMPT,
     generate_content_config=TEXT_MODE_NO_THINK_CONFIG,
+    include_contents="none",
 )
 
 fc_strategy_generator = LlmAgent(
@@ -2448,8 +2802,13 @@ fc_strategy_generator = LlmAgent(
     instruction=_FC_STRATEGY_GENERATOR_PROMPT,
     output_key="fc_approved_strategy",
     generate_content_config=JSON_MODE_CONFIG,
-    after_agent_callback=_make_auto_save_callback(
-        "fc_strategy_generator", "fc_approved_strategy",
+    include_contents="none",
+    before_agent_callback=_make_strategy_before_callback("fc_strategy_generator"),
+    after_agent_callback=_make_strategy_save_and_project_callback(
+        "fc_strategy_generator",
+        strategy_key="fc_approved_strategy",
+        scene_map_key="fc_scene_map",
+        presenter_key="fc_approved_strategy_presenter",
     ),
 )
 
@@ -2458,6 +2817,7 @@ fc_strategy_presenter = LlmAgent(
     model=MODEL_FLASH,
     instruction=_FC_STRATEGY_PRESENTER_PROMPT,
     generate_content_config=TEXT_MODE_NO_THINK_CONFIG,
+    include_contents="none",
 )
 
 fc_consistency_checker = LlmAgent(
@@ -2465,7 +2825,9 @@ fc_consistency_checker = LlmAgent(
     model=MODEL_FLASH,
     instruction=_FC_CONSISTENCY_CHECKER_PROMPT,
     output_key="fc_consistency_result",
-    generate_content_config=JSON_MODE_CONFIG,
+    generate_content_config=QUALITY_CHECK_CONFIG,
+    include_contents="none",
+    before_agent_callback=_make_timing_before_callback("fc_consistency_checker"),
     after_agent_callback=_make_adapt_quality_check_callback(
         "fc_consistency_checker", "fc_consistency_result",
     ),
@@ -2477,6 +2839,8 @@ fc_variation_regenerator = LlmAgent(
     instruction=_FC_VARIATION_REGENERATOR_PROMPT,
     output_key="fc_variation_output",
     generate_content_config=JSON_MODE_CONFIG,
+    include_contents="none",
+    before_agent_callback=_make_timing_before_callback("fc_variation_regenerator"),
     after_agent_callback=_make_auto_save_callback(
         "fc_variation_regenerator", "fc_variation_output",
     ),
@@ -2487,6 +2851,7 @@ fc_results_presenter = LlmAgent(
     model=MODEL_FLASH,
     instruction=_load_prompt("full_campaign/results_presenter.md"),
     generate_content_config=TEXT_MODE_NO_THINK_CONFIG,
+    include_contents="none",
     tools=[save_full_campaign_manifest_artifact],
     before_agent_callback=_fc_build_manifest_before_callback,
     after_agent_callback=_fc_session_state_export_callback,
@@ -2501,6 +2866,8 @@ def _make_fc_variation_step(index: int) -> SequentialAgent:
     """
     variation_prompt = _FC_VARIATION_BASE_PROMPT.replace(
         "fc_target_audience_id", f"fc_target_audience_id_{index}",
+    ).replace(
+        "fc_target_audience_strategy", f"fc_target_audience_strategy_{index}",
     )
     generator = LlmAgent(
         name=f"fc_variation_generator_{index}",
@@ -2508,6 +2875,7 @@ def _make_fc_variation_step(index: int) -> SequentialAgent:
         instruction=variation_prompt,
         output_key=f"fc_variation_output_{index}",
         generate_content_config=JSON_MODE_CONFIG,
+        include_contents="none",
         before_agent_callback=_make_fc_audience_target_callback(index),
         after_agent_callback=_make_auto_save_callback(
             f"fc_variation_generator_{index}",
@@ -2565,7 +2933,7 @@ fc_variation_scatter = ParallelAgent(
 fc_quality_loop = LoopAgent(
     name="fc_quality_loop",
     sub_agents=[fc_consistency_checker, fc_variation_regenerator],
-    max_iterations=2,
+    max_iterations=1,
     before_agent_callback=_merge_fc_variation_outputs,
 )
 
@@ -2581,11 +2949,70 @@ fc_execution_phase = SequentialAgent(
 
 # --- Phase 5: Root Agent ---
 
+# Debug: log every root_agent LLM response so we can diagnose Gate 1 stalls.
+# Records finish_reason, text parts, and function calls to
+# outputs/root_agent_debug.log. Remove once the stall is resolved.
+_ROOT_DEBUG_LOG = OUTPUT_DIR / "root_agent_debug.log"
+
+
+async def _root_agent_debug_after_model_callback(callback_context, llm_response):
+    try:
+        OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now().isoformat(timespec="seconds")
+        finish_reason = getattr(llm_response, "finish_reason", None)
+        error_code = getattr(llm_response, "error_code", None)
+        error_message = getattr(llm_response, "error_message", None)
+        partial = getattr(llm_response, "partial", None)
+
+        text_parts = []
+        function_calls = []
+        function_responses = []
+        content = getattr(llm_response, "content", None)
+        if content and getattr(content, "parts", None):
+            for part in content.parts:
+                if getattr(part, "text", None):
+                    text_parts.append(part.text)
+                if getattr(part, "function_call", None):
+                    fc = part.function_call
+                    function_calls.append({
+                        "name": getattr(fc, "name", None),
+                        "args": getattr(fc, "args", None),
+                    })
+                if getattr(part, "function_response", None):
+                    fr = part.function_response
+                    function_responses.append({
+                        "name": getattr(fr, "name", None),
+                        "response": getattr(fr, "response", None),
+                    })
+
+        entry = {
+            "timestamp": timestamp,
+            "finish_reason": str(finish_reason) if finish_reason else None,
+            "error_code": error_code,
+            "error_message": error_message,
+            "partial": partial,
+            "text_parts": text_parts,
+            "function_calls": function_calls,
+            "function_responses": function_responses,
+        }
+        with open(_ROOT_DEBUG_LOG, "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False, default=str) + "\n")
+    except Exception as exc:
+        # Never let debug logging break the pipeline.
+        try:
+            with open(_ROOT_DEBUG_LOG, "a", encoding="utf-8") as f:
+                f.write(f"[debug log error] {exc}\n")
+        except Exception:
+            pass
+    return None
+
+
 root_agent = LlmAgent(
     name="creative_collective",
     model=MODEL_PRO,
     instruction=_load_prompt("root_agent.md"),
-    tools=[write_selected_concept],
+    tools=[write_selected_concept, write_campaign_constraints],
+    after_model_callback=_root_agent_debug_after_model_callback,
     sub_agents=[
         # Campaign creation path
         discovery_phase,

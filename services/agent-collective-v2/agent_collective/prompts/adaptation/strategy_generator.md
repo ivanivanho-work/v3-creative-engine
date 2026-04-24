@@ -156,6 +156,27 @@ Confirm the scene stays unchanged and briefly state why it works for this audien
 
 Confirm the scene is locked and cannot change.
 
+### **Campaign Tagline: One Shared Version, Diverge Only When the Concept Requires It**
+
+The campaign tagline (`campaign_tagline`) is a brand asset. Follow this two-step logic:
+
+**Step 1 -- Establish one shared tagline for all audiences:**
+If the original tagline is in a different language from the target market, translate it once. That single translation is the shared tagline for all audience segments. Do not produce a different translation per audience. If the original is already in the target market's language, all audiences share the original unchanged.
+
+**Step 2 -- Diverge only when a specific concept makes the shared version wrong:**
+For a given audience, write a different tagline only if the shared tagline would be factually incoherent or meaningless given that audience's specific adapted concept. The bar is high: would a viewer of this specific adapted ad be confused or misled by the shared tagline? If not, use the shared version. Do not deviate for tone-matching, nuance, or general audience appeal -- those are not strong enough reasons.
+
+**When writing or translating the tagline, use two references:**
+1. `strategy_brand_voice` from session state -- the brand voice principles (tone, dos, don'ts).
+2. The original tagline from the scene_map -- the stylistic benchmark. Your translation or adaptation must feel like it belongs to the same family. If the original is declarative and product-forward, yours should be too.
+
+**Output format for the tagline:**
+- `new_content`: the final tagline text (shared translation, or audience-specific if required)
+- `back_translation`: the English meaning if the text is not in English; omit if English
+- `localization_notes`: any nuances about the phrasing choice
+
+The CTA (`cta_text`) is locked. Do not include it in `changes`. Confirm it is unchanged in `unchanged_elements`.
+
 ---
 
 ## **STEP 4: VERIFY SCENE-TO-SCENE CONSISTENCY**
@@ -182,10 +203,33 @@ If the Audience Mapper flagged overlaps between segments, explicitly address eac
 
 ---
 
+## **STEP 5b: SUMMARISE KEY CHANGES FOR REVIEWER**
+
+After completing the scene-by-scene plan for each audience, produce a `key_changes` array. This is what the human reviewer sees in the approval table -- keep it accurate and tight.
+
+**Include a row for each change that meaningfully shifts what a viewer sees and responds to:**
+- A different opening scenario, environment, or subject
+- Different camera roll content (summarise as a group, not individual photos)
+- A different AI-generated video output
+- The campaign tagline row (always include this; `adapted` shows the shared tagline for all audiences, or the audience-specific version only if the concept requires it)
+
+**Do not include:**
+- Minor consistency tweaks (slightly adjusted hand style, subtle prop change that just matches the character)
+- Elements that are the same across all versions (CTA button, Shorts branding)
+
+**Rules:**
+- Aim for 3-6 rows. Never more than 6.
+- If a row type is meaningful for one audience it must appear for all audiences. The row labels must be consistent across all `audience_strategies` so the reviewer can compare segments at a glance.
+- `original` and `adapted` are one sentence each -- describe what a viewer actually sees, not the rationale.
+- For the campaign tagline row: `adapted` is the shared tagline (translated if needed) or an audience-specific version only if the concept requires it; include an English back-translation in parentheses if the text is not in English.
+
+---
+
 ## **CONSTRAINTS**
 
 * NEVER propose adaptations that violate the face policy. No identifiable human faces in any replacement asset or generated content.  
-* NEVER modify LOCKED scenes.  
+* NEVER modify LOCKED scenes.
+* NEVER produce a different tagline per audience segment unless that audience's specific concept makes the shared tagline incoherent. See "Campaign Tagline: One Shared Version" above. All audiences share one tagline (translated once if needed); deviate only when the concept forces it. When writing the tagline, use `strategy_brand_voice` for principles and the original from the scene_map as the stylistic benchmark.  
 * NEVER modify KEEP scenes unless you have an exceptionally strong, documented reason.  
 * NEVER break narrative consistency across scenes. Every adapted ad must tell a coherent story from start to finish.  
 * NEVER change the core purpose of the ad. If the ad sells a video generation tool, the adapted ad must still sell a video generation tool.  
@@ -267,7 +311,7 @@ Respond with ONLY the JSON below. No preamble. No explanation. No markdown code 
         {  
           "element\_id": "nested\_2\_03",  
           "element\_type": "user\_input\_text",  
-          "current\_content": "Show me and my cat skydiving",  
+          "current\_content": "[describe current prompt text from scene\_map]",  
           "new\_content": "The adapted prompt text that references the new input images",  
           "rationale": "Why this prompt resonates with this audience",  
           "face\_policy\_compliant": true  
@@ -300,7 +344,7 @@ Respond with ONLY the JSON below. No preamble. No explanation. No markdown code 
         {  
           "element\_id": "generated\_video",  
           "element\_type": "scene\_visual",  
-          "current\_content": "Woman and cat skydiving",  
+          "current\_content": "[describe current scene\_04 content from scene\_map]",  
           "new\_content": "Description of the adapted generated video that matches the new prompt from Scene 02",  
           "generation\_prompt": "A detailed prompt that could be used to generate this video content",  
           "rationale": "Why this generated output resonates with this audience and matches the input concept",  
@@ -316,18 +360,25 @@ Respond with ONLY the JSON below. No preamble. No explanation. No markdown code 
       "action": "adapt",  
       "changes": \[  
         {  
-          "element\_id": "tagline",  
+          "element\_id": "campaign\_tagline",  
           "element\_type": "text\_copy",  
-          "current\_content": "Prompt with text and images",  
-          "new\_content": "The adapted tagline",  
-          "rationale": "Why this messaging resonates with this audience",  
+          "current\_content": "[current tagline text from scene\_map]",  
+          "new\_content": "The adapted tagline in the target market's language",  
+          "back\_translation": "English meaning of the adapted tagline",  
+          "localization\_notes": "Nuances about the phrasing choice",  
+          "rationale": "Why this tagline is coherent with the concept and relevant to this audience",  
           "face\_policy\_compliant": true  
         }  
       \],  
       "unchanged\_elements": \[  
         {  
-          "element": "Product name 'Veo on Shorts'",  
-          "reason": "Brand-critical product naming"  
+          "element\_id": "cta\_text",  
+          "element": "CTA text",  
+          "reason": "CTA is locked across all variations"  
+        },  
+        {  
+          "element": "YouTube Shorts logo",  
+          "reason": "Brand-critical, always locked"  
         }  
       \]  
     },  
@@ -342,6 +393,29 @@ Respond with ONLY the JSON below. No preamble. No explanation. No markdown code 
           "reason": "Brand sign-off is locked per Scene Map"  
         }  
       \]  
+    }  
+  \],
+
+  "key\_changes": \[  
+    {  
+      "label": "Opening scene",  
+      "original": "Friends clinking casual drinks in a modern Korean cafe",  
+      "adapted": "Trendy female hands clinking colorful fruit ades in a vibrant, aesthetic cafe"  
+    },  
+    {  
+      "label": "Camera roll",  
+      "original": "Street food stall, cafe pastry, mountain trail, cat video, stationery, market street",  
+      "adapted": "Cute pet, cafe dessert, K-fashion flat lay, Seoul landmark, beauty product, K-pop fan event clip"  
+    },  
+    {  
+      "label": "AI-generated video",  
+      "original": "Polished clip of friends clinking casual drinks, professional edit",  
+      "adapted": "Bright pastel-filtered clip, aesthetic hands clinking drinks, fast cuts synced to a K-pop beat"  
+    },  
+    {  
+      "label": "Campaign tagline",  
+      "original": "[original tagline text from scene_map, e.g. 'Now on Pixel.']",  
+      "adapted": "[translated or adapted tagline, e.g. '나만의 픽셀로 (My own Pixel)']"  
     }  
   \],
 
@@ -373,6 +447,10 @@ Respond with ONLY the JSON below. No preamble. No explanation. No markdown code 
 * `consistency_check` is required for every audience. It must verify the complete narrative thread.  
 * `face_policy_compliant` must be true for every change. If it would be false, the change violates constraints and must be revised.  
 * `confidence_score` reflects both the quality of audience data and the strength of the creative concept. Low audience data confidence (below 0.6) should cap strategy confidence at around 0.65.
+* `key_changes` is required for every audience. Row labels must be identical across all `audience_strategies` -- the label "Camera roll" must appear for every audience if it appears for any.
+* `key_changes[].original` describes the source asset as-is. `key_changes[].adapted` describes what this audience version shows. Both are one sentence.
+* The campaign tagline always gets a `key_changes` row with label `"Campaign tagline"`.
+* The CTA never gets a `key_changes` row.
 
 
 ---
@@ -395,3 +473,18 @@ If the user previously rejected your strategy with feedback, that feedback will 
 Output your complete JSON as specified in the OUTPUT FORMAT section above. Your JSON response will be captured in session state under `approved_strategy` for the Variation Generator and Strategy Presenter to read.
 
 Do not add commentary or present concepts yourself. A separate presenter agent will read your output and format an engaging presentation for the user.
+
+---
+
+## Session Data
+
+The values below are injected from session state. Use them as your primary input.
+
+### scene_map
+{scene_map}
+
+### audience_profiles
+{audience_profiles}
+
+### strategy_brand_voice
+{strategy_brand_voice}

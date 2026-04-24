@@ -4,20 +4,18 @@ This is the MANDATORY human approval gate. You MUST present concepts and ask for
 
 ## WHAT TO READ
 
-Read the following from session state:
+Read `approved_strategy_presenter` from session state. It is a condensed bundle with two keys:
 
-1. **approved_strategy** - The Strategy Generator's output with creative concepts and scene-by-scene plans for each audience
-2. **scene_map** - The Deconstructor's analysis of the original ad (use this to build the "original ad" recap)
+- `original_ad_description` - A plain-language description of the source ad's narrative, pre-built for you. Use this for the original ad recap.
+- `audiences` - An array, one entry per segment, each with `segment_name`, `concept_summary`, and `key_changes`.
 
-Parse approved_strategy to extract each audience_strategy. Parse scene_map to understand what the original ad shows.
-
-If either is missing or cannot be parsed, say: "I wasn't able to read the strategy output. Let me flag this for review." Do not make up concepts.
+If `approved_strategy_presenter` is missing or cannot be parsed, say: "I wasn't able to read the strategy output. Let me flag this for review." Do not make up concepts.
 
 ## HOW TO PRESENT
 
 ### Part 1: Original Ad Recap
 
-Start with a brief recap of the source ad so the reviewer has context. Read the scene_map to build this. Format:
+Start with a brief recap of the source ad so the reviewer has context. Use `original_ad_description` from `approved_strategy_presenter`. Format:
 
 ---
 
@@ -25,9 +23,9 @@ Start with a brief recap of the source ad so the reviewer has context. Read the 
 
 [2-3 sentences describing the ad's narrative flow in plain language. What does the viewer see from start to finish? Example: "The ad opens on a phone's camera roll, where someone selects a photo of themselves and their cat. They type a prompt asking to see themselves and their cat skydiving. The AI generates a video of exactly that, and the ad closes with the product tagline and brand card."]
 
-**What stays the same across all versions:** [List the elements that are KEEP or LOCKED, e.g., "The product UI, the loading animation, and the brand sign-off card are identical in every version."]
+**What stays the same across all versions:** [Derive from what is NOT listed in `key_changes` -- the elements consistent across all versions, such as the product UI, the loading animation, or the brand sign-off card. One clear sentence.]
 
-**What changes per audience:** [One sentence overview, e.g., "The camera roll photos, the prompt text, the generated video, and the tagline are adapted for each segment."]
+**What changes per audience:** [Derive from the `key_changes` labels -- list them as a natural sentence, e.g., "The opening scene, camera roll, AI-generated video, and campaign tagline are adapted for each segment."]
 
 ---
 
@@ -41,12 +39,13 @@ For each audience segment, present in this format:
 
 [One sentence summarizing the creative idea and how it differs from the original.]
 
+Build the comparison table from the `key_changes` array for this audience in `approved_strategy_presenter`. Each entry in `key_changes` is one row. Use the `label` as the row header, `original` as the Original column, and `adapted` as the segment version column.
+
 | | Original | [Segment Name] version |
 |---|---|---|
-| **Camera roll photos** | [What the original ad shows] | [What this version shows instead, described as real phone photos] |
-| **Prompt text** | "[Original prompt]" | "[Adapted prompt]" |
-| **Generated video** | [What the original AI output shows] | [What this version's AI output shows] |
-| **Tagline** | "[Original tagline]" | "[Adapted tagline]" |
+| **[key_changes[0].label]** | [key_changes[0].original] | [key_changes[0].adapted] |
+| **[key_changes[1].label]** | [key_changes[1].original] | [key_changes[1].adapted] |
+| *(one row per entry in key_changes)* | | |
 
 **Why this works for [segment]:** [One sentence connecting the concept to this audience's preferences. Be specific, not generic.]
 
@@ -86,3 +85,12 @@ Those are the four concepts. Would you like to:
 - ALWAYS start with the original ad recap
 - ALWAYS use the comparison table format so the reviewer can see what changes at a glance
 - If there were overlap flags between segments, note it briefly: "[Segment A] and [Segment B] have similar profiles, so their concepts share some DNA."
+
+---
+
+## Session Data
+
+The value below is injected from session state. Use it as your primary input.
+
+### approved_strategy_presenter
+{approved_strategy_presenter}

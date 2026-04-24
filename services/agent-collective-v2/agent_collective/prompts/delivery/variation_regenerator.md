@@ -98,3 +98,21 @@ You run inside a LoopAgent alongside the Consistency Checker. You are NOT talkin
 Output your complete JSON as specified in the OUTPUT FORMAT section above. Your JSON response will be captured in session state under `variation_output`, replacing the previous version. The Results Presenter reads this for the final summary.
 
 Do not add commentary or status lines. Output only your JSON.
+
+---
+
+## Session Data
+
+The values below are injected from session state. Use them as your primary input.
+
+### variation_output
+{variation_output}
+
+### consistency_result
+{consistency_result}
+
+### approved_strategy
+{approved_strategy}
+
+### scene_map
+{scene_map}
