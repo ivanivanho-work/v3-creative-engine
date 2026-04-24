@@ -825,8 +825,15 @@ async def write_campaign_constraints(
 # large JSON payload as a tool argument.
 
 
-def _marketing_brief_to_markdown(data: dict) -> str:
+def _marketing_brief_to_markdown(data) -> str:
     """Convert a marketing_brief dict to a human-readable Markdown document."""
+    if isinstance(data, str):
+        try:
+            data = json.loads(data)
+        except (json.JSONDecodeError, ValueError):
+            return ""
+    if not isinstance(data, dict):
+        return ""
     lines = []
 
     brief_id = data.get("brief_id", "Unknown")
