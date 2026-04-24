@@ -43,6 +43,7 @@ from pathlib import Path
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from demo_ui import kb_storage
 
@@ -124,6 +125,7 @@ adk_app = get_fast_api_app(
         "https://v3-creative-engine.web.app",
         "https://v3-creative-engine.firebaseapp.com",
         "http://localhost:5000",
+        "http://localhost:5500",
         "http://localhost:8080",
     ],
 )
@@ -135,15 +137,17 @@ adk_app = get_fast_api_app(
 
 app = FastAPI(title="Agent Collective V2")
 
-# CORS for Firebase Hosting
+# CORS for Firebase Hosting and local dev (including Cloud Shell Web Preview)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "https://v3-creative-engine.web.app",
         "https://v3-creative-engine.firebaseapp.com",
         "http://localhost:5000",
+        "http://localhost:5500",
         "http://localhost:8080",
     ],
+    allow_origin_regex=r"https://\d+-cs-.+\.cloudshell\.dev",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -449,3 +453,8 @@ async def delete_kb_file(req: KbDeleteRequest):
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+_FRONTEND_DIR = Path(__file__).parent.parent.parent.parent / "public" / "agent-collective-v2"
+if _FRONTEND_DIR.exists():
+    app.mount("/", StaticFiles(directory=str(_FRONTEND_DIR), html=True), name="frontend")

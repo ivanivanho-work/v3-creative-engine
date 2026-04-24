@@ -13,9 +13,12 @@
 
 // Backend URL — Cloud Run service (update after deployment)
 // For local dev, set to "http://localhost:8080"
-const API_BASE = window.location.hostname === "localhost"
-  ? "http://localhost:8080"
-  : "https://agent-collective-v2-964100659393.us-central1.run.app";
+const API_BASE = (() => {
+  const h = window.location.hostname;
+  if (h === "localhost") return "http://localhost:8080";
+  if (h.includes("cloudshell.dev")) return `${window.location.protocol}//${h.replace(/^\d+/, "8080")}`;
+  return "https://agent-collective-v2-964100659393.us-central1.run.app";
+})();
 
 // Firebase config (same as v3-creative-engine)
 const FIREBASE_CONFIG = {
