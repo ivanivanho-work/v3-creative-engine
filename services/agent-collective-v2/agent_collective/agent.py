@@ -117,41 +117,41 @@ def _load_kb_documents(market: str) -> str:
 # Run folder management
 # =========================================================================
 
-# Tracks the current run's output folder for this server process.
-# Reset this to None if you want a new folder per invocation.
-_current_run_dir: Path | None = None
-_run_start_time: datetime | None = None
-_agent_timings: list[dict] = []
-_agent_start_times: dict[str, datetime] = {}
+# Run state keyed by session_id so concurrent sessions never share folders
+# or timing data. Each entry is created on first use and cleared on pipeline
+# start so a session can run multiple pipelines sequentially.
+_run_dirs: dict[str, Path] = {}
+_run_start_times: dict[str, datetime] = {}
+_agent_timings: dict[str, list[dict]] = {}
+_agent_start_times: dict[str, dict[str, datetime]] = {}
 
 
-def _get_run_dir() -> Path:
+def _get_run_dir(session_id: str) -> Path:
     """Get or create the output folder for this pipeline run.
 
-    Folders are named: outputs/run_YYYY-MM-DD_NNN/
+    Folders are named: outputs/{market}/run_YYYY-MM-DD_NNN/
     where NNN is a sequential number per day.
     """
-    global _current_run_dir, _run_start_time
-    if _current_run_dir is not None:
-        return _current_run_dir
+    if session_id in _run_dirs:
+        return _run_dirs[session_id]
 
     today = datetime.now().strftime("%Y-%m-%d")
     MARKET_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     existing = sorted(MARKET_OUTPUT_DIR.glob(f"run_{today}_*"))
     next_num = len(existing) + 1
-    _current_run_dir = MARKET_OUTPUT_DIR / f"run_{today}_{next_num:03d}"
-    _current_run_dir.mkdir(parents=True, exist_ok=True)
-    _run_start_time = datetime.now()
-    return _current_run_dir
+    run_dir = MARKET_OUTPUT_DIR / f"run_{today}_{next_num:03d}"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    _run_dirs[session_id] = run_dir
+    _run_start_times[session_id] = datetime.now()
+    return run_dir
 
 
-def _reset_run_dir():
-    """Reset so the next pipeline run creates a fresh folder."""
-    global _current_run_dir, _run_start_time, _agent_timings, _agent_start_times
-    _current_run_dir = None
-    _run_start_time = None
-    _agent_timings = []
-    _agent_start_times = {}
+def _reset_run_dir(session_id: str):
+    """Reset so the next pipeline run for this session creates a fresh folder."""
+    _run_dirs.pop(session_id, None)
+    _run_start_times.pop(session_id, None)
+    _agent_timings.pop(session_id, None)
+    _agent_start_times.pop(session_id, None)
 
 
 def _parse_state_value(value):
@@ -354,7 +354,8 @@ def _make_kb_cache_before_callback(agent_name: str, model: str):
     callback can persist it, then returns None to let ADK proceed.
     """
     async def callback(callback_context) -> types.Content | None:
-        _record_agent_start(agent_name)
+        sid = callback_context.session.id
+        _record_agent_start(sid, agent_name)
         session_market = callback_context.state.get("market", MARKET)
 
         # If KB files are absent (e.g. gitignored on a fresh clone), fall back
@@ -365,13 +366,13 @@ def _make_kb_cache_before_callback(agent_name: str, model: str):
             cached = _load_kb_cache(session_market)
             if cached is not None:
                 _, cached_insights = cached
-                run_dir = _get_run_dir()
+                run_dir = _get_run_dir(sid)
                 with open(run_dir / f"{agent_name}.json", "w", encoding="utf-8") as f:
                     json.dump(cached_insights, f, indent=2, ensure_ascii=False)
                 callback_context.state["kb_insights"] = json.dumps(
                     cached_insights, ensure_ascii=False
                 )
-                _record_agent_timing(agent_name)
+                _record_agent_timing(sid, agent_name)
                 return types.Content(
                     role="model",
                     parts=[types.Part(text=json.dumps(cached_insights, ensure_ascii=False))],
@@ -385,7 +386,7 @@ def _make_kb_cache_before_callback(agent_name: str, model: str):
         if cached is not None:
             cached_fingerprint, cached_insights = cached
             if cached_fingerprint == fingerprint:
-                run_dir = _get_run_dir()
+                run_dir = _get_run_dir(sid)
                 with open(run_dir / f"{agent_name}.json", "w", encoding="utf-8") as f:
                     json.dump(cached_insights, f, indent=2, ensure_ascii=False)
                 # output_key never fires on a cache hit because ADK sets
@@ -395,7 +396,7 @@ def _make_kb_cache_before_callback(agent_name: str, model: str):
                 callback_context.state["kb_insights"] = json.dumps(
                     cached_insights, ensure_ascii=False
                 )
-                _record_agent_timing(agent_name)
+                _record_agent_timing(sid, agent_name)
                 return types.Content(
                     role="model",
                     parts=[types.Part(text=json.dumps(cached_insights, ensure_ascii=False))],
@@ -420,7 +421,8 @@ def _make_kb_cache_after_callback(agent_name: str):
         if data is None:
             return
 
-        run_dir = _get_run_dir()
+        sid = callback_context.session.id
+        run_dir = _get_run_dir(sid)
         parsed = _parse_state_value(data)
         with open(run_dir / f"{agent_name}.json", "w", encoding="utf-8") as f:
             json.dump(parsed, f, indent=2, ensure_ascii=False)
@@ -430,7 +432,7 @@ def _make_kb_cache_after_callback(agent_name: str):
         if fingerprint and market:
             _save_kb_cache(market, fingerprint, parsed)
 
-        _record_agent_timing(agent_name)
+        _record_agent_timing(sid, agent_name)
 
     return callback
 
@@ -440,15 +442,15 @@ def _make_kb_cache_after_callback(agent_name: str):
 # =========================================================================
 
 
-def _record_agent_start(agent_name: str):
+def _record_agent_start(session_id: str, agent_name: str):
     """Record the start timestamp for an agent in the current run."""
-    _agent_start_times[agent_name] = datetime.now()
+    _agent_start_times.setdefault(session_id, {})[agent_name] = datetime.now()
 
 
 def _make_timing_before_callback(agent_name: str):
     """Factory: before_agent_callback that records when an agent starts."""
     async def callback(callback_context):
-        _record_agent_start(agent_name)
+        _record_agent_start(callback_context.session.id, agent_name)
     return callback
 
 
@@ -461,7 +463,7 @@ def _make_strategy_before_callback(agent_name: str):
     prompt compact and reduces latency.
     """
     async def callback(callback_context):
-        _record_agent_start(agent_name)
+        _record_agent_start(callback_context.session.id, agent_name)
         kb_raw = callback_context.state.get("kb_insights")
         brand_voice = {}
         if kb_raw:
@@ -476,31 +478,32 @@ def _make_strategy_before_callback(agent_name: str):
     return callback
 
 
-def _record_agent_timing(agent_name: str):
+def _record_agent_timing(session_id: str, agent_name: str):
     """Record the completion timestamp and duration for an agent in the current run."""
     completed_at = datetime.now()
-    start = _agent_start_times.get(agent_name)
+    start = _agent_start_times.get(session_id, {}).get(agent_name)
     duration_seconds = round((completed_at - start).total_seconds()) if start else 0
-    _agent_timings.append({
+    _agent_timings.setdefault(session_id, []).append({
         "name": agent_name,
         "completed_at": completed_at.isoformat(timespec="seconds"),
         "duration_seconds": duration_seconds,
     })
 
 
-def _write_run_timing(run_dir: Path):
+def _write_run_timing(session_id: str, run_dir: Path):
     """Write run_timing.json to the run folder.
 
     Total processing time is the sum of individual agent durations,
     which excludes time spent waiting for operator responses at gates.
     """
-    if _run_start_time is None:
+    run_start = _run_start_times.get(session_id)
+    if run_start is None:
         return
 
     now = datetime.now()
     total_processing_seconds = 0
     agents = []
-    for entry in _agent_timings:
+    for entry in _agent_timings.get(session_id, []):
         duration_seconds = entry.get("duration_seconds", 0)
         total_processing_seconds += duration_seconds
         agents.append({
@@ -511,7 +514,7 @@ def _write_run_timing(run_dir: Path):
         })
 
     timing = {
-        "run_start": _run_start_time.isoformat(timespec="seconds"),
+        "run_start": run_start.isoformat(timespec="seconds"),
         "run_end": now.isoformat(timespec="seconds"),
         "total_processing_minutes": round(total_processing_seconds / 60, 1),
         "agents": agents,
@@ -543,14 +546,15 @@ def _make_quality_check_callback(agent_name: str, state_key: str):
             return
 
         # Auto-save the result
-        run_dir = _get_run_dir()
+        sid = callback_context.session.id
+        run_dir = _get_run_dir(sid)
         parsed = _parse_state_value(data)
         out_path = run_dir / f"{agent_name}.json"
 
         with open(out_path, "w", encoding="utf-8") as f:
             json.dump(parsed, f, indent=2, ensure_ascii=False)
 
-        _record_agent_timing(agent_name)
+        _record_agent_timing(sid, agent_name)
 
         # Escalate (exit loop) if quality check passed.
         # The state write is required: _handle_after_agent_callback only yields
@@ -574,14 +578,15 @@ def _make_auto_save_callback(agent_name: str, state_key: str):
         if data is None:
             return
 
-        run_dir = _get_run_dir()
+        sid = callback_context.session.id
+        run_dir = _get_run_dir(sid)
         parsed = _parse_state_value(data)
         out_path = run_dir / f"{agent_name}.json"
 
         with open(out_path, "w", encoding="utf-8") as f:
             json.dump(parsed, f, indent=2, ensure_ascii=False)
 
-        _record_agent_timing(agent_name)
+        _record_agent_timing(sid, agent_name)
 
     return callback
 
@@ -603,14 +608,15 @@ def _make_strategy_save_and_project_callback(
         if strategy_data is None:
             return
 
-        run_dir = _get_run_dir()
+        sid = callback_context.session.id
+        run_dir = _get_run_dir(sid)
         parsed_strategy = _parse_state_value(strategy_data)
         if not isinstance(parsed_strategy, dict):
             return
         with open(run_dir / f"{agent_name}.json", "w", encoding="utf-8") as f:
             json.dump(parsed_strategy, f, indent=2, ensure_ascii=False)
 
-        _record_agent_timing(agent_name)
+        _record_agent_timing(sid, agent_name)
 
         scene_map_data = callback_context.state.get(scene_map_key)
         parsed_scene_map = _parse_state_value(scene_map_data) or {}
@@ -657,52 +663,48 @@ def _make_strategy_presenter_before_callback(
 
 
 def _make_latest_file_callback(state_key: str, filename: str):
-    """Factory: creates a callback that writes a 'latest' copy of
-    a state key to the outputs/ root for the demo UI to serve.
-
-    This runs on presenter agents so the download always has the
-    final (post-quality-check) version.
+    """Factory: writes the output JSON into the session's run folder and the
+    market-scoped latest file so the download endpoints always serve the
+    most recently completed run.
     """
     async def callback(callback_context):
         data = callback_context.state.get(state_key)
         if data is None:
             return
 
-        MARKET_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        sid = callback_context.session.id
+        run_dir = _get_run_dir(sid)
         parsed = _parse_state_value(data)
-        out_path = MARKET_OUTPUT_DIR / filename
-
-        with open(out_path, "w", encoding="utf-8") as f:
+        with open(run_dir / filename, "w", encoding="utf-8") as f:
             json.dump(parsed, f, indent=2, ensure_ascii=False)
-
-        # Also write into the run folder (without the "latest_" prefix)
-        run_dir = _get_run_dir()
-        run_filename = filename.replace("latest_", "")
-        with open(run_dir / run_filename, "w", encoding="utf-8") as f:
+        MARKET_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        with open(MARKET_OUTPUT_DIR / filename, "w", encoding="utf-8") as f:
             json.dump(parsed, f, indent=2, ensure_ascii=False)
 
     return callback
 
 
 def _make_latest_brief_markdown_callback():
-    """Callback for brief_presenter: writes the marketing brief as Markdown."""
+    """Callback for brief_presenter: writes the marketing brief into the session's
+    run folder and the market-scoped latest file for the download endpoint.
+    """
     async def callback(callback_context):
         data = callback_context.state.get("marketing_brief")
         if data is None:
             return
 
-        MARKET_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        sid = callback_context.session.id
+        run_dir = _get_run_dir(sid)
         parsed = _parse_state_value(data)
         md_content = _marketing_brief_to_markdown(parsed)
 
+        with open(run_dir / "latest_marketing_brief.md", "w", encoding="utf-8") as f:
+            f.write(md_content)
+        MARKET_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
         with open(MARKET_OUTPUT_DIR / "latest_marketing_brief.md", "w", encoding="utf-8") as f:
             f.write(md_content)
 
-        run_dir = _get_run_dir()
-        with open(run_dir / "marketing_brief.md", "w", encoding="utf-8") as f:
-            f.write(md_content)
-
-        _record_agent_timing("brief_presenter")
+        _record_agent_timing(sid, "brief_presenter")
 
     return callback
 
@@ -715,7 +717,8 @@ async def _session_state_export_callback(callback_context):
     for the demo UI download endpoint.
     """
     state = callback_context.state
-    run_dir = _get_run_dir()
+    sid = callback_context.session.id
+    run_dir = _get_run_dir(sid)
 
     # Export all pipeline state keys
     export_keys = [
@@ -729,44 +732,31 @@ async def _session_state_export_callback(callback_context):
         if val is not None:
             export[key] = _parse_state_value(val)
 
-    session_path = run_dir / "session_state.json"
-    with open(session_path, "w", encoding="utf-8") as f:
+    with open(run_dir / "session_state.json", "w", encoding="utf-8") as f:
         json.dump(export, f, indent=2, ensure_ascii=False)
 
-    # Also write the latest files for the demo UI
+    # Keep market-scoped latest files current for the download endpoints.
     MARKET_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    brief = state.get("marketing_brief")
+    brief = export.get("marketing_brief")
     if brief is not None:
-        parsed = _parse_state_value(brief)
-        md_content = _marketing_brief_to_markdown(parsed)
-        latest_path = MARKET_OUTPUT_DIR / "latest_marketing_brief.md"
-        with open(latest_path, "w", encoding="utf-8") as f:
-            f.write(md_content)
-        with open(run_dir / "marketing_brief.md", "w", encoding="utf-8") as f:
+        md_content = _marketing_brief_to_markdown(brief)
+        with open(MARKET_OUTPUT_DIR / "latest_marketing_brief.md", "w", encoding="utf-8") as f:
             f.write(md_content)
 
-    manifest = state.get("generation_manifest")
+    manifest = export.get("generation_manifest")
     if manifest is not None:
-        parsed = _parse_state_value(manifest)
-        latest_path = MARKET_OUTPUT_DIR / "latest_generation_manifest.json"
-        with open(latest_path, "w", encoding="utf-8") as f:
-            json.dump(parsed, f, indent=2, ensure_ascii=False)
-        with open(run_dir / "generation_manifest.json", "w", encoding="utf-8") as f:
-            json.dump(parsed, f, indent=2, ensure_ascii=False)
+        with open(MARKET_OUTPUT_DIR / "latest_generation_manifest.json", "w", encoding="utf-8") as f:
+            json.dump(manifest, f, indent=2, ensure_ascii=False)
 
-    creative = state.get("creative_package")
+    creative = export.get("creative_package")
     if creative is not None:
-        parsed = _parse_state_value(creative)
-        md_content = _creative_package_to_markdown(parsed)
-        latest_path = MARKET_OUTPUT_DIR / "latest_creative_package.md"
-        with open(latest_path, "w", encoding="utf-8") as f:
-            f.write(md_content)
-        with open(run_dir / "creative_package.md", "w", encoding="utf-8") as f:
+        md_content = _creative_package_to_markdown(creative)
+        with open(MARKET_OUTPUT_DIR / "latest_creative_package.md", "w", encoding="utf-8") as f:
             f.write(md_content)
 
-    _record_agent_timing("results_presenter")
-    _write_run_timing(run_dir)
+    _record_agent_timing(sid, "results_presenter")
+    _write_run_timing(sid, run_dir)
 
 
 # =========================================================================
@@ -1622,7 +1612,8 @@ async def _adaptation_session_state_export_callback(callback_context):
     to the run folder at the end of the adaptation pipeline.
     """
     state = callback_context.state
-    run_dir = _get_run_dir()
+    sid = callback_context.session.id
+    run_dir = _get_run_dir(sid)
 
     export_keys = [
         "kb_insights", "preprocessor_output", "scene_map",
@@ -1668,30 +1659,24 @@ async def _adaptation_session_state_export_callback(callback_context):
             manifest = _build_adaptation_manifest(fallback_export)
 
     if manifest:
-        with open(
-            run_dir / "generation_manifest.json", "w", encoding="utf-8",
-        ) as f:
+        with open(run_dir / "generation_manifest.json", "w", encoding="utf-8") as f:
             json.dump(manifest, f, indent=2, ensure_ascii=False)
-        with open(
-            MARKET_OUTPUT_DIR / "latest_generation_manifest.json",
-            "w", encoding="utf-8",
-        ) as f:
+        with open(run_dir / "latest_generation_manifest.json", "w", encoding="utf-8") as f:
+            json.dump(manifest, f, indent=2, ensure_ascii=False)
+        with open(MARKET_OUTPUT_DIR / "latest_generation_manifest.json", "w", encoding="utf-8") as f:
             json.dump(manifest, f, indent=2, ensure_ascii=False)
 
     md_content = _build_adaptation_package_md(export)
     if md_content:
-        with open(
-            run_dir / "creative_package.md", "w", encoding="utf-8",
-        ) as f:
+        with open(run_dir / "creative_package.md", "w", encoding="utf-8") as f:
             f.write(md_content)
-        with open(
-            MARKET_OUTPUT_DIR / "latest_creative_package.md",
-            "w", encoding="utf-8",
-        ) as f:
+        with open(run_dir / "latest_creative_package.md", "w", encoding="utf-8") as f:
+            f.write(md_content)
+        with open(MARKET_OUTPUT_DIR / "latest_creative_package.md", "w", encoding="utf-8") as f:
             f.write(md_content)
 
-    _record_agent_timing("adapt_results_presenter")
-    _write_run_timing(run_dir)
+    _record_agent_timing(sid, "adapt_results_presenter")
+    _write_run_timing(sid, run_dir)
 
 
 # =========================================================================
@@ -1710,14 +1695,15 @@ def _make_adapt_quality_check_callback(agent_name: str, state_key: str):
         if data is None:
             return
 
-        run_dir = _get_run_dir()
+        sid = callback_context.session.id
+        run_dir = _get_run_dir(sid)
         parsed = _parse_state_value(data)
         out_path = run_dir / f"{agent_name}.json"
 
         with open(out_path, "w", encoding="utf-8") as f:
             json.dump(parsed, f, indent=2, ensure_ascii=False)
 
-        _record_agent_timing(agent_name)
+        _record_agent_timing(sid, agent_name)
 
         # Escalate if all audiences passed.
         # The state write is required: _handle_after_agent_callback only yields
@@ -1775,7 +1761,7 @@ async def _discovery_before_callback(callback_context):
     Attached to discovery_phase (not root_agent) so the folder resets
     once per pipeline run, not on every user message.
     """
-    _reset_run_dir()
+    _reset_run_dir(callback_context.session.id)
 
 
 # =========================================================================
@@ -2101,7 +2087,7 @@ adapt_strategy_presenter = LlmAgent(
 # empty Content to skip the LLM call entirely.
 def _make_audience_target_callback(index: int):
     async def callback(callback_context) -> types.Content | None:
-        _record_agent_start(f"adapt_variation_generator_{index}")
+        _record_agent_start(callback_context.session.id, f"adapt_variation_generator_{index}")
         strategy = _parse_state_value(
             callback_context.state.get("approved_strategy", {})
         )
@@ -2172,7 +2158,8 @@ def _merge_variation_outputs(callback_context):
     callback_context.state["variation_output"] = merged
 
     # Persist merged output to run folder
-    run_dir = _get_run_dir()
+    sid = callback_context.session.id
+    run_dir = _get_run_dir(sid)
     out_path = run_dir / "adapt_variation_output_merged.json"
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(merged, f, indent=2, ensure_ascii=False)
@@ -2273,7 +2260,7 @@ adapt_parallel_intake = ParallelAgent(
 # then audience mapping, then the presenter summarizes findings for the user.
 async def _adapt_before_callback(callback_context):
     """Reset run folder at the start of a new adaptation run."""
-    _reset_run_dir()
+    _reset_run_dir(callback_context.session.id)
 
 adapt_pre_strategy_phase = SequentialAgent(
     name="adapt_pre_strategy_phase",
@@ -2521,7 +2508,7 @@ async def _fc_build_manifest_before_callback(callback_context):
     Builds the unified full_campaign_manifest and writes it to state so the
     presenter agent can read it and the artifact tool can save it.
     """
-    _record_agent_start("fc_results_presenter")
+    _record_agent_start(callback_context.session.id, "fc_results_presenter")
     state = callback_context.state
 
     fc_vo = _parse_state_value(state.get("fc_variation_output"))
@@ -2570,10 +2557,11 @@ async def _fc_session_state_export_callback(callback_context):
     """After-agent callback for fc_results_presenter.
 
     Writes all session state keys and the full_campaign_manifest to the
-    run folder and the market-scoped latest files.
+    run folder.
     """
     state = callback_context.state
-    run_dir = _get_run_dir()
+    sid = callback_context.session.id
+    run_dir = _get_run_dir(sid)
 
     export_keys = [
         "kb_insights", "campaign_concepts", "selected_concept",
@@ -2589,21 +2577,21 @@ async def _fc_session_state_export_callback(callback_context):
         if val is not None:
             export[key] = _parse_state_value(val)
 
-    session_path = run_dir / "session_state.json"
-    with open(session_path, "w", encoding="utf-8") as f:
+    with open(run_dir / "session_state.json", "w", encoding="utf-8") as f:
         json.dump(export, f, indent=2, ensure_ascii=False)
 
     manifest = export.get("full_campaign_manifest")
     if manifest:
-        MARKET_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-        latest_path = MARKET_OUTPUT_DIR / "latest_full_campaign_manifest.json"
-        with open(latest_path, "w", encoding="utf-8") as f:
+        with open(run_dir / "latest_full_campaign_manifest.json", "w", encoding="utf-8") as f:
             json.dump(manifest, f, indent=2, ensure_ascii=False)
         with open(run_dir / "full_campaign_manifest.json", "w", encoding="utf-8") as f:
             json.dump(manifest, f, indent=2, ensure_ascii=False)
+        MARKET_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        with open(MARKET_OUTPUT_DIR / "latest_full_campaign_manifest.json", "w", encoding="utf-8") as f:
+            json.dump(manifest, f, indent=2, ensure_ascii=False)
 
-    _record_agent_timing("fc_results_presenter")
-    _write_run_timing(run_dir)
+    _record_agent_timing(sid, "fc_results_presenter")
+    _write_run_timing(sid, run_dir)
 
 
 async def save_full_campaign_manifest_artifact(tool_context):
@@ -2632,7 +2620,7 @@ def _make_fc_audience_target_callback(index: int):
     Skips with empty Content if no audience exists at this index.
     """
     async def callback(callback_context) -> types.Content | None:
-        _record_agent_start(f"fc_variation_generator_{index}")
+        _record_agent_start(callback_context.session.id, f"fc_variation_generator_{index}")
         strategy = _parse_state_value(
             callback_context.state.get("fc_approved_strategy", {})
         )
@@ -2702,7 +2690,8 @@ def _merge_fc_variation_outputs(callback_context):
 
     callback_context.state["fc_variation_output"] = merged
 
-    run_dir = _get_run_dir()
+    sid = callback_context.session.id
+    run_dir = _get_run_dir(sid)
     out_path = run_dir / "fc_variation_output_merged.json"
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(merged, f, indent=2, ensure_ascii=False)
