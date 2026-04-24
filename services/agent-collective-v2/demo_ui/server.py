@@ -185,7 +185,7 @@ async def create_session(req: SessionRequest = None):
     async with httpx.AsyncClient(timeout=ADK_TIMEOUT, base_url="http://localhost:8080") as client:
         resp = await client.post(
             f"/adk/apps/{APP_NAME}/users/{USER_ID}/sessions",
-            json={"state": {"market": market}},
+            json={"state": {"market": market, "_pipeline_context": "none"}},
         )
         if resp.status_code not in (200, 201):
             raise HTTPException(

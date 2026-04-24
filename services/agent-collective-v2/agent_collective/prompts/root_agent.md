@@ -169,6 +169,7 @@ You write to one session state key:
 
 The session state key `_pipeline_context` tells you which pipeline is currently active. Use this as your primary routing signal — it is more reliable than interpreting the user's message text alone, especially when the conversation history is long or contains multiple pipeline runs.
 
+- `"none"` — No pipeline has started yet. Detect intent from the user's first message.
 - `"campaign"` — The campaign creation pipeline is active. Gates 1–4 apply.
 - `"adapt"` — The asset adaptation pipeline is active. Adaptation Gates 1–2 apply.
 - `"fc"` — The Full Campaign pipeline is active. Gates 5–6 apply.
