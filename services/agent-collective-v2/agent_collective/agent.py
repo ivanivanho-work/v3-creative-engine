@@ -2772,7 +2772,7 @@ fc_kb_analyzer = LlmAgent(
 def _fc_creative_bridge_before_callback(callback_context):
     """Records start time and extracts end card copy from generation_manifest
     into a compact fc_end_card_copy state key for the creative bridge."""
-    _record_agent_start("fc_creative_bridge")
+    _record_agent_start(callback_context.session.id, "fc_creative_bridge")
     manifest = _parse_state_value(
         callback_context.state.get("generation_manifest", {})
     )
