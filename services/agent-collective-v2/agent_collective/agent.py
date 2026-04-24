@@ -182,7 +182,7 @@ def _build_strategy_presenter_bundle(strategy: dict, scene_map: dict) -> dict:
     descriptions = [
         sc["description"]
         for sc in scenes
-        if sc.get("swappability") != "LOCKED" and sc.get("description")
+        if sc.get("swap_recommendation") != "LOCKED" and sc.get("description")
     ]
     original_ad_description = " ".join(descriptions[:3])
 
@@ -615,6 +615,41 @@ def _make_strategy_save_and_project_callback(
         scene_map_data = callback_context.state.get(scene_map_key)
         parsed_scene_map = _parse_state_value(scene_map_data) or {}
 
+        bundle = _build_strategy_presenter_bundle(parsed_strategy, parsed_scene_map)
+        callback_context.state[presenter_key] = json.dumps(bundle, ensure_ascii=False)
+
+    return callback
+
+
+def _make_strategy_presenter_before_callback(
+    strategy_key: str,
+    scene_map_key: str,
+    presenter_key: str,
+):
+    """Factory: before_agent_callback for strategy presenter agents.
+
+    Rebuilds the condensed presenter bundle immediately before the presenter
+    runs, reading from the already-persisted strategy and scene_map state keys.
+
+    This is the authoritative write point for presenter_key. The after_agent_callback
+    on the generator also writes presenter_key as a best-effort within the same
+    invocation, but that write may not survive a session reload if the pipeline is
+    resumed across user turns. Building the bundle here — where both source keys are
+    guaranteed to be in SQLite-backed session state — makes the presenter robust to
+    turn boundaries and any async timing edge cases in event processing.
+    """
+    async def callback(callback_context):
+        strategy_data = callback_context.state.get(strategy_key)
+        scene_map_data = callback_context.state.get(scene_map_key)
+
+        if strategy_data is None:
+            return
+
+        parsed_strategy = _parse_state_value(strategy_data)
+        if not isinstance(parsed_strategy, dict):
+            return
+
+        parsed_scene_map = _parse_state_value(scene_map_data) or {}
         bundle = _build_strategy_presenter_bundle(parsed_strategy, parsed_scene_map)
         callback_context.state[presenter_key] = json.dumps(bundle, ensure_ascii=False)
 
@@ -2050,6 +2085,11 @@ adapt_strategy_presenter = LlmAgent(
     instruction=_load_prompt("adaptation/strategy_presenter.md"),
     generate_content_config=TEXT_MODE_NO_THINK_CONFIG,
     include_contents="none",
+    before_agent_callback=_make_strategy_presenter_before_callback(
+        strategy_key="approved_strategy",
+        scene_map_key="scene_map",
+        presenter_key="approved_strategy_presenter",
+    ),
 )
 
 
@@ -2818,6 +2858,11 @@ fc_strategy_presenter = LlmAgent(
     instruction=_FC_STRATEGY_PRESENTER_PROMPT,
     generate_content_config=TEXT_MODE_NO_THINK_CONFIG,
     include_contents="none",
+    before_agent_callback=_make_strategy_presenter_before_callback(
+        strategy_key="fc_approved_strategy",
+        scene_map_key="fc_scene_map",
+        presenter_key="fc_approved_strategy_presenter",
+    ),
 )
 
 fc_consistency_checker = LlmAgent(
