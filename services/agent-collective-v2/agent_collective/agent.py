@@ -2518,7 +2518,7 @@ async def _fc_build_manifest_before_callback(callback_context):
     # on large outputs). If the parsed result is not a usable dict, fall back
     # to re-merging from the individual per-audience slots.
     if not isinstance(fc_vo, dict) or not fc_vo.get("variations"):
-        logger.warning(
+        print(
             "_fc_build_manifest_before_callback: fc_variation_output not a "
             "valid dict -- falling back to re-merging from per-audience slots"
         )
