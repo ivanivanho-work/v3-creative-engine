@@ -1762,6 +1762,7 @@ async def _discovery_before_callback(callback_context):
     once per pipeline run, not on every user message.
     """
     _reset_run_dir(callback_context.session.id)
+    callback_context.state["_pipeline_context"] = "campaign"
 
 
 # =========================================================================
@@ -2261,6 +2262,7 @@ adapt_parallel_intake = ParallelAgent(
 async def _adapt_before_callback(callback_context):
     """Reset run folder at the start of a new adaptation run."""
     _reset_run_dir(callback_context.session.id)
+    callback_context.state["_pipeline_context"] = "adapt"
 
 adapt_pre_strategy_phase = SequentialAgent(
     name="adapt_pre_strategy_phase",
@@ -2940,6 +2942,11 @@ fc_parallel_intake = ParallelAgent(
     sub_agents=[fc_creative_bridge, fc_kb_analyzer],
 )
 
+async def _fc_pre_strategy_before_callback(callback_context):
+    """Mark session as being in the FC pipeline so the root_agent can route reliably."""
+    callback_context.state["_pipeline_context"] = "fc"
+
+
 fc_pre_strategy_phase = SequentialAgent(
     name="fc_pre_strategy_phase",
     sub_agents=[
@@ -2947,6 +2954,7 @@ fc_pre_strategy_phase = SequentialAgent(
         fc_audience_mapper,
         fc_analysis_presenter,
     ],
+    before_agent_callback=_fc_pre_strategy_before_callback,
 )
 
 fc_strategy_phase = SequentialAgent(

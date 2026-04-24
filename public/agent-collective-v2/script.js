@@ -55,8 +55,8 @@ const AUTO_APPROVE_MESSAGES = {
   "creative_presenter":       "Approve",
   "adapt_analysis_presenter": "Yes, continue",
   "adapt_strategy_presenter": "Approve",
-  "fc_analysis_presenter":    "Yes, continue",
-  "fc_strategy_presenter":    "Approve",
+  "fc_analysis_presenter":    "Build audience strategies",
+  "fc_strategy_presenter":    "Generate campaign variations",
 };
 
 const FINAL_PRESENTERS = new Set([
