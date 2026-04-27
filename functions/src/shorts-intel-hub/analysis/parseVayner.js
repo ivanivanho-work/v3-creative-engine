@@ -3,6 +3,8 @@
  * Normalizes rows into the shared Trend shape expected by the frontend.
  */
 
+import { getIsoWeek, resolvePrimaryMarket } from './classify.js';
+
 const lower = (v) => String(v ?? '').trim().toLowerCase();
 
 const splitList = (v) =>
@@ -81,9 +83,12 @@ export function parseVaynerRows(rows) {
       const platforms = splitList(row['Platforms Trending']);
       const primaryMarkets = splitList(row['Primary Markets']);
       const secondaryMarkets = splitList(row['Secondary Markets']);
+      const primaryMarket = resolvePrimaryMarket(primaryMarkets);
       const hashtagsField = row['Hashtags (comma-separated)'] ?? row['Hashtags'] ?? '';
       const hashtags = splitList(hashtagsField);
       const brandSafeRaw = lower(row['Brand Safe']);
+      const dateIdentified = normalizeDate(row['Date Identified']);
+      const isoWeek = getIsoWeek(dateIdentified);
 
       return {
         id: `vayner-${slug(topicName)}-${idx}`,
@@ -107,7 +112,9 @@ export function parseVaynerRows(rows) {
           ?? row['Creation Complexity']),
         trendScale: mapScale(row['Trend Scale\n(Creation-led/Viewer-led)'] ?? row['Trend Scale']),
         platformsTrending: platforms.length ? platforms : undefined,
-        primaryMarkets: primaryMarkets.length ? primaryMarkets : undefined,
+        primaryMarkets: primaryMarkets.length ? primaryMarkets : [primaryMarket],
+        primaryMarket,
+        isoWeek,
         secondaryMarkets: secondaryMarkets.length ? secondaryMarkets : undefined,
         platformOrigin: String(row['Platform Origin'] ?? '').trim() || undefined,
         aiTool: String(row['AI Tool'] ?? '').trim() || undefined,
@@ -123,7 +130,7 @@ export function parseVaynerRows(rows) {
         saves: parseNumber(row['Saves (TT-only)']),
         creatorSubs: parseNumber(row['Creator Subscriber Count']),
         publicationDate: normalizeDate(row['Publication Date']),
-        dateIdentified: normalizeDate(row['Date Identified']),
+        dateIdentified,
 
         // Legacy fields used by existing UI
         rank: 0,

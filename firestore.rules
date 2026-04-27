@@ -133,6 +133,18 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Shorts Intel Hub - Shared upload + match state (client-writable, no auth for now)
+    match /shorts_intel_hub/{docId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Shorts Intel Hub - Upload archive (client-writable snapshots)
+    match /shorts_intel_hub_archive/{archiveId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
     // ========================================================================
     // DEFAULT RULE
     // ========================================================================

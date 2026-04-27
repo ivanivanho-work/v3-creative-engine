@@ -41,9 +41,22 @@ service firebase.storage {
     // SHORTS INTEL HUB
     // ========================================================================
 
-    // Shorts Intel Hub - Weekly reports and exported data
+    // Shorts Intel Hub - Weekly reports and exported data (Cloud Functions only)
     match /shorts-intel-hub/{fileName} {
-      allow write: if false;  // Only Cloud Functions can write
+      allow write: if false;
+    }
+
+    // Shorts Intel Hub - User CSV uploads (client-writable, no auth for now)
+    match /shorts-intel-hub/uploads/{uploadId}/{fileName} {
+      allow write: if request.resource.size < 25 * 1024 * 1024  // Max 25MB
+                   && request.resource.contentType.matches('text/csv|application/vnd.ms-excel|application/octet-stream|text/plain');
+    }
+
+    // Shorts Intel Hub - Match-and-rank JSON results (client-writable; can be
+    // larger than Firestore's 1 MiB doc limit, hence Storage-backed)
+    match /shorts-intel-hub/results/{fileName} {
+      allow write: if request.resource.size < 20 * 1024 * 1024  // Max 20MB
+                   && request.resource.contentType.matches('application/json|text/plain');
     }
 
     // ========================================================================

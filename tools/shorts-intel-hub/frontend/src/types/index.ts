@@ -43,6 +43,11 @@ export interface Trend {
   trendScale?: TrendScale;
   platformsTrending?: string[];
   primaryMarkets?: string[];
+  primaryMarket?: string;   // single normalized market (JP/KR/IN/ID/Global)
+  isoWeek?: string;         // e.g. "2026-W17"
+  irs?: number | null;
+  ersNormalized?: number;   // 0–100, comparable within a (market, week) cell
+  irsNormalized?: number;   // 0–100, comparable within a (market, week) cell
   secondaryMarkets?: string[];
   platformOrigin?: string;
   aiTool?: string;

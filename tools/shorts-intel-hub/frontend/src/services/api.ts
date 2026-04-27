@@ -257,20 +257,42 @@ export interface MatchPair {
   rank: number;
 }
 
-export interface MatchAndRankResponse {
-  success: boolean;
+export interface MatchCellStats {
+  internalParsed: number;
+  externalParsed: number;
+  matched: number;
+  matchedByKeyword: number;
+  matchedBySemantic: number;
+  internalOnly: number;
+  externalOnly: number;
+}
+
+export interface MatchCell {
   internal: Trend[];
   matching: MatchPair[];
   external: Trend[];
+  stats: MatchCellStats;
+}
+
+export interface MatchAndRankResponse {
+  success: boolean;
+  version?: number;          // 2 for the per-(market, week) cell shape
+  markets: string[];
+  weeks: string[];           // ISO week ids, newest first
+  cells: Record<string, MatchCell>; // key = `${market}|${week}`
   stats: {
     internalParsed: number;
     externalParsed: number;
-    matched: number;
-    matchedByKeyword: number;
-    matchedBySemantic: number;
-    internalOnly: number;
-    externalOnly: number;
+    internalSkippedNoWeek: number;
+    externalSkippedNoWeek: number;
+    globalInternal: number;
+    globalExternal: number;
+    cellCount: number;
   };
+}
+
+export function cellKey(market: string, week: string): string {
+  return `${market}|${week}`;
 }
 
 /**

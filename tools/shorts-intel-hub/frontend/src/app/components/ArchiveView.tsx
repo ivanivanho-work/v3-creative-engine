@@ -1,22 +1,14 @@
 import { useEffect, useState } from 'react';
-import { Calendar, ChevronDown, ChevronUp, Trash2, ExternalLink } from 'lucide-react';
+import { Calendar, ChevronDown, ChevronUp, Trash2, FileText, Play } from 'lucide-react';
 import {
-  getArchives,
-  deleteArchive,
-  entryTopTrends,
-  type ArchiveEntry,
-} from '@/services/archiveStore';
+  subscribeToArchive,
+  deleteArchiveEntry,
+  type ArchiveEntryFs,
+} from '@/services/sharedState';
 
 interface ArchiveViewProps {
   market: string;
 }
-
-const MARKET_NAMES: Record<string, string> = {
-  JP: 'Japan',
-  KR: 'South Korea',
-  IN: 'India',
-  ID: 'Indonesia',
-};
 
 function formatSavedAt(iso: string) {
   try {
@@ -30,31 +22,22 @@ function formatSavedAt(iso: string) {
   }
 }
 
-function getSourceBadgeColor(source: string) {
-  switch (source) {
-    case 'Nyan Cat':
-      return 'bg-purple-500/20 text-purple-400 border border-purple-500/30';
-    case 'Vayner':
-      return 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30';
-    default:
-      return 'bg-gray-500/20 text-gray-400 border border-gray-500/30';
-  }
-}
-
-export function ArchiveView({ market }: ArchiveViewProps) {
-  const [entries, setEntries] = useState<ArchiveEntry[]>([]);
+export function ArchiveView({ market: _market }: ArchiveViewProps) {
+  const [entries, setEntries] = useState<ArchiveEntryFs[]>([]);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
-
-  const refresh = () => {
-    const all = getArchives(market);
-    setEntries(all);
-    // Auto-expand the newest entry so the user sees content immediately.
-    if (all[0]) setExpandedIds(new Set([all[0].id]));
-  };
+  const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    refresh();
-  }, [market]);
+    const unsub = subscribeToArchive((next) => {
+      setEntries(next);
+      setHydrated(true);
+      setExpandedIds((prev) => {
+        if (prev.size > 0 || next.length === 0) return prev;
+        return new Set([next[0].id]);
+      });
+    });
+    return unsub;
+  }, []);
 
   const toggle = (id: string) => {
     setExpandedIds((prev) => {
@@ -65,12 +48,9 @@ export function ArchiveView({ market }: ArchiveViewProps) {
     });
   };
 
-  const handleDelete = (id: string) => {
-    deleteArchive(id);
-    refresh();
+  const handleDelete = async (id: string) => {
+    await deleteArchiveEntry(id);
   };
-
-  const marketName = MARKET_NAMES[market] ?? market;
 
   return (
     <div>
@@ -79,26 +59,35 @@ export function ArchiveView({ market }: ArchiveViewProps) {
         <div>
           <h4 className="text-foreground font-medium mb-1">Historical Archive</h4>
           <p className="text-muted-foreground text-sm">
-            Every successful matching run is auto-saved here. Switch the market
-            filter above to browse archives for a different region.
+            Every CSV upload and every matching run is auto-archived here and shared
+            across all visitors. Raw CSVs remain downloadable; run results link to
+            the stored JSON.
           </p>
         </div>
       </div>
 
-      {entries.length === 0 ? (
+      {!hydrated ? (
+        <div className="p-8 text-center bg-card rounded-lg border border-border">
+          <p className="text-muted-foreground">Loading archive…</p>
+        </div>
+      ) : entries.length === 0 ? (
         <div className="p-8 text-center bg-card rounded-lg border border-border">
           <Calendar className="size-12 mx-auto mb-4 text-muted-foreground" />
           <p className="text-muted-foreground">
-            No archived runs yet for {marketName}. Run matching on the Top Topics
-            & Trends tab to create an archive entry.
+            No archived entries yet. Uploading a CSV or running matching creates
+            archive entries automatically.
           </p>
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-3">
           {entries.map((entry) => {
             const isExpanded = expandedIds.has(entry.id);
-            const top = entryTopTrends(entry, 10);
-            const stats = entry.result.stats;
+            const isUpload = entry.type === 'upload';
+            const Icon = isUpload ? FileText : Play;
+            const iconColor = isUpload ? 'text-purple-400' : 'text-cyan-400';
+            const heading = isUpload
+              ? `Upload — ${entry.kind === 'nyanCat' ? 'Nyan Cat' : 'Vayner'}`
+              : 'Matching run';
 
             return (
               <div
@@ -110,14 +99,17 @@ export function ArchiveView({ market }: ArchiveViewProps) {
                     onClick={() => toggle(entry.id)}
                     className="flex items-center gap-3 flex-1 text-left hover:opacity-80 transition-opacity"
                   >
-                    <Calendar className="size-5 text-muted-foreground" />
+                    <Icon className={`size-5 ${iconColor}`} />
                     <div>
                       <h3 className="text-foreground font-medium">
-                        {formatSavedAt(entry.savedAt)} — {marketName}
+                        {formatSavedAt(entry.createdAt)} — {heading}
                       </h3>
                       <p className="text-sm text-muted-foreground">
-                        {stats.internalParsed} internal · {stats.externalParsed} external ·{' '}
-                        {stats.matched} matched
+                        {isUpload
+                          ? entry.nyanCatFile?.name || entry.vaynerFile?.name || '—'
+                          : entry.summary
+                          ? `${entry.summary.stats.cellCount} cells · ${entry.summary.weeks.length} weeks · ${entry.summary.markets.length} markets`
+                          : '—'}
                       </p>
                     </div>
                   </button>
@@ -140,70 +132,37 @@ export function ArchiveView({ market }: ArchiveViewProps) {
                 </div>
 
                 {isExpanded && (
-                  <div className="border-t border-border p-5">
-                    {(entry.nyanCatFileName || entry.vaynerFileName) && (
-                      <div className="mb-4 text-xs text-muted-foreground">
-                        {entry.nyanCatFileName && <div>Nyan Cat: {entry.nyanCatFileName}</div>}
-                        {entry.vaynerFileName && <div>Vayner: {entry.vaynerFileName}</div>}
+                  <div className="border-t border-border p-5 text-sm space-y-2">
+                    {entry.nyanCatFile && (
+                      <div className="text-muted-foreground">
+                        <span className="text-foreground">Nyan Cat:</span> {entry.nyanCatFile.name} ({(entry.nyanCatFile.size / 1024).toFixed(1)} KB)
                       </div>
                     )}
-
-                    {top.length === 0 ? (
-                      <p className="text-sm text-muted-foreground italic">
-                        This run had no visible trends.
-                      </p>
-                    ) : (
-                      <div className="space-y-3">
-                        {top.map((trend) => (
-                          <div
-                            key={trend.id}
-                            className="p-4 bg-muted/50 rounded-lg"
-                          >
-                            <div className="flex items-start gap-4">
-                              <div className="flex-shrink-0 size-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-semibold">
-                                #{trend.rank}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-start justify-between gap-4 mb-2">
-                                  <h4 className="text-foreground font-medium">{trend.topicName}</h4>
-                                  <div className="text-right flex-shrink-0">
-                                    <div className="text-xl font-bold text-foreground">
-                                      {typeof trend.score === 'number' ? Math.round(trend.score) : '—'}
-                                    </div>
-                                    <div className="text-xs text-muted-foreground">Score</div>
-                                  </div>
-                                </div>
-                                {trend.description && (
-                                  <p className="text-foreground text-sm mb-3 line-clamp-2">
-                                    {trend.description}
-                                  </p>
-                                )}
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <span className={`px-2 py-1 rounded-full text-xs ${getSourceBadgeColor(trend.source)}`}>
-                                    {trend.source}
-                                  </span>
-                                  {trend.targetDemo && (
-                                    <span className="px-2 py-1 rounded-full bg-secondary text-secondary-foreground text-xs">
-                                      {trend.targetDemo}
-                                    </span>
-                                  )}
-                                  {trend.referenceLink && (
-                                    <a
-                                      href={trend.referenceLink}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="inline-flex items-center gap-1 text-primary hover:underline text-xs"
-                                    >
-                                      <ExternalLink className="size-3" />
-                                      View reference
-                                    </a>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
+                    {entry.vaynerFile && (
+                      <div className="text-muted-foreground">
+                        <span className="text-foreground">Vayner:</span> {entry.vaynerFile.name} ({(entry.vaynerFile.size / 1024).toFixed(1)} KB)
                       </div>
+                    )}
+                    {entry.summary && (
+                      <>
+                        <div className="text-muted-foreground">
+                          <span className="text-foreground">Markets:</span> {entry.summary.markets.join(', ') || '—'}
+                        </div>
+                        <div className="text-muted-foreground">
+                          <span className="text-foreground">Weeks:</span> {entry.summary.weeks.join(', ') || '—'}
+                        </div>
+                        <div className="text-muted-foreground">
+                          <span className="text-foreground">Parsed:</span> {entry.summary.stats.internalParsed} internal · {entry.summary.stats.externalParsed} external
+                          {entry.summary.stats.globalInternal + entry.summary.stats.globalExternal > 0 && (
+                            <> · {entry.summary.stats.globalInternal + entry.summary.stats.globalExternal} Global</>
+                          )}
+                        </div>
+                        {entry.summary.stats.internalSkippedNoWeek + entry.summary.stats.externalSkippedNoWeek > 0 && (
+                          <div className="text-yellow-500">
+                            {entry.summary.stats.internalSkippedNoWeek + entry.summary.stats.externalSkippedNoWeek} trends skipped (no date)
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 )}

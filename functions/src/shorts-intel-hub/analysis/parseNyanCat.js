@@ -7,6 +7,8 @@
  *   - avg visual_quality_score < 0.3 → contentQuality=aiSlop (hard filter)
  */
 
+import { getIsoWeek, resolvePrimaryMarket, GLOBAL_MARKET } from './classify.js';
+
 const AGE_BUCKET_MAP = {
   AGE_13_17: '13-17',
   AGE_18_24: '18-24',
@@ -128,6 +130,8 @@ export function parseNyanCatRows(rows) {
     const publicationDate = dates[dates.length - 1] || undefined;
 
     const market = dominantCountry(videos);
+    const primaryMarket = market || GLOBAL_MARKET;
+    const isoWeek = getIsoWeek(publicationDate);
     const targetDemo = dominantDemo(videos);
     const description = videos.length > 1
       ? `Sound "${songTitle}" powering ${videos.length} viral Shorts. ${totalCreations.toLocaleString()} downstream uploads in 3 days.`
@@ -153,7 +157,9 @@ export function parseNyanCatRows(rows) {
       trendScale: totalCreations >= 10 ? 'Creation-Led' : 'Viewer-led',
       platformsTrending: ['YT Shorts'],
       platformOrigin: 'YT Shorts',
-      primaryMarkets: market ? [market] : undefined,
+      primaryMarkets: [primaryMarket],
+      primaryMarket,
+      isoWeek,
       genAI: false,
 
       // Raw metrics for ERS
