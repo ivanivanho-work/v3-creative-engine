@@ -19,7 +19,7 @@ const API_BASE = window.location.hostname === "localhost"
 
 // Firebase config (same as v3-creative-engine)
 const FIREBASE_CONFIG = {
-  apiKey: "AIzaSyBwtQBAZ_IewB2TYCkew3ctzB4HMs9Gyn0",
+  apiKey: "AIzaSyBjw05ng3dqmRrs7SKA57MAjSnUdeuJLj8",
   authDomain: "v3-creative-engine.firebaseapp.com",
   projectId: "v3-creative-engine",
   storageBucket: "v3-creative-engine.firebasestorage.app",
@@ -31,7 +31,9 @@ const FIREBASE_CONFIG = {
 // Firebase init
 // =========================================================================
 
-firebase.initializeApp(FIREBASE_CONFIG);
+if (!firebase.apps.length) {
+  firebase.initializeApp(FIREBASE_CONFIG);
+}
 const db = firebase.firestore();
 
 // =========================================================================

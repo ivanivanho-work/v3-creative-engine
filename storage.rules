@@ -1,39 +1,44 @@
 rules_version = '2';
 
+// Phase −1 lockdown: gate every read/write behind Firebase Auth allowlist.
+// allowlist = ivanho.wz@gmail.com OR @google.com.
+
 service firebase.storage {
   match /b/{bucket}/o {
 
-    // ========================================================================
-    // PUBLIC READ ACCESS
-    // ========================================================================
+    function authed() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && (request.auth.token.email == 'ivanho.wz@gmail.com'
+            || request.auth.token.email.matches('.*@google[.]com$'));
+    }
 
-    // Allow public read access to all files (for CDN and public assets)
+    // Default read rule — only allowlisted users.
     match /{allPaths=**} {
-      allow read: if true;
+      allow read: if authed();
     }
 
     // ========================================================================
     // CREATIVE GENERATOR & TEMPLATE STAMPER
     // ========================================================================
 
-    // Creative Generator - User uploaded images
     match /uploads/{country}/{fileName} {
-      allow write: if request.resource.size < 10 * 1024 * 1024  // Max 10MB
+      allow write: if authed()
+                   && request.resource.size < 10 * 1024 * 1024
                    && request.resource.contentType.matches('image/.*');
     }
 
-    // Template Stamper - Rendered videos (written by Cloud Functions)
     match /renders/{fileName} {
-      allow write: if false;  // Only Cloud Functions can write
+      allow write: if false;  // Cloud Functions only
     }
 
     // ========================================================================
     // AGENT COLLECTIVE
     // ========================================================================
 
-    // Agent Collective - Knowledge base documents
     match /knowledge/{market}/{fileName} {
-      allow write: if request.resource.size < 50 * 1024 * 1024  // Max 50MB
+      allow write: if authed()
+                   && request.resource.size < 50 * 1024 * 1024
                    && request.resource.contentType.matches('application/pdf|application/vnd.openxmlformats-officedocument.*');
     }
 
@@ -41,21 +46,19 @@ service firebase.storage {
     // SHORTS INTEL HUB
     // ========================================================================
 
-    // Shorts Intel Hub - Weekly reports and exported data (Cloud Functions only)
     match /shorts-intel-hub/{fileName} {
-      allow write: if false;
+      allow write: if false;  // Cloud Functions only
     }
 
-    // Shorts Intel Hub - User CSV uploads (client-writable, no auth for now)
     match /shorts-intel-hub/uploads/{uploadId}/{fileName} {
-      allow write: if request.resource.size < 25 * 1024 * 1024  // Max 25MB
+      allow write: if authed()
+                   && request.resource.size < 25 * 1024 * 1024
                    && request.resource.contentType.matches('text/csv|application/vnd.ms-excel|application/octet-stream|text/plain');
     }
 
-    // Shorts Intel Hub - Match-and-rank JSON results (client-writable; can be
-    // larger than Firestore's 1 MiB doc limit, hence Storage-backed)
     match /shorts-intel-hub/results/{fileName} {
-      allow write: if request.resource.size < 20 * 1024 * 1024  // Max 20MB
+      allow write: if authed()
+                   && request.resource.size < 20 * 1024 * 1024
                    && request.resource.contentType.matches('application/json|text/plain');
     }
 
@@ -63,9 +66,9 @@ service firebase.storage {
     // SHORTS BRAIN
     // ========================================================================
 
-    // Shorts Brain - Campaign assets and analysis results
     match /shorts-brain/{allPaths=**} {
-      allow write: if request.resource.size < 20 * 1024 * 1024  // Max 20MB
+      allow write: if authed()
+                   && request.resource.size < 20 * 1024 * 1024
                    && request.resource.contentType.matches('image/.*|application/json|text/csv');
     }
 
@@ -73,25 +76,22 @@ service firebase.storage {
     // REMOTION TEMPLATES
     // ========================================================================
 
-    // Remotion bundle - Static assets for video rendering
     match /remotion-bundle/{allPaths=**} {
-      allow write: if false;  // Only Cloud Functions can write
+      allow write: if false;  // Cloud Functions only
     }
 
     // ========================================================================
-    // PUBLIC EXAMPLES
+    // PUBLIC EXAMPLES (now also auth-gated for read)
     // ========================================================================
 
-    // Public example files (like template previews)
     match /examples/{fileName} {
-      allow write: if false;  // Only Cloud Functions can write
+      allow write: if false;  // Cloud Functions only
     }
 
     // ========================================================================
-    // DEFAULT RULE
+    // DEFAULT — deny writes everywhere else
     // ========================================================================
 
-    // Only allow writes from Cloud Functions (via admin SDK) for other paths
     match /{allPaths=**} {
       allow write: if false;
     }

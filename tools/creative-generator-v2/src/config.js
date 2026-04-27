@@ -1,7 +1,7 @@
 export const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8080';
 
 export const FIREBASE_CONFIG = {
-  apiKey: 'AIzaSyBwtQBAZ_IewB2TYCkew3ctzB4HMs9Gyn0',
+  apiKey: 'AIzaSyBjw05ng3dqmRrs7SKA57MAjSnUdeuJLj8',
   authDomain: 'v3-creative-engine.firebaseapp.com',
   projectId: 'v3-creative-engine',
   storageBucket: 'v3-creative-engine.firebasestorage.app',

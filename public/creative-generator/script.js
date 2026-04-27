@@ -8,7 +8,7 @@
 // ============================================================================
 
 const firebaseConfig = {
-  apiKey: "AIzaSyBwtQBAZ_IewB2TYCkew3ctzB4HMs9Gyn0",
+  apiKey: "AIzaSyBjw05ng3dqmRrs7SKA57MAjSnUdeuJLj8",
   authDomain: "v3-creative-engine.firebaseapp.com",
   projectId: "v3-creative-engine",
   storageBucket: "v3-creative-engine.firebasestorage.app",
@@ -16,8 +16,10 @@ const firebaseConfig = {
   appId: "1:964100659393:web:bc6aa41fce9a8770d55c40"
 };
 
-// Initialize Firebase
-firebase.initializeApp(firebaseConfig);
+// Initialize Firebase (auth-gate may have already initialized the default app)
+if (!firebase.apps.length) {
+  firebase.initializeApp(firebaseConfig);
+}
 const db = firebase.firestore();
 const functions = firebase.functions();
 
@@ -828,8 +830,10 @@ async function downloadAsset() {
     const extension = state.currentAsset.type === 'image' ? '.jpg' : '.mp4';
     const filename = `ytm-creative-${state.currentAsset.type}-${state.currentAsset.id.substring(0, 8)}${extension}`;
 
-    // Use Cloud Function proxy for proper download with CORS headers
-    const downloadUrl = `https://us-central1-v3-creative-engine.cloudfunctions.net/downloadAsset?url=${encodeURIComponent(url)}`;
+    // Use Cloud Function proxy for proper download with CORS headers.
+    // Attach Firebase Auth idToken via query param — <a download> can't set headers.
+    const idToken = await firebase.auth().currentUser.getIdToken();
+    const downloadUrl = `https://us-central1-v3-creative-engine.cloudfunctions.net/downloadAsset?url=${encodeURIComponent(url)}&token=${encodeURIComponent(idToken)}`;
 
     // Create download link
     const link = document.createElement('a');

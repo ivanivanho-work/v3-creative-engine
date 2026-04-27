@@ -9,7 +9,7 @@ import { getFunctions } from 'firebase/functions';
 // Security Rules and Firebase Authentication settings.
 // See: https://firebase.google.com/docs/projects/api-keys
 const firebaseConfig = {
-  apiKey: "AIzaSyBwtQBAZ_IewB2TYCkew3ctzB4HMs9Gyn0",
+  apiKey: "AIzaSyBjw05ng3dqmRrs7SKA57MAjSnUdeuJLj8",
   authDomain: "v3-creative-engine.firebaseapp.com",
   projectId: "v3-creative-engine",
   storageBucket: "v3-creative-engine.firebasestorage.app",

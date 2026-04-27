@@ -4,8 +4,10 @@
  */
 
 const admin = require('firebase-admin');
+const { requireAllowed } = require('../_authGuard');
 
 async function imageToVideoJob(data, context) {
+  requireAllowed(context);
   try {
     const { jobId, imageUrl } = data;
 

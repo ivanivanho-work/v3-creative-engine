@@ -1,2 +1,18 @@
 tools/shorts-intel-hub/frontend/src/services/approvedStore.ts:generic-api-key:10
 public/shorts-intel-hub/assets/index-BFemmaVW.js:gcp-api-key:2236
+
+# Firebase web API key — public per Firebase docs; access controlled by Auth + Rules.
+# https://firebase.google.com/docs/projects/api-keys
+public/agent-collective-v2/script.js:gcp-api-key:22
+public/agent-collective/index.html:gcp-api-key:1077
+public/agent-collective-v2/auth-gate.js:gcp-api-key:7
+public/_auth-gate-compat.js:gcp-api-key:10
+public/creative-generator/script.js:gcp-api-key:11
+tools/creative-generator-v2/src/config.js:gcp-api-key:4
+tools/shorts-brain/src/firebase.js:gcp-api-key:6
+tools/shorts-intel-hub/frontend/src/config/firebase.ts:gcp-api-key:16
+tools/template-stamper/src/lib/firebase.ts:gcp-api-key:12
+public/creative-generator-v2/assets/index-DdHYztGJ.js:gcp-api-key:2070
+public/shorts-intel-hub/assets/index-BvFcSTBV.js:gcp-api-key:3250
+public/shorts-brain/assets/index-HByME1-o.js:gcp-api-key:2678
+public/template-stamper/assets/index-p-ZuMqN1.js:gcp-api-key:2587

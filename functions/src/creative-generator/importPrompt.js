@@ -5,6 +5,7 @@
  */
 
 const functions = require('firebase-functions');
+const { requireAllowedHttp } = require('../_authGuard');
 
 /**
  * HTTP endpoint to receive prompts from external sources (MCP Bridge)
@@ -21,6 +22,9 @@ async function importPrompt(req, res) {
     res.status(204).send('');
     return;
   }
+
+  await requireAllowedHttp(req, res);
+  if (res.headersSent) return;
 
   // Only accept POST requests
   if (req.method !== 'POST') {

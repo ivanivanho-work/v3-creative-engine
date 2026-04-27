@@ -3,7 +3,11 @@
  * Replace mock data with real backend calls
  */
 
+import { getAuth } from 'firebase/auth';
+import { app } from '@/config/firebase';
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api';
+const auth = getAuth(app);
 
 // ============================================================================
 // TYPE DEFINITIONS
@@ -46,27 +50,30 @@ export interface ScoringSettingsResponse {
 // ============================================================================
 
 /**
- * Get authentication token from storage
- * Adjust this based on your auth implementation
+ * Get Firebase Auth ID token for the current user.
  */
-function getAuthToken(): string {
-  return localStorage.getItem('auth_token') || '';
+async function getAuthToken(): Promise<string> {
+  const user = auth.currentUser;
+  if (!user) return '';
+  return user.getIdToken();
 }
 
 /**
  * Generic fetch wrapper with error handling
  */
 async function apiFetch<T>(
-  endpoint: string, 
+  endpoint: string,
   options?: RequestInit
 ): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`;
-  
+
   try {
+    const token = await getAuthToken();
     const response = await fetch(url, {
       ...options,
       headers: {
         'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...options?.headers,
       },
     });
@@ -90,13 +97,8 @@ async function authenticatedFetch<T>(
   endpoint: string,
   options?: RequestInit
 ): Promise<T> {
-  return apiFetch<T>(endpoint, {
-    ...options,
-    headers: {
-      ...options?.headers,
-      'Authorization': `Bearer ${getAuthToken()}`,
-    },
-  });
+  // apiFetch already attaches the Firebase Auth ID token automatically.
+  return apiFetch<T>(endpoint, options);
 }
 
 // ============================================================================
@@ -372,7 +374,7 @@ export function logout(): void {
  * Check if user is authenticated
  */
 export function isAuthenticated(): boolean {
-  return !!getAuthToken();
+  return !!auth.currentUser;
 }
 
 // ============================================================================

@@ -1,53 +1,46 @@
 rules_version = '2';
 
+// Phase −1 lockdown: gate every read/write behind Firebase Auth allowlist.
+// allowlist = ivanho.wz@gmail.com OR @google.com.
+// Triggers (admin SDK) bypass rules — unaffected.
+
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    function authed() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && (request.auth.token.email == 'ivanho.wz@gmail.com'
+            || request.auth.token.email.matches('.*@google[.]com$'));
+    }
 
     // ========================================================================
     // CREATIVE GENERATOR & TEMPLATE STAMPER
     // ========================================================================
 
-    // Jobs collection - Video rendering jobs
     match /jobs/{jobId} {
-      // Allow read for everyone (for testing)
-      // TODO: Add authentication in Phase 2
-      allow read: if true;
-
-      // Allow create for everyone (Cloud Functions use admin SDK which bypasses rules)
-      allow create: if true;
-
-      // Allow update/delete only for cloud functions (via admin SDK)
+      allow read: if authed();
+      allow create: if authed();
+      // update/delete only via admin SDK (Cloud Functions)
       allow update, delete: if false;
     }
 
-    // Gallery collection - Saved assets
     match /gallery/{galleryId} {
-      // Allow read/write for everyone (no auth for now)
-      // TODO: Add authentication later
-      allow read: if true;
-      allow create: if true;
-      allow delete: if true;
+      allow read: if authed();
+      allow create: if authed();
+      allow delete: if authed();
     }
 
-    // Template Stamper Transfers - Asset transfers from Creative Generator
     match /template_stamper_transfers/{transferId} {
-      // Allow read for everyone (Template Stamper needs to read transfers)
-      allow read: if true;
-      // Allow create from Creative Generator
-      allow create: if true;
-      // Allow update for Template Stamper to mark as processed
-      allow update: if true;
-      // Allow delete for cleanup
-      allow delete: if true;
+      allow read: if authed();
+      allow create: if authed();
+      allow update: if authed();
+      allow delete: if authed();
     }
 
-    // Reference Characters - Reusable character assets for consistent generation
     match /reference_characters/{characterId} {
-      // Allow read for everyone (Creative Generator and Agent Collective need to read)
-      allow read: if true;
-      // Allow create/delete for everyone (no auth for now)
-      allow create, delete: if true;
-      // Cloud Functions update via admin SDK (bypasses rules)
+      allow read: if authed();
+      allow create, delete: if authed();
       allow update: if false;
     }
 
@@ -55,101 +48,85 @@ service cloud.firestore {
     // AGENT COLLECTIVE
     // ========================================================================
 
-    // Agent Collective - Market setups (protocols, knowledge files)
     match /agent_markets/{marketId} {
-      allow read: if true;
-      allow write: if true;
+      allow read: if authed();
+      allow write: if authed();
     }
 
-    // Agent Collective - Chat archives
     match /chat_archives/{archiveId} {
-      allow read: if true;
-      allow create: if true;
-      allow delete: if true;
+      allow read: if authed();
+      allow create: if authed();
+      allow delete: if authed();
     }
 
-    // Agent Collective - Prompt transfers (for analytics)
     match /prompt_transfers/{transferId} {
-      allow read: if true;
-      allow create: if true;
+      allow read: if authed();
+      allow create: if authed();
     }
 
-    // Agent Collective V2 - Chat archives (ADK pipeline)
     match /chat_archives_v2/{archiveId} {
-      allow read: if true;
-      allow create: if true;
-      allow delete: if true;
+      allow read: if authed();
+      allow create: if authed();
+      allow delete: if authed();
     }
 
-    // Agent Collective V2 - Prompt/manifest transfers
     match /prompt_transfers_v2/{transferId} {
-      allow read: if true;
-      allow create: if true;
+      allow read: if authed();
+      allow create: if authed();
     }
 
     // ========================================================================
     // SHORTS BRAIN
     // ========================================================================
 
-    // Shorts Brain - Campaign data
     match /campaigns/{campaignId} {
-      allow read: if true;
-      allow write: if true;
+      allow read: if authed();
+      allow write: if authed();
     }
 
-    // Shorts Brain - Analysis results
     match /analysis_results/{resultId} {
-      allow read: if true;
-      allow write: if true;
+      allow read: if authed();
+      allow write: if authed();
     }
 
-    // Shorts Brain - Weekly snapshots (stateful memory)
     match /shorts_brain_snapshots/{snapshotId} {
-      allow read: if true;
-      allow write: if true;
+      allow read: if authed();
+      allow write: if authed();
     }
 
-    // Shorts Brain - Artifacts collection (legacy data structure)
     match /artifacts/{appId}/public/data/{collection}/{document=**} {
-      allow read: if true;
-      allow write: if true;
+      allow read: if authed();
+      allow write: if authed();
     }
 
     // ========================================================================
     // SHORTS INTEL HUB
     // ========================================================================
 
-    // Shorts Intel Hub - Weekly topics and insights
     match /weekly_topics/{topicId} {
-      allow read: if true;
-      // Only Cloud Functions can write
-      allow write: if false;
+      allow read: if authed();
+      allow write: if false;  // Cloud Functions only
     }
 
-    // Shorts Intel Hub - Topic embeddings (for vector search)
     match /topic_embeddings/{embeddingId} {
-      allow read: if true;
-      // Only Cloud Functions can write
-      allow write: if false;
+      allow read: if authed();
+      allow write: if false;  // Cloud Functions only
     }
 
-    // Shorts Intel Hub - Shared upload + match state (client-writable, no auth for now)
     match /shorts_intel_hub/{docId} {
-      allow read: if true;
-      allow write: if true;
+      allow read: if authed();
+      allow write: if authed();
     }
 
-    // Shorts Intel Hub - Upload archive (client-writable snapshots)
     match /shorts_intel_hub_archive/{archiveId} {
-      allow read: if true;
-      allow write: if true;
+      allow read: if authed();
+      allow write: if authed();
     }
 
     // ========================================================================
-    // DEFAULT RULE
+    // DEFAULT — deny everything else
     // ========================================================================
 
-    // Default: deny all other access
     match /{document=**} {
       allow read, write: if false;
     }

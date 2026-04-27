@@ -13,6 +13,7 @@
 
 const admin = require('firebase-admin');
 const functions = require('firebase-functions');
+const { requireAllowed } = require('../_authGuard');
 
 const db = admin.firestore();
 const bucket = admin.storage().bucket();
@@ -40,6 +41,7 @@ function getWeekId(dateStr) {
  * and raw CSV files in Cloud Storage.
  */
 const saveSnapshot = async (data, context) => {
+  requireAllowed(context);
   const { weekId, reportingDate, globalData, regionalData, files } = data;
 
   if (!weekId || !globalData) {
@@ -100,6 +102,7 @@ const saveSnapshot = async (data, context) => {
  * Optionally filter by year or load specific weeks.
  */
 const loadSnapshots = async (data, context) => {
+  requireAllowed(context);
   const { year, weekIds, metaOnly } = data || {};
 
   let query = db.collection(COLLECTION).orderBy('weekId', 'desc');
@@ -135,6 +138,7 @@ const loadSnapshots = async (data, context) => {
  * Delete a specific weekly snapshot
  */
 const deleteSnapshot = async (data, context) => {
+  requireAllowed(context);
   const { weekId } = data;
   if (!weekId) throw new functions.https.HttpsError('invalid-argument', 'weekId is required');
 
