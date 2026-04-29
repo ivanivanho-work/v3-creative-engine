@@ -154,6 +154,20 @@ def _reset_run_dir(session_id: str):
     _agent_start_times.pop(session_id, None)
 
 
+def _release_session_tracking(session_id: str):
+    """Drop all per-session bookkeeping entries.
+
+    Called at the end of each pipeline (results presenter callback) so the
+    long-lived ADK server doesn't accumulate one entry per finished session
+    indefinitely. Re-entering a pipeline for the same session_id will rebuild
+    the entries via _get_run_dir / _record_agent_start.
+    """
+    _run_dirs.pop(session_id, None)
+    _run_start_times.pop(session_id, None)
+    _agent_timings.pop(session_id, None)
+    _agent_start_times.pop(session_id, None)
+
+
 def _parse_state_value(value):
     """Safely parse a state value that might be a JSON string or dict.
 
@@ -757,6 +771,7 @@ async def _session_state_export_callback(callback_context):
 
     _record_agent_timing(sid, "results_presenter")
     _write_run_timing(sid, run_dir)
+    _release_session_tracking(sid)
 
 
 # =========================================================================
@@ -1684,6 +1699,7 @@ async def _adaptation_session_state_export_callback(callback_context):
 
     _record_agent_timing(sid, "adapt_results_presenter")
     _write_run_timing(sid, run_dir)
+    _release_session_tracking(sid)
 
 
 # =========================================================================
@@ -1860,14 +1876,16 @@ brief_reviser = LlmAgent(
     ),
 )
 
-# Quality loop: checker then reviser, max 1 iteration.
+# Quality loop: checker then reviser, max 2 iterations.
 # Checker and reviser are direct sub_agents so ADK checks the escalate flag
 # after the checker runs - if the brief passes, the reviser is skipped entirely.
-# 1 iteration: if the checker fails, the reviser runs once and the loop exits.
+# 2 iterations: if the checker fails, the reviser runs and the checker re-runs
+# once to verify the fix. The thinking_budget cap on the checker (QUALITY_CHECK_CONFIG)
+# is the real latency win; keeping a second verification pass preserves quality gating.
 brief_quality_loop = LoopAgent(
     name="brief_quality_loop",
     sub_agents=[brief_quality_checker, brief_reviser],
-    max_iterations=1,
+    max_iterations=2,
 )
 
 brief_presenter = LlmAgent(
@@ -1957,14 +1975,15 @@ prompt_regenerator = LlmAgent(
     ),
 )
 
-# Quality loop: checker then regenerator, max 1 iteration.
+# Quality loop: checker then regenerator, max 2 iterations.
 # Same pattern as brief_quality_loop - checker and regenerator are direct
 # sub_agents so the regenerator is skipped when the checker escalates on pass.
-# 1 iteration: if the checker fails, the regenerator runs once and the loop exits.
+# 2 iterations: if the checker fails, the regenerator runs and the checker
+# re-verifies once. Latency is bounded by QUALITY_CHECK_CONFIG's thinking_budget=2048.
 prompt_quality_loop = LoopAgent(
     name="prompt_quality_loop",
     sub_agents=[prompt_quality_checker, prompt_regenerator],
-    max_iterations=1,
+    max_iterations=2,
 )
 
 results_presenter = LlmAgent(
@@ -2304,7 +2323,7 @@ adapt_variation_scatter = ParallelAgent(
 adapt_quality_loop = LoopAgent(
     name="adapt_quality_loop",
     sub_agents=[adapt_consistency_checker, adapt_variation_regenerator],
-    max_iterations=1,
+    max_iterations=2,
     before_agent_callback=_merge_variation_outputs,
 )
 
@@ -2601,6 +2620,7 @@ async def _fc_session_state_export_callback(callback_context):
 
     _record_agent_timing(sid, "fc_results_presenter")
     _write_run_timing(sid, run_dir)
+    _release_session_tracking(sid)
 
 
 async def save_full_campaign_manifest_artifact(tool_context):
@@ -2950,7 +2970,14 @@ fc_parallel_intake = ParallelAgent(
 )
 
 async def _fc_pre_strategy_before_callback(callback_context):
-    """Mark session as being in the FC pipeline so the root_agent can route reliably."""
+    """Mark session as being in the FC pipeline so the root_agent can route reliably.
+
+    Resets the run folder so FC outputs land in a fresh run_*/ folder rather than
+    overwriting the Campaign Creation run that necessarily preceded it in the
+    same session. Without this, fc_*.json, full_campaign_manifest.json, and
+    run_timing.json clobber the prior run's artifacts.
+    """
+    _reset_run_dir(callback_context.session.id)
     callback_context.state["_pipeline_context"] = "fc"
 
 
@@ -2982,7 +3009,7 @@ fc_variation_scatter = ParallelAgent(
 fc_quality_loop = LoopAgent(
     name="fc_quality_loop",
     sub_agents=[fc_consistency_checker, fc_variation_regenerator],
-    max_iterations=1,
+    max_iterations=2,
     before_agent_callback=_merge_fc_variation_outputs,
 )
 
@@ -3000,11 +3027,16 @@ fc_execution_phase = SequentialAgent(
 
 # Debug: log every root_agent LLM response so we can diagnose Gate 1 stalls.
 # Records finish_reason, text parts, and function calls to
-# outputs/root_agent_debug.log. Remove once the stall is resolved.
+# outputs/root_agent_debug.log. Off by default; set ROOT_AGENT_DEBUG_LOG=1
+# to enable. Concurrent sessions append to the same file without locking,
+# so leaving it on in production can interleave bytes within a JSONL line.
 _ROOT_DEBUG_LOG = OUTPUT_DIR / "root_agent_debug.log"
+_ROOT_DEBUG_LOG_ENABLED = os.getenv("ROOT_AGENT_DEBUG_LOG") == "1"
 
 
 async def _root_agent_debug_after_model_callback(callback_context, llm_response):
+    if not _ROOT_DEBUG_LOG_ENABLED:
+        return None
     try:
         OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now().isoformat(timespec="seconds")
