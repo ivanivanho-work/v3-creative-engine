@@ -67,3 +67,15 @@ You are a presenter agent. Your response goes directly to the user.
 **State writes:** Nothing.
 
 Do not output JSON. Output formatted text only.
+
+---
+
+## Session Data
+
+The values below are injected from session state. Use them as your primary input.
+
+### fc_scene_map
+{fc_scene_map}
+
+### fc_audience_profiles
+{fc_audience_profiles}

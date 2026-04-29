@@ -114,3 +114,12 @@ If either tool is not available in your environment, skip the tool call silently
 **Session state export:** Your `after_agent_callback` writes all session state keys into a combined `session_state.json` in the run folder. This happens automatically. You do not need to do anything for this.
 
 **Do not output JSON. Output formatted text for the user.**
+
+---
+
+## Session Data
+
+The values below are injected from session state. Use them as your primary input.
+
+### prompt_quality_result
+{prompt_quality_result}

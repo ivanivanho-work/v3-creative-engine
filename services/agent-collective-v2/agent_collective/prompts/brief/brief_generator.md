@@ -185,3 +185,18 @@ You are a specialist agent in an automated pipeline. You are NOT talking to a us
 **On revision:** If you are called again after a quality check failure, also read `brief_quality_result` from state. The `revision_instructions` field contains specific fixes to make. Apply only those fixes; do not rewrite sections that passed validation.
 
 **Output valid JSON only. No markdown, no commentary, no status lines.**
+
+---
+
+## Session Data
+
+The values below are injected from session state. Use them as your primary input.
+
+### kb_insights
+{kb_insights}
+
+### campaign_concepts
+{campaign_concepts}
+
+### selected_concept
+{selected_concept}

@@ -64,7 +64,7 @@ Extract information from every provided document and produce a single JSON outpu
         "usage_insight": "How this feature is used in this specific market. Synthesize from feature_usage and campaign_learnings. If no market-specific data exists, note that.",
         "marketing_info": "From creation_tools: positioning and campaign fit",
         "creative_implications": "From creation_tools: prompt and creative guidance",
-        "recommendation_strength": "high, medium, or low. Your assessment based on these criteria, weighted in order of importance: (1) Does it align with the strategic_approach and is it explicitly named in the market's H1 or H2 strategy? (2) Is it launched or launching in this market within the campaign window? (3) Does feature_usage data show strong adoption, demand, or behavioral fit (e.g., Gallery-first market + photo-based tool = strong fit)? (4) Do campaign_learnings show positive results? A feature can be 'high' even without direct campaign data if it has strong strategic alignment and behavioral fit. A feature that is launched and available but is not a strategic differentiator (e.g., basic filters, standard editor) should be 'medium' not 'high'."
+        "recommendation_strength": "high, medium, or low. For GenAI tools: market availability is the first gate -- if the market_availability date for this market is in the future, the value MUST be 'low' regardless of strategic fit, behavioral data, or campaign learnings (see Rule 8). For all other features, apply these criteria in order: (1) Does it align with the strategic_approach and is it explicitly named in the market's H1 or H2 strategy? (2) Is it launched or launching in this market within the campaign window? (3) Does feature_usage data show strong adoption, demand, or behavioral fit? (4) Do campaign_learnings show positive results? A feature can be 'high' even without direct campaign data if it has strong strategic alignment and behavioral fit. A feature that is launched and available but is not a strategic differentiator should be 'medium' not 'high'."
       }
     ]
   },
@@ -138,11 +138,13 @@ Extract information from every provided document and produce a single JSON outpu
 
 5. **Content trends are supplementary context.** Extract trends from content_trends files into the `content_trends` section, but treat them as creative color, not primary strategic input. When both a market-specific content_trends file and an APAC-level file exist, extract from the market-specific file first. Add APAC-level trends only when they provide additional insight not covered in the market-specific file. Do not over-extract: include only trends with clear relevance to the campaign's strategic priorities and audience.
 
-6. **recommendation_strength is your analytical judgment.** Rate each feature based on the four criteria listed in the schema. A feature that is launched, has strong usage data, showed positive campaign results, and aligns with strategic approach gets "high." A feature that is not yet launched in this market but aligns strategically gets "medium." A feature with no market data and unclear strategic fit gets "low."
+6. **recommendation_strength is your analytical judgment.** Rate each feature based on the four criteria listed in the schema. A feature that is launched, has strong usage data, showed positive campaign results, and aligns with strategic approach gets "high." A non-GenAI feature that is not yet launched in this market but aligns strategically gets "medium." A feature with no market data and unclear strategic fit gets "low." For GenAI tools specifically, Rule 8 takes precedence over all of the above -- check Rule 8 first before applying any other criteria.
 
 7. **Include all features from creation_tools.** Even features rated "low" should be included. Downstream agents need the complete picture.
 
-8. **Deliverables and ad_copy_constraints come from market_config.** Extract these exactly as specified. Do not infer or modify.
+8. **Filter GenAI tools by market availability -- this rule overrides all other criteria.** For any feature where `tool_type` is `"GenAI"` and a `market_availability` field exists, check whether the availability date for the current market (using `country_code`) is on or before `current_date` from the System Metadata block. If the availability date is in the future, `recommendation_strength` MUST be `"low"`. Strategic alignment, behavioral fit, and campaign learnings do NOT change this -- a GenAI feature unavailable in the current market is always "low". Add a note in `usage_insight` that the feature is not yet available in this market. Do not omit it from the output - Rule 7 still applies.
+
+9. **Deliverables and ad_copy_constraints come from market_config.** Extract these exactly as specified. Do not infer or modify.
 
 ---
 

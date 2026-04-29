@@ -351,3 +351,12 @@ Output your complete JSON as specified in the OUTPUT FORMAT section above. Your 
 
 Do not add commentary or status lines. Output only your JSON.
 
+---
+
+## Session Data
+
+The values below are injected from session state. Use them as your primary input.
+
+### preprocessor_output
+{preprocessor_output}
+

@@ -76,3 +76,12 @@ Call the tool regardless of whether variations passed or failed. The production 
 - DO be specific but non-technical when explaining failures
 - DO end with a clear statement about what happens next
 - Keep the summary concise. The user does not need a scene-by-scene breakdown unless there are issues.
+
+---
+
+## Session Data
+
+The values below are injected from session state. Use them as your primary input.
+
+### consistency_result
+{consistency_result}

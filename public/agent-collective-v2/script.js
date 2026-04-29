@@ -13,9 +13,12 @@
 
 // Backend URL — Cloud Run service (update after deployment)
 // For local dev, set to "http://localhost:8080"
-const API_BASE = window.location.hostname === "localhost"
-  ? "http://localhost:8080"
-  : "https://agent-collective-v2-964100659393.us-central1.run.app";
+const API_BASE = (() => {
+  const h = window.location.hostname;
+  if (h === "localhost") return "http://localhost:8080";
+  if (h.includes("cloudshell.dev")) return `${window.location.protocol}//${h.replace(/^\d+/, "8080")}`;
+  return "https://agent-collective-v2-964100659393.us-central1.run.app";
+})();
 
 // Firebase config (same as v3-creative-engine)
 const FIREBASE_CONFIG = {
@@ -45,6 +48,25 @@ let isProcessing = false;
 let pendingFile = null;
 let firstMessageSent = false;
 let lastManifestData = null;  // For MCP bridge
+
+let autoApprove = localStorage.getItem("autoApprove") === "true";
+let lastPresenterThisTurn = null;
+
+const AUTO_APPROVE_MESSAGES = {
+  "brief_presenter":          "Approve",
+  "creative_presenter":       "Approve",
+  "adapt_analysis_presenter": "Yes, continue",
+  "adapt_strategy_presenter": "Approve",
+  "fc_analysis_presenter":    "Build audience strategies",
+  "fc_strategy_presenter":    "Generate campaign variations",
+};
+
+const FINAL_PRESENTERS = new Set([
+  "concept_presenter",
+  "results_presenter",
+  "adapt_results_presenter",
+  "fc_results_presenter",
+]);
 
 const TYPING_SPEED_MS = 18;
 
@@ -187,6 +209,7 @@ const pipelineBadge = document.getElementById("pipelineBadge");
 const agentStatusList = document.getElementById("agentStatusList");
 const phaseTimeline = document.getElementById("phaseTimeline");
 const mcpSendBtn = document.getElementById("mcpSendBtn");
+const autoApproveToggle = document.getElementById("autoApproveToggle");
 const mcpHint = document.getElementById("mcpHint");
 const toastContainer = document.getElementById("toastContainer");
 
@@ -382,6 +405,8 @@ async function handleSend() {
   fileInput.value = "";
   filePreview.hidden = true;
 
+  lastPresenterThisTurn = null;
+
   // Ensure session exists (usually pre-created, so instant)
   try { await ensureSession(); }
   catch (err) { console.error("Session failed:", err); showError(); return; }
@@ -406,6 +431,20 @@ async function handleSend() {
     setInputDisabled(false);
     inputField.focus();
     updatePipelineBadge(getCurrentPhase() >= 5 ? "Complete" : "Waiting", getCurrentPhase() >= 5 ? "done" : "");
+
+    if (
+      autoApprove &&
+      firstMessageSent &&
+      lastPresenterThisTurn &&
+      AUTO_APPROVE_MESSAGES[lastPresenterThisTurn] &&
+      !FINAL_PRESENTERS.has(lastPresenterThisTurn)
+    ) {
+      const approvalMsg = AUTO_APPROVE_MESSAGES[lastPresenterThisTurn];
+      lastPresenterThisTurn = null;
+      await sleep(700);
+      inputField.value = approvalMsg;
+      handleSend();
+    }
   } catch (err) {
     console.error("Pipeline error:", err);
     showError();
@@ -464,6 +503,7 @@ async function sendWithStream(text, phaseIndicatorEl) {
 
       if (!RENDER_AUTHORS.has(author)) continue;
       completedPresenters.add(author);
+      lastPresenterThisTurn = author;
 
       const parts = event.content?.parts || [];
       for (const part of parts) {
@@ -543,6 +583,7 @@ async function sendWithUpload(file, text, phaseIndicatorEl) {
 
       if (!RENDER_AUTHORS.has(author)) continue;
       completedPresenters.add(author);
+      lastPresenterThisTurn = author;
 
       const parts = event.content?.parts || [];
       for (const part of parts) {
@@ -921,6 +962,14 @@ marketSelect.addEventListener("change", () => {
   }
   loadArchiveList();
 });
+
+if (autoApproveToggle) {
+  autoApproveToggle.checked = autoApprove;
+  autoApproveToggle.addEventListener("change", () => {
+    autoApprove = autoApproveToggle.checked;
+    localStorage.setItem("autoApprove", autoApprove);
+  });
+}
 
 // Initial load
 loadArchiveList();
