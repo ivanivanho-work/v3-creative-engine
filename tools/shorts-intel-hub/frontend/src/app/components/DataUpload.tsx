@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { Upload, Download, FileText, X } from 'lucide-react';
+import { Upload, Download, FileText, X, Loader2 } from 'lucide-react';
 import {
   NYANCAT_TEMPLATE,
   VAYNER_TEMPLATE,
@@ -8,25 +8,57 @@ import {
   downloadText,
   type TemplateSpec,
 } from '@/services/uploadTemplates';
+import {
+  uploadCsv,
+  clearCurrentFile,
+  type SharedState,
+  type UploadKind,
+  type UploadedFileRef,
+} from '@/services/sharedState';
 
 interface CsvSlotProps {
   title: string;
   subtitle: string;
   accept: string;
-  file: File | null;
-  onPick: (f: File | null) => void;
+  fileRef: UploadedFileRef | null;
+  kind: UploadKind;
 }
 
-function CsvSlot({ title, subtitle, accept, file, onPick }: CsvSlotProps) {
+function CsvSlot({ title, subtitle, accept, fileRef, kind }: CsvSlotProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handlePick = async (file: File | null) => {
+    setError(null);
+    if (!file) {
+      setBusy(true);
+      try {
+        await clearCurrentFile(kind);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Failed to clear file');
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+    setBusy(true);
+    try {
+      await uploadCsv(kind, file);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Upload failed');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
     const dropped = e.dataTransfer.files?.[0];
-    if (dropped) onPick(dropped);
+    if (dropped) handlePick(dropped);
   };
 
   return (
@@ -49,44 +81,59 @@ function CsvSlot({ title, subtitle, accept, file, onPick }: CsvSlotProps) {
         type="file"
         accept={accept}
         className="hidden"
-        onChange={(e) => onPick(e.target.files?.[0] ?? null)}
+        onChange={(e) => handlePick(e.target.files?.[0] ?? null)}
       />
 
-      {file ? (
+      {fileRef ? (
         <div className="flex items-center gap-3 p-3 rounded-md bg-muted">
           <FileText className="size-5 text-primary flex-shrink-0" />
           <div className="flex-1 min-w-0">
-            <div className="text-sm text-foreground truncate">{file.name}</div>
-            <div className="text-xs text-muted-foreground">{(file.size / 1024).toFixed(1)} KB</div>
+            <div className="text-sm text-foreground truncate">{fileRef.name}</div>
+            <div className="text-xs text-muted-foreground">
+              {(fileRef.size / 1024).toFixed(1)} KB · uploaded {new Date(fileRef.uploadedAt).toLocaleString()}
+            </div>
           </div>
           <button
             type="button"
-            onClick={() => onPick(null)}
-            className="flex-shrink-0 p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground"
+            onClick={() => handlePick(null)}
+            disabled={busy}
+            className="flex-shrink-0 p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground disabled:opacity-50"
             aria-label="Remove file"
           >
-            <X className="size-4" />
+            {busy ? <Loader2 className="size-4 animate-spin" /> : <X className="size-4" />}
           </button>
         </div>
       ) : (
         <button
           type="button"
           onClick={() => inputRef.current?.click()}
-          className="w-full flex flex-col items-center gap-2 py-6 rounded-md border border-dashed border-border hover:border-primary/50 hover:bg-muted transition-colors"
+          disabled={busy}
+          className="w-full flex flex-col items-center gap-2 py-6 rounded-md border border-dashed border-border hover:border-primary/50 hover:bg-muted transition-colors disabled:opacity-60"
         >
-          <Upload className="size-6 text-muted-foreground" />
-          <span className="text-sm text-foreground">Drop CSV here or click to browse</span>
+          {busy ? (
+            <>
+              <Loader2 className="size-6 text-muted-foreground animate-spin" />
+              <span className="text-sm text-foreground">Uploading…</span>
+            </>
+          ) : (
+            <>
+              <Upload className="size-6 text-muted-foreground" />
+              <span className="text-sm text-foreground">Drop CSV here or click to browse</span>
+            </>
+          )}
         </button>
+      )}
+
+      {error && (
+        <div className="mt-2 text-xs text-red-500">{error}</div>
       )}
     </div>
   );
 }
 
 interface DataUploadProps {
-  nyanCatFile: File | null;
-  vaynerFile: File | null;
-  onNyanCatFileChange: (f: File | null) => void;
-  onVaynerFileChange: (f: File | null) => void;
+  state: SharedState;
+  hydrated: boolean;
 }
 
 function FieldTable({ spec }: { spec: TemplateSpec }) {
@@ -144,12 +191,7 @@ function FieldTable({ spec }: { spec: TemplateSpec }) {
   );
 }
 
-export function DataUpload({
-  nyanCatFile,
-  vaynerFile,
-  onNyanCatFileChange,
-  onVaynerFileChange,
-}: DataUploadProps) {
+export function DataUpload({ state, hydrated }: DataUploadProps) {
   const [activeSpec, setActiveSpec] = useState<'nyancat' | 'vayner'>('nyancat');
   const [showGuide, setShowGuide] = useState(false);
 
@@ -171,10 +213,13 @@ export function DataUpload({
           <h3 className="text-foreground mb-2">Data Upload</h3>
           <p className="text-muted-foreground">
             Drop in the two CSVs that drive the three-track view: Nyan Cat (internal,
-            video-level) and Vayner (external, trend-level). Files stay in this session —
-            switch to the Marketing Dashboard and click "Run Matching + Ranking" to
-            process them.
+            video-level) and Vayner (external, trend-level). Files upload to shared
+            storage — everyone viewing the Hub sees the same dataset. Switch to the
+            Marketing Dashboard and click "Run Matching + Ranking" to process them.
           </p>
+          {!hydrated && (
+            <p className="text-muted-foreground text-xs mt-2">Loading latest shared state…</p>
+          )}
         </div>
 
         <div className="mb-6 flex flex-wrap gap-4">
@@ -182,15 +227,15 @@ export function DataUpload({
             title="Nyan Cat CSV (Internal)"
             subtitle={`Video-level export — ${NYANCAT_TEMPLATE.fields.length} columns, grouped by audio_id.`}
             accept=".csv,text/csv"
-            file={nyanCatFile}
-            onPick={onNyanCatFileChange}
+            fileRef={state.nyanCat}
+            kind="nyanCat"
           />
           <CsvSlot
             title="Vayner CSV (External)"
             subtitle={`Trend-level export — ${VAYNER_TEMPLATE.fields.length} columns, one row per trend.`}
             accept=".csv,text/csv"
-            file={vaynerFile}
-            onPick={onVaynerFileChange}
+            fileRef={state.vayner}
+            kind="vayner"
           />
         </div>
 
@@ -230,7 +275,6 @@ export function DataUpload({
             </div>
           </div>
 
-          {/* Tab switch between specs */}
           <div className="mb-4 flex gap-2 border-b border-border">
             <button
               onClick={() => setActiveSpec('nyancat')}

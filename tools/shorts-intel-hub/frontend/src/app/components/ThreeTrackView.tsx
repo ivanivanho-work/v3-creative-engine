@@ -3,13 +3,13 @@ import {
   Loader2, Sparkles, Link2, ExternalLink, CheckCircle2, EyeOff, AlertTriangle,
   ChevronDown, ChevronRight, Music, Hash, Users, Globe, Zap, ShieldCheck, ShieldOff,
 } from 'lucide-react';
-import { matchAndRank, type MatchAndRankResponse, type MatchPair } from '@/services/api';
-import { addArchive } from '@/services/archiveStore';
+import { matchAndRank, cellKey, type MatchCell, type MatchPair } from '@/services/api';
 import {
   approveTrend as storeApprove,
   getCurrentBatch,
 } from '@/services/approvedStore';
 import { ApprovedSidebar } from '@/app/components/ApprovedSidebar';
+import { fetchCsvFile, setCurrentMatchResult, type SharedState } from '@/services/sharedState';
 import type { Trend } from '@/types';
 
 function formatCompact(n: number | undefined): string | null {
@@ -297,18 +297,25 @@ function TrackColumn({ title, count, accentClass, accentText, children }: {
 }
 
 interface ThreeTrackViewProps {
-  nyanCatFile: File | null;
-  vaynerFile: File | null;
+  state: SharedState;
+  hydrated: boolean;
   market: string;
+  week: string | null;
 }
 
-export function ThreeTrackView({ nyanCatFile, vaynerFile, market }: ThreeTrackViewProps) {
+export function ThreeTrackView({ state, hydrated, market, week }: ThreeTrackViewProps) {
+  const { nyanCat: nyanCatRef, vayner: vaynerRef, matchResult } = state;
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<MatchAndRankResponse | null>(null);
   const [showHidden, setShowHidden] = useState(false);
   // Bump to force re-reads of the approved store after mutations.
   const [approvedVersion, setApprovedVersion] = useState(0);
+
+  const isStaleShape = !!matchResult && matchResult.version !== 2;
+  const cell: MatchCell | null = useMemo(() => {
+    if (!matchResult || !week) return null;
+    return matchResult.cells?.[cellKey(market, week)] ?? null;
+  }, [matchResult, market, week]);
 
   const approvedIds = useMemo(() => {
     const batch = getCurrentBatch(market);
@@ -318,16 +325,16 @@ export function ThreeTrackView({ nyanCatFile, vaynerFile, market }: ThreeTrackVi
   const isFrozen = !!getCurrentBatch(market).sentAt;
 
   const allTrends = useMemo(() => {
-    if (!result) return new Map<string, Trend>();
+    if (!cell) return new Map<string, Trend>();
     const map = new Map<string, Trend>();
-    for (const t of result.internal) map.set(t.id, t);
-    for (const t of result.external) map.set(t.id, t);
-    for (const p of result.matching) {
+    for (const t of cell.internal) map.set(t.id, t);
+    for (const t of cell.external) map.set(t.id, t);
+    for (const p of cell.matching) {
       map.set(p.internal.id, p.internal);
       map.set(p.external.id, p.external);
     }
     return map;
-  }, [result]);
+  }, [cell]);
 
   const handleApprove = (id: string) => {
     if (isFrozen) return;
@@ -338,20 +345,21 @@ export function ThreeTrackView({ nyanCatFile, vaynerFile, market }: ThreeTrackVi
   };
 
   const handleRun = async () => {
-    if (!nyanCatFile && !vaynerFile) {
+    if (!nyanCatRef && !vaynerRef) {
       setError('Upload at least one CSV on the Data Upload page (ideally both for matching to work).');
       return;
     }
     setLoading(true);
     setError(null);
     try {
-      const res = await matchAndRank(nyanCatFile, vaynerFile);
-      setResult(res);
-      addArchive({
-        market,
-        nyanCatFileName: nyanCatFile?.name ?? null,
-        vaynerFileName: vaynerFile?.name ?? null,
-        result: res,
+      const [nyanFile, vaynerFile] = await Promise.all([
+        nyanCatRef ? fetchCsvFile(nyanCatRef) : Promise.resolve(null),
+        vaynerRef ? fetchCsvFile(vaynerRef) : Promise.resolve(null),
+      ]);
+      const res = await matchAndRank(nyanFile, vaynerFile);
+      await setCurrentMatchResult(res, {
+        nyanCatFile: nyanCatRef,
+        vaynerFile: vaynerRef,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Matching failed');
@@ -363,9 +371,10 @@ export function ThreeTrackView({ nyanCatFile, vaynerFile, market }: ThreeTrackVi
   const filterVisible = (trends: Trend[]) => showHidden ? trends : trends.filter((t) => !t.hidden);
 
   const fileStatus = (() => {
+    if (!hydrated) return 'Loading latest shared state…';
     const parts: string[] = [];
-    if (nyanCatFile) parts.push(`Nyan Cat: ${nyanCatFile.name}`);
-    if (vaynerFile) parts.push(`Vayner: ${vaynerFile.name}`);
+    if (nyanCatRef) parts.push(`Nyan Cat: ${nyanCatRef.name}`);
+    if (vaynerRef) parts.push(`Vayner: ${vaynerRef.name}`);
     return parts.length ? parts.join(' · ') : 'No CSVs uploaded yet — head to the Data Upload tab.';
   })();
 
@@ -382,7 +391,7 @@ export function ThreeTrackView({ nyanCatFile, vaynerFile, market }: ThreeTrackVi
         <div className="flex items-center gap-3 flex-wrap">
           <button
             onClick={handleRun}
-            disabled={loading || (!nyanCatFile && !vaynerFile)}
+            disabled={loading || !hydrated || (!nyanCatRef && !vaynerRef)}
             className="inline-flex items-center gap-2 px-5 py-2 rounded-lg bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50"
           >
             {loading ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
@@ -405,21 +414,69 @@ export function ThreeTrackView({ nyanCatFile, vaynerFile, market }: ThreeTrackVi
         )}
       </div>
 
+      {/* Stale shape notice */}
+      {isStaleShape && (
+        <div className="mb-4 p-3 rounded-lg border border-yellow-500/40 bg-yellow-500/10 text-yellow-500 text-sm">
+          The cached result uses an older format. Click <strong>Run Matching + Ranking</strong> to
+          refresh with per-market, per-week filtering + normalization.
+        </div>
+      )}
+
+      {/* Dataset-level summary (across all markets/weeks in this upload) */}
+      {matchResult && !isStaleShape && (
+        <div className="mb-4 p-3 rounded-lg border border-border bg-card text-sm">
+          <div className="text-muted-foreground mb-1">This upload</div>
+          <div className="flex flex-wrap gap-x-6 gap-y-1 text-foreground">
+            <span><strong>{matchResult.stats.internalParsed}</strong> Nyan Cat parsed</span>
+            <span><strong>{matchResult.stats.externalParsed}</strong> Vayner parsed</span>
+            <span><strong>{matchResult.markets.length}</strong> markets · <strong>{matchResult.weeks.length}</strong> weeks · <strong>{matchResult.stats.cellCount}</strong> cells</span>
+            {matchResult.stats.globalInternal + matchResult.stats.globalExternal > 0 && (
+              <span className="text-cyan-400">{matchResult.stats.globalInternal + matchResult.stats.globalExternal} tagged Global</span>
+            )}
+          </div>
+          {(matchResult.stats.internalSkippedNoWeek > 0 || matchResult.stats.externalSkippedNoWeek > 0) && (
+            <div className="mt-2 p-2 rounded bg-yellow-500/10 border border-yellow-500/30 text-yellow-500 text-xs">
+              <strong>⚠ {matchResult.stats.internalSkippedNoWeek} Nyan Cat + {matchResult.stats.externalSkippedNoWeek} Vayner</strong> trends were skipped because their date column
+              (Nyan: <code>shorts_video_published_date</code>, Vayner: <code>Date Identified</code>) was missing or unparseable.
+              Check that column in your CSV — week filtering requires a valid date.
+            </div>
+          )}
+          {matchResult.stats.internalParsed === 0 && (
+            <div className="mt-2 p-2 rounded bg-red-500/10 border border-red-500/30 text-red-400 text-xs">
+              <strong>⚠ No Nyan Cat trends parsed.</strong> Check that the CSV has an <code>audio_id</code> (or <code>Song_title</code>) column
+              per row and that the file was uploaded into the Nyan Cat slot on the Data Upload tab.
+            </div>
+          )}
+          {matchResult.weeks.length === 0 && matchResult.stats.internalParsed + matchResult.stats.externalParsed > 0 && (
+            <div className="mt-2 p-2 rounded bg-red-500/10 border border-red-500/30 text-red-400 text-xs">
+              <strong>⚠ No weeks found in either CSV.</strong> Every trend is missing its date field, so nothing falls into a week cell.
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Missing-cell notice */}
+      {matchResult && !isStaleShape && !cell && week && (
+        <div className="mb-4 p-3 rounded-lg border border-muted bg-muted/40 text-muted-foreground text-sm">
+          No topics for {market} in {week}. Try a different market or week.
+        </div>
+      )}
+
       {/* Results */}
-      {result && (
+      {cell && (
         <>
           <div className="mb-4 grid grid-cols-2 md:grid-cols-4 gap-2">
-            <Stat label="Internal parsed" value={result.stats.internalParsed} />
-            <Stat label="External parsed" value={result.stats.externalParsed} />
+            <Stat label="Internal parsed" value={cell.stats.internalParsed} />
+            <Stat label="External parsed" value={cell.stats.externalParsed} />
             <Stat
               label="Matched"
-              value={result.stats.matched}
-              sub={`${result.stats.matchedByKeyword} kw · ${result.stats.matchedBySemantic} sem`}
+              value={cell.stats.matched}
+              sub={`${cell.stats.matchedByKeyword} kw · ${cell.stats.matchedBySemantic} sem`}
             />
             <Stat
               label="Unique"
-              value={result.stats.internalOnly + result.stats.externalOnly}
-              sub={`${result.stats.internalOnly} int · ${result.stats.externalOnly} ext`}
+              value={cell.stats.internalOnly + cell.stats.externalOnly}
+              sub={`${cell.stats.internalOnly} int · ${cell.stats.externalOnly} ext`}
             />
           </div>
 
@@ -430,11 +487,11 @@ export function ThreeTrackView({ nyanCatFile, vaynerFile, market }: ThreeTrackVi
           >
             <TrackColumn
               title="Internal (Nyan Cat)"
-              count={filterVisible(result.internal).length}
+              count={filterVisible(cell.internal).length}
               accentClass="border-purple-500/30"
               accentText="text-purple-400"
             >
-              {filterVisible(result.internal).map((t) => (
+              {filterVisible(cell.internal).map((t) => (
                 <CompactTrendCard
                   key={t.id}
                   trend={t}
@@ -446,11 +503,11 @@ export function ThreeTrackView({ nyanCatFile, vaynerFile, market }: ThreeTrackVi
 
             <TrackColumn
               title="Matched Topics"
-              count={result.matching.length}
+              count={cell.matching.length}
               accentClass="border-cyan-500/30"
               accentText="text-cyan-400"
             >
-              {result.matching.map((pair) => (
+              {cell.matching.map((pair) => (
                 <MatchedPairCard
                   key={`${pair.internal.id}::${pair.external.id}`}
                   pair={pair}
@@ -462,11 +519,11 @@ export function ThreeTrackView({ nyanCatFile, vaynerFile, market }: ThreeTrackVi
 
             <TrackColumn
               title="External (Vayner)"
-              count={filterVisible(result.external).length}
+              count={filterVisible(cell.external).length}
               accentClass="border-cyan-500/30"
               accentText="text-cyan-400"
             >
-              {filterVisible(result.external).map((t) => (
+              {filterVisible(cell.external).map((t) => (
                 <CompactTrendCard
                   key={t.id}
                   trend={t}

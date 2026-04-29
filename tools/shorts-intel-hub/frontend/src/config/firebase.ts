@@ -8,13 +8,21 @@
  * See: https://firebase.google.com/docs/projects/api-keys
  */
 
+import { initializeApp, getApps, getApp } from 'firebase/app';
+import { getFirestore } from 'firebase/firestore';
+import { getStorage } from 'firebase/storage';
+
 export const firebaseConfig = {
-  apiKey: "AIzaSyBwtQBAZ_IewB2TYCkew3ctzB4HMs9Gyn0",
+  apiKey: "AIzaSyBjw05ng3dqmRrs7SKA57MAjSnUdeuJLj8",
   authDomain: "v3-creative-engine.firebaseapp.com",
   projectId: "v3-creative-engine",
   storageBucket: "v3-creative-engine.firebasestorage.app",
   messagingSenderId: "964100659393",
   appId: "1:964100659393:web:bc6aa41fce9a8770d55c40"
 };
+
+export const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+export const db = getFirestore(app);
+export const storage = getStorage(app);
 
 export default firebaseConfig;

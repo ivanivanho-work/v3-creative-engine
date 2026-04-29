@@ -3,7 +3,7 @@ import { getStorage, ref, uploadBytes, getBytes, listAll, deleteObject } from 'f
 import { getFirestore, doc, setDoc, getDocs, collection, query, orderBy, where, limit, deleteDoc, serverTimestamp } from 'firebase/firestore';
 
 const firebaseConfig = {
-  apiKey: "AIzaSyBwtQBAZ_IewB2TYCkew3ctzB4HMs9Gyn0",
+  apiKey: "AIzaSyBjw05ng3dqmRrs7SKA57MAjSnUdeuJLj8",
   authDomain: "v3-creative-engine.firebaseapp.com",
   projectId: "v3-creative-engine",
   storageBucket: "v3-creative-engine.firebasestorage.app",
@@ -11,7 +11,7 @@ const firebaseConfig = {
   appId: "1:964100659393:web:bc6aa41fce9a8770d55c40"
 };
 
-const app = initializeApp(firebaseConfig);
+export const app = initializeApp(firebaseConfig);
 const storage = getStorage(app);
 const db = getFirestore(app);
 

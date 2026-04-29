@@ -4,9 +4,16 @@
  */
 
 const functions = require('firebase-functions');
+const { requireAllowedHttp } = require('./_authGuard');
+
+async function gate(req, res) {
+  await requireAllowedHttp(req, res);
+  return !res.headersSent;
+}
 
 // MCP Bridge - Receive assets from Creative Generator
 exports.mcpReceiveAssets = functions.https.onRequest(async (req, res) => {
+  if (!(await gate(req, res))) return;
   try {
     const { mcpReceiveAssets } = await import('./template-stamper/index.js');
     return mcpReceiveAssets(req, res);
@@ -18,6 +25,7 @@ exports.mcpReceiveAssets = functions.https.onRequest(async (req, res) => {
 
 // API - Get all templates
 exports.getTemplates = functions.https.onRequest(async (req, res) => {
+  if (!(await gate(req, res))) return;
   try {
     const { getTemplates } = await import('./template-stamper/index.js');
     return getTemplates(req, res);
@@ -29,6 +37,7 @@ exports.getTemplates = functions.https.onRequest(async (req, res) => {
 
 // API - Get single template
 exports.getTemplate = functions.https.onRequest(async (req, res) => {
+  if (!(await gate(req, res))) return;
   try {
     const { getTemplate } = await import('./template-stamper/index.js');
     return getTemplate(req, res);
@@ -40,6 +49,7 @@ exports.getTemplate = functions.https.onRequest(async (req, res) => {
 
 // API - Create job
 exports.createJob = functions.https.onRequest(async (req, res) => {
+  if (!(await gate(req, res))) return;
   try {
     const { createJob } = await import('./template-stamper/index.js');
     return createJob(req, res);
@@ -51,6 +61,7 @@ exports.createJob = functions.https.onRequest(async (req, res) => {
 
 // API - Get job
 exports.getJob = functions.https.onRequest(async (req, res) => {
+  if (!(await gate(req, res))) return;
   try {
     const { getJob } = await import('./template-stamper/index.js');
     return getJob(req, res);
@@ -62,6 +73,7 @@ exports.getJob = functions.https.onRequest(async (req, res) => {
 
 // API - Get job history
 exports.getJobHistory = functions.https.onRequest(async (req, res) => {
+  if (!(await gate(req, res))) return;
   try {
     const { getJobHistory } = await import('./template-stamper/index.js');
     return getJobHistory(req, res);
@@ -71,7 +83,7 @@ exports.getJobHistory = functions.https.onRequest(async (req, res) => {
   }
 });
 
-// Job Processing - Trigger Remotion Render (Firestore trigger)
+// Job Processing - Trigger Remotion Render (Firestore trigger — not user-facing, no gate)
 exports.triggerRemotionRender = functions.firestore
   .document('jobs/{jobId}')
   .onCreate(async (snap, context) => {
@@ -86,6 +98,7 @@ exports.triggerRemotionRender = functions.firestore
 
 // Asset Processing - Preprocess asset
 exports.preprocessAsset = functions.https.onRequest(async (req, res) => {
+  if (!(await gate(req, res))) return;
   try {
     const { preprocessAsset } = await import('./template-stamper/index.js');
     return preprocessAsset(req, res);

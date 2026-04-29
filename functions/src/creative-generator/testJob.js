@@ -5,8 +5,10 @@
  */
 
 const admin = require('firebase-admin');
+const { requireAllowed } = require('../_authGuard');
 
 async function createTestJob(data, context) {
+  requireAllowed(context);
   try {
     const { type = 'image', prompt, format, sceneNumber, country } = data;
 

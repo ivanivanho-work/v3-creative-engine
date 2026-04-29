@@ -4,6 +4,7 @@
  */
 
 const functions = require('firebase-functions');
+const { requireAllowed } = require('../_authGuard');
 
 // Get API key from environment (loaded from .env or Firebase config)
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || functions.config().gemini?.key;
@@ -15,6 +16,7 @@ const GEMINI_MODEL = 'gemini-2.0-flash';
  * Supports multi-turn conversations with history
  */
 async function callGeminiAgent(data, context) {
+  requireAllowed(context);
   try {
     // Validate input
     if (!data.systemPrompt || !data.userMessage) {

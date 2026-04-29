@@ -1,16 +1,31 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { MarketingDashboard } from '@/app/components/MarketingDashboard';
 import { DataUpload } from '@/app/components/DataUpload';
 import { BarChart3, Upload, Youtube } from 'lucide-react';
+import { subscribeToCurrent, type SharedState } from '@/services/sharedState';
+
+const EMPTY_STATE: SharedState = {
+  nyanCat: null,
+  vayner: null,
+  matchSummary: null,
+  matchResult: null,
+};
 
 export default function App() {
   const [activeView, setActiveView] = useState<'dashboard' | 'upload'>('dashboard');
-  const [nyanCatFile, setNyanCatFile] = useState<File | null>(null);
-  const [vaynerFile, setVaynerFile] = useState<File | null>(null);
+  const [state, setState] = useState<SharedState>(EMPTY_STATE);
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    const unsub = subscribeToCurrent((next) => {
+      setState(next);
+      setHydrated(true);
+    });
+    return unsub;
+  }, []);
 
   return (
     <div className="size-full flex flex-col bg-background">
-      {/* Header */}
       <header className="border-b border-border bg-card">
         <div className="px-6 py-3">
           <div className="flex items-center justify-between">
@@ -51,17 +66,11 @@ export default function App() {
         </div>
       </header>
 
-      {/* Main Content */}
       <main className="flex-1 overflow-auto">
         {activeView === 'dashboard' ? (
-          <MarketingDashboard nyanCatFile={nyanCatFile} vaynerFile={vaynerFile} />
+          <MarketingDashboard state={state} hydrated={hydrated} />
         ) : (
-          <DataUpload
-            nyanCatFile={nyanCatFile}
-            vaynerFile={vaynerFile}
-            onNyanCatFileChange={setNyanCatFile}
-            onVaynerFileChange={setVaynerFile}
-          />
+          <DataUpload state={state} hydrated={hydrated} />
         )}
       </main>
     </div>
