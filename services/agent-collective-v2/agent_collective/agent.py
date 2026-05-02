@@ -137,6 +137,7 @@ def _get_run_dir(session_id: str) -> Path:
 
     today = datetime.now().strftime("%Y-%m-%d")
     MARKET_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    _prune_stale_session_latests()
     existing = sorted(MARKET_OUTPUT_DIR.glob(f"run_{today}_*"))
     next_num = len(existing) + 1
     run_dir = MARKET_OUTPUT_DIR / f"run_{today}_{next_num:03d}"
@@ -166,6 +167,115 @@ def _release_session_tracking(session_id: str):
     _run_start_times.pop(session_id, None)
     _agent_timings.pop(session_id, None)
     _agent_start_times.pop(session_id, None)
+
+
+# =========================================================================
+# Session-keyed latest_* files (issue #6)
+# =========================================================================
+# The MARKET_OUTPUT_DIR / "latest_*.{md,json}" files are overwritten by every
+# pipeline run, so concurrent sessions in the same market race on download.
+# We additionally write a session-keyed copy (latest_*_{sid}.{ext}) so the
+# download endpoints can serve the file belonging to the requesting session.
+# Market-level latest_* files are kept as a fallback for callers without a sid.
+#
+# Pruning: stale session-keyed copies (> _SESSION_LATEST_TTL seconds) are
+# removed opportunistically when a new run folder is created. No background
+# cron required.
+
+_SESSION_LATEST_TTL = 24 * 3600  # 24 hours
+
+_SAFE_SID_RE = re.compile(r"[^a-zA-Z0-9_-]")
+
+
+def _safe_sid(session_id: str) -> str:
+    """Make a session_id safe for use in a filename."""
+    return _SAFE_SID_RE.sub("_", session_id)[:64]
+
+
+def _session_keyed_path(base_name: str, session_id: str) -> Path:
+    """Return MARKET_OUTPUT_DIR / latest_<stem>_<sid><suffix>.
+
+    Example: ("latest_generation_manifest.json", "abc-123") ->
+    MARKET_OUTPUT_DIR / "latest_generation_manifest_abc-123.json"
+    """
+    p = Path(base_name)
+    return MARKET_OUTPUT_DIR / f"{p.stem}_{_safe_sid(session_id)}{p.suffix}"
+
+
+def _write_market_latest(
+    base_name: str,
+    content,
+    session_id: str | None = None,
+    *,
+    is_json: bool = False,
+):
+    """Write a latest_* file at the market level and (if sid given) a
+    session-keyed sibling. Both copies are kept in sync so callers without
+    a session_id continue to get the most recent run.
+    """
+    MARKET_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    targets = [MARKET_OUTPUT_DIR / base_name]
+    if session_id:
+        targets.append(_session_keyed_path(base_name, session_id))
+    for path in targets:
+        if is_json:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(content, f, indent=2, ensure_ascii=False)
+        else:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(content)
+
+
+_LATEST_BASE_NAMES = (
+    "latest_marketing_brief.md",
+    "latest_creative_package.md",
+    "latest_generation_manifest.json",
+    "latest_full_campaign_manifest.json",
+)
+
+
+def _is_session_keyed_latest(path: Path) -> bool:
+    """True if path is a session-keyed latest_* sibling (not the market-level
+    latest_<base>.<ext> file itself).
+    """
+    name = path.name
+    for base in _LATEST_BASE_NAMES:
+        if name == base:
+            return False
+        base_p = Path(base)
+        prefix = f"{base_p.stem}_"
+        if name.startswith(prefix) and name.endswith(base_p.suffix):
+            sid = name[len(prefix):-len(base_p.suffix)]
+            if sid:  # non-empty sid component
+                return True
+    return False
+
+
+def _prune_stale_session_latests(now_ts: float | None = None):
+    """Remove latest_*_<sid>.{md,json} files older than _SESSION_LATEST_TTL.
+
+    Best-effort; failures are swallowed so a permission glitch never blocks
+    a new pipeline run. Only files matching the session-keyed pattern for
+    one of the four known latest_* base names are eligible for deletion.
+    """
+    if not MARKET_OUTPUT_DIR.exists():
+        return
+    if now_ts is None:
+        now_ts = datetime.now().timestamp()
+    cutoff = now_ts - _SESSION_LATEST_TTL
+    try:
+        for path in MARKET_OUTPUT_DIR.iterdir():
+            if not path.is_file():
+                continue
+            if not _is_session_keyed_latest(path):
+                continue
+            try:
+                if path.stat().st_mtime < cutoff:
+                    path.unlink()
+            except OSError:
+                continue
+    except Exception:
+        pass
 
 
 def _parse_state_value(value):
@@ -714,9 +824,7 @@ def _make_latest_brief_markdown_callback():
 
         with open(run_dir / "latest_marketing_brief.md", "w", encoding="utf-8") as f:
             f.write(md_content)
-        MARKET_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-        with open(MARKET_OUTPUT_DIR / "latest_marketing_brief.md", "w", encoding="utf-8") as f:
-            f.write(md_content)
+        _write_market_latest("latest_marketing_brief.md", md_content, sid)
 
         _record_agent_timing(sid, "brief_presenter")
 
@@ -750,24 +858,23 @@ async def _session_state_export_callback(callback_context):
         json.dump(export, f, indent=2, ensure_ascii=False)
 
     # Keep market-scoped latest files current for the download endpoints.
-    MARKET_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-
+    # Each call also writes a session-keyed sibling so concurrent sessions
+    # in the same market don't race on download (see issue #6).
     brief = export.get("marketing_brief")
     if brief is not None:
         md_content = _marketing_brief_to_markdown(brief)
-        with open(MARKET_OUTPUT_DIR / "latest_marketing_brief.md", "w", encoding="utf-8") as f:
-            f.write(md_content)
+        _write_market_latest("latest_marketing_brief.md", md_content, sid)
 
     manifest = export.get("generation_manifest")
     if manifest is not None:
-        with open(MARKET_OUTPUT_DIR / "latest_generation_manifest.json", "w", encoding="utf-8") as f:
-            json.dump(manifest, f, indent=2, ensure_ascii=False)
+        _write_market_latest(
+            "latest_generation_manifest.json", manifest, sid, is_json=True,
+        )
 
     creative = export.get("creative_package")
     if creative is not None:
         md_content = _creative_package_to_markdown(creative)
-        with open(MARKET_OUTPUT_DIR / "latest_creative_package.md", "w", encoding="utf-8") as f:
-            f.write(md_content)
+        _write_market_latest("latest_creative_package.md", md_content, sid)
 
     _record_agent_timing(sid, "results_presenter")
     _write_run_timing(sid, run_dir)
@@ -1652,8 +1759,6 @@ async def _adaptation_session_state_export_callback(callback_context):
     with open(session_path, "w", encoding="utf-8") as f:
         json.dump(export, f, indent=2, ensure_ascii=False)
 
-    MARKET_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-
     manifest = _build_adaptation_manifest(export)
 
     # Fallback: if the primary variation_output couldn't be parsed (e.g. the
@@ -1685,8 +1790,9 @@ async def _adaptation_session_state_export_callback(callback_context):
             json.dump(manifest, f, indent=2, ensure_ascii=False)
         with open(run_dir / "latest_generation_manifest.json", "w", encoding="utf-8") as f:
             json.dump(manifest, f, indent=2, ensure_ascii=False)
-        with open(MARKET_OUTPUT_DIR / "latest_generation_manifest.json", "w", encoding="utf-8") as f:
-            json.dump(manifest, f, indent=2, ensure_ascii=False)
+        _write_market_latest(
+            "latest_generation_manifest.json", manifest, sid, is_json=True,
+        )
 
     md_content = _build_adaptation_package_md(export)
     if md_content:
@@ -1694,8 +1800,7 @@ async def _adaptation_session_state_export_callback(callback_context):
             f.write(md_content)
         with open(run_dir / "latest_creative_package.md", "w", encoding="utf-8") as f:
             f.write(md_content)
-        with open(MARKET_OUTPUT_DIR / "latest_creative_package.md", "w", encoding="utf-8") as f:
-            f.write(md_content)
+        _write_market_latest("latest_creative_package.md", md_content, sid)
 
     _record_agent_timing(sid, "adapt_results_presenter")
     _write_run_timing(sid, run_dir)
@@ -2614,9 +2719,9 @@ async def _fc_session_state_export_callback(callback_context):
             json.dump(manifest, f, indent=2, ensure_ascii=False)
         with open(run_dir / "full_campaign_manifest.json", "w", encoding="utf-8") as f:
             json.dump(manifest, f, indent=2, ensure_ascii=False)
-        MARKET_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-        with open(MARKET_OUTPUT_DIR / "latest_full_campaign_manifest.json", "w", encoding="utf-8") as f:
-            json.dump(manifest, f, indent=2, ensure_ascii=False)
+        _write_market_latest(
+            "latest_full_campaign_manifest.json", manifest, sid, is_json=True,
+        )
 
     _record_agent_timing(sid, "fc_results_presenter")
     _write_run_timing(sid, run_dir)

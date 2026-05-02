@@ -619,24 +619,31 @@ async function sendWithUpload(file, text, phaseIndicatorEl) {
 // Download collection helper
 // =========================================================================
 
+// Append ?session_id=<sid> so the server returns the file written by THIS
+// session, not whichever session most recently finished in the same market
+// (issue #6).
+function withSession(url) {
+  return sessionId ? `${url}?session_id=${encodeURIComponent(sessionId)}` : url;
+}
+
 function collectDownload(fnName, pendingDownloads) {
   if (fnName === "save_marketing_brief_artifact") {
-    pendingDownloads.push({ href: `${API_BASE}/api/brief`, artifact: "marketing_brief.json", filename: "marketing_brief.md", label: "Download marketing brief" });
+    pendingDownloads.push({ href: withSession(`${API_BASE}/api/brief`), artifact: "marketing_brief.json", filename: "marketing_brief.md", label: "Download marketing brief" });
   }
   if (fnName === "save_creative_package_artifact") {
-    pendingDownloads.push({ href: `${API_BASE}/api/creative-package`, artifact: "creative_package.md", filename: "creative_package.md", label: "Download creative package" });
+    pendingDownloads.push({ href: withSession(`${API_BASE}/api/creative-package`), artifact: "creative_package.md", filename: "creative_package.md", label: "Download creative package" });
   }
   if (fnName === "save_generation_manifest_artifact") {
-    pendingDownloads.push({ href: `${API_BASE}/api/manifest`, artifact: "generation_manifest.json", filename: "generation_manifest.json", label: "Download generation manifest" });
+    pendingDownloads.push({ href: withSession(`${API_BASE}/api/manifest`), artifact: "generation_manifest.json", filename: "generation_manifest.json", label: "Download generation manifest" });
     enableMcpBridge();
   }
   if (fnName === "save_variation_artifact") {
-    pendingDownloads.push({ href: `${API_BASE}/api/creative-package`, artifact: "creative_package.md", filename: "creative_package.md", label: "Download creative package" });
-    pendingDownloads.push({ href: `${API_BASE}/api/manifest`, artifact: "generation_manifest.json", filename: "generation_manifest.json", label: "Download generation manifest" });
+    pendingDownloads.push({ href: withSession(`${API_BASE}/api/creative-package`), artifact: "creative_package.md", filename: "creative_package.md", label: "Download creative package" });
+    pendingDownloads.push({ href: withSession(`${API_BASE}/api/manifest`), artifact: "generation_manifest.json", filename: "generation_manifest.json", label: "Download generation manifest" });
     enableMcpBridge();
   }
   if (fnName === "save_full_campaign_manifest_artifact") {
-    pendingDownloads.push({ href: `${API_BASE}/api/full-campaign-manifest`, artifact: "full_campaign_manifest.json", filename: "full_campaign_manifest.json", label: "Download full campaign manifest" });
+    pendingDownloads.push({ href: withSession(`${API_BASE}/api/full-campaign-manifest`), artifact: "full_campaign_manifest.json", filename: "full_campaign_manifest.json", label: "Download full campaign manifest" });
     enableMcpBridge();
   }
 }
@@ -989,16 +996,16 @@ mcpSendBtn.addEventListener("click", async () => {
   mcpSendBtn.disabled = true;
   mcpHint.textContent = "Sending...";
   try {
-    // Fetch manifest
-    let manifestResp = await fetch(`${API_BASE}/api/full-campaign-manifest`);
-    if (!manifestResp.ok) manifestResp = await fetch(`${API_BASE}/api/manifest`);
+    // Fetch manifest (session-keyed so concurrent sessions can't race; see issue #6)
+    let manifestResp = await fetch(withSession(`${API_BASE}/api/full-campaign-manifest`));
+    if (!manifestResp.ok) manifestResp = await fetch(withSession(`${API_BASE}/api/manifest`));
     if (!manifestResp.ok) { showToast("No manifest available"); mcpSendBtn.disabled = false; return; }
     const manifestData = await manifestResp.json();
 
     // Fetch creative package (optional — don't block if unavailable)
     let creativePackage = null;
     try {
-      const cpResp = await fetch(`${API_BASE}/api/creative-package`);
+      const cpResp = await fetch(withSession(`${API_BASE}/api/creative-package`));
       if (cpResp.ok) creativePackage = await cpResp.text();
     } catch {}
 

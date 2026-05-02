@@ -19,10 +19,12 @@ Endpoints:
     POST /api/run                    - Blocking fallback
     POST /api/run/upload             - File upload + SSE stream
     GET  /api/artifact/{sid}/{name}  - Download an artifact from the session
-    GET  /api/brief                  - Download latest marketing brief
-    GET  /api/creative-package       - Download latest creative package
-    GET  /api/manifest               - Download latest generation manifest
-    GET  /api/full-campaign-manifest - Download latest full campaign manifest
+    GET  /api/brief?session_id=<sid>                  - Download latest marketing brief
+    GET  /api/creative-package?session_id=<sid>       - Download latest creative package
+    GET  /api/manifest?session_id=<sid>               - Download latest generation manifest
+    GET  /api/full-campaign-manifest?session_id=<sid> - Download latest full campaign manifest
+    (session_id is optional; without it, the market-level latest_* file is served — may
+     reflect a different session if multiple ran concurrently in the same market)
     GET  /api/kb                     - List KB files
     GET  /api/kb/file                - Read a KB file
     POST /api/kb/upload              - Upload a KB file
@@ -340,9 +342,26 @@ async def get_artifact(session_id: str, artifact_name: str):
 # File download endpoints (latest outputs from agent callbacks)
 # -------------------------------------------------------------------------
 
+# Resolve a download to the session-keyed copy when ?session_id=<sid> is
+# given. Falls back to the market-level latest_* file (which reflects whichever
+# session most recently finished) so legacy callers keep working. See issue #6.
+_SAFE_SID_RE = re.compile(r"[^a-zA-Z0-9_-]")
+
+
+def _resolve_latest(base_name: str, session_id: str | None) -> Path:
+    """Return path to the latest_* file, preferring the session-keyed copy."""
+    if session_id:
+        safe = _SAFE_SID_RE.sub("_", session_id)[:64]
+        p = Path(base_name)
+        keyed = OUTPUTS_DIR / f"{p.stem}_{safe}{p.suffix}"
+        if keyed.exists():
+            return keyed
+    return OUTPUTS_DIR / base_name
+
+
 @app.get("/api/brief")
-async def get_brief():
-    path = OUTPUTS_DIR / "latest_marketing_brief.md"
+async def get_brief(session_id: str | None = None):
+    path = _resolve_latest("latest_marketing_brief.md", session_id)
     if not path.exists():
         raise HTTPException(status_code=404, detail="No marketing brief found.")
     return Response(
@@ -353,8 +372,8 @@ async def get_brief():
 
 
 @app.get("/api/creative-package")
-async def get_creative_package():
-    path = OUTPUTS_DIR / "latest_creative_package.md"
+async def get_creative_package(session_id: str | None = None):
+    path = _resolve_latest("latest_creative_package.md", session_id)
     if not path.exists():
         raise HTTPException(status_code=404, detail="No creative package found.")
     return Response(
@@ -365,8 +384,8 @@ async def get_creative_package():
 
 
 @app.get("/api/manifest")
-async def get_manifest():
-    path = OUTPUTS_DIR / "latest_generation_manifest.json"
+async def get_manifest(session_id: str | None = None):
+    path = _resolve_latest("latest_generation_manifest.json", session_id)
     if not path.exists():
         raise HTTPException(status_code=404, detail="No generation manifest found.")
     return Response(
@@ -377,8 +396,8 @@ async def get_manifest():
 
 
 @app.get("/api/full-campaign-manifest")
-async def get_full_campaign_manifest():
-    path = OUTPUTS_DIR / "latest_full_campaign_manifest.json"
+async def get_full_campaign_manifest(session_id: str | None = None):
+    path = _resolve_latest("latest_full_campaign_manifest.json", session_id)
     if not path.exists():
         raise HTTPException(status_code=404, detail="No full campaign manifest found.")
     return Response(
