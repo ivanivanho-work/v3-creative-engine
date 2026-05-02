@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   Globe, RefreshCcw, Brain, MapPin, Sparkles, Download,
   Layers, Zap, Play, TrendingUp, Users,
@@ -7,7 +7,8 @@ import {
   Wand2, Palette, Component as ComponentIcon,
   ChevronDown, ChevronUp, FolderKanban, Lightbulb, Copy, Edit2, Save, Plus,
   RotateCcw, Binary, Power, Settings2, Trash2,
-  Target as TargetIcon, Database, Clock, CheckCircle2, AlertCircle, Loader2
+  Target as TargetIcon, Database, Clock, CheckCircle2, AlertCircle, Loader2,
+  Calendar, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { saveSnapshot, loadSnapshotIndex, loadSnapshotFiles, deleteSnapshot, getWeekId } from './firebase.js';
 
@@ -16,16 +17,26 @@ import { saveSnapshot, loadSnapshotIndex, loadSnapshotFiles, deleteSnapshot, get
  */
 
 // --- 1. CONFIGURATION & CONSTANTS ---
-const M_TYPES = ['DAU-SCT', 'DAC-SCT', 'GenAI DAU-SCT'];
+const DRIVE_RESOURCE_LINK = "https://drive.google.com/corp/drive/folders/18GCtCrz-Bs1YdXKtQs-tjugb6xudULaX?resourcekey=0-gMJCegK7SZkhgJeT_YTjSw";
+
+const M_TYPES = ['DAU-SCT', 'DAC-SCT', 'GenAI DAU-SCT', 'Impressions', 'CTR'];
 const MARKET_SEGMENTS = ['India', 'Indonesia', 'Japan', 'South Korea', 'AUNZ'];
 const MARKET_KEYS = { 'India': 'IN', 'Indonesia': 'ID', 'Japan': 'JP', 'South Korea': 'KR', 'AUNZ': 'AUNZ' };
 const MARKET_KEYS_REV = { 'IN': 'India', 'ID': 'Indonesia', 'JP': 'Japan', 'KR': 'South Korea', 'AUNZ': 'AUNZ' };
-const AO_CATEGORIES = ['SSC', 'Shelf', 'UTS', 'MVR'];
+// 'JP Proactive Container' is treated as an Always-On category in PR 1 for parser/data shape
+// purposes only. The dedicated landing-page tile and routing override land in PR 2.
+const AO_CATEGORIES = ['SSC', 'Shelf', 'UTS', 'MVR', 'UTS SFV', 'JP Proactive Container'];
 
 const GENDERS_KEYS = ['female', 'male', 'total'];
-const GENDERS_DISPLAY = ['FEMALE', 'MALE', 'GenPop'];
+const GENDERS_DISPLAY_MAP = { 'female': 'FEMALE', 'male': 'MALE', 'total': 'GenPop' };
 const AGE_BUCKETS = ['18-24', '25-34', '18-34', '35+', 'total'];
-const AGE_BUCKETS_DISPLAY = ['18-24', '25-34', '18-34', '35+', 'GenPop'];
+const AGE_BUCKETS_DISPLAY_MAP = {
+  '18-24': '18-24',
+  '25-34': '25-34',
+  '18-34': '18-34',
+  '35+': '35-44',
+  'total': 'GenPop'
+};
 
 const OKR_TARGETS = {
   'APAC': 0.15, 'INDIA': 0.16, 'INDONESIA': 0.29, 'JAPAN': 1.2, 'SOUTH KOREA': 1.08, 'AUNZ': 1.56,
@@ -69,8 +80,36 @@ const DEMO_PERMS = [
 // --- 2. GLOBAL UTILITIES ---
 
 const cleanStr = (s) => (s || '').toString().replace(/['"]/g, '').replace(/\u00A0/g, ' ').trim();
-const superClean = (s) => cleanStr(s).toUpperCase().replace(/[^A-Z0-9]/g, '');
+
+// Unicode-aware: keeps non-Latin characters (CJK, etc.) so JP/KR campaign names
+// remain identifiable in the keyed lookup. Falls back to ASCII if the runtime
+// doesn't support \p{L}/\p{N} (very old engines).
+const superClean = (s) => {
+  try {
+    return cleanStr(s).toUpperCase().replace(/[^\p{L}\p{N}]/gu, '');
+  } catch (e) {
+    return cleanStr(s).toUpperCase().replace(/[\s\-_&!?,.()'"\uFF01]/g, '');
+  }
+};
+
 const eq = (a, b) => superClean(a) === superClean(b);
+
+// Strips trailing market suffix tokens so the same campaign uploaded under
+// different markets can resolve to one metaLookup entry.
+const normalizeCampaignKey = (s) => {
+  return superClean(s)
+    .replace(/INDIA$|INDONESIA$|JAPAN$|SOUTHKOREA$|AUNZ$|IN$|ID$|JP$|KR$/g, '')
+    .trim();
+};
+
+const formatCompactNumber = (val) => {
+  if (val === 0) return '0.00';
+  if (val === 'NA' || val === null || val === undefined || isNaN(val)) return '-';
+  return new Intl.NumberFormat('en-US', {
+    notation: 'compact',
+    maximumFractionDigits: 1
+  }).format(val);
+};
 
 const robustParseDate = (dateStr) => {
   const d = cleanStr(dateStr);
@@ -84,7 +123,8 @@ const robustParseDate = (dateStr) => {
       let month, day;
       if (v1 > 12) { day = v1; month = v2; }
       else if (v2 > 12) { month = v1; day = v2; }
-      else { month = v1; day = v2; }
+      else { day = v1; month = v2; }
+      if (month > 12) return null;
       return `${y}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
     }
     const date = new Date(d);
@@ -133,66 +173,108 @@ const findHeader = (headers, targets) => {
   return upperHeaders.findIndex(h => targetUpper.some(t => h.includes(t)));
 };
 
-const findMetadata = (rowKey, metaMap) => {
-  const key = superClean(rowKey);
-  if (!key) return {};
-  if (metaMap[key]) return metaMap[key];
-  const allMetaKeys = Object.keys(metaMap);
-  const fuzzyMatch = allMetaKeys.find(mKey => mKey.length >= 5 && (key.includes(mKey) || mKey.includes(key)));
-  return fuzzyMatch ? metaMap[fuzzyMatch] : {};
+// Two-level lookup: metaMap is keyed { [marketKey]: { [campaignKey]: meta } }.
+// marketContext is consulted first (avoids cross-market collisions) then falls
+// through to a global scan. normalizeCampaignKey lets a campaign uploaded
+// with the market suffixed in its name still resolve.
+const findMetadata = (rowKey, metaMap, marketContext = null) => {
+  const campKey = superClean(rowKey);
+  const normalizedCampKey = normalizeCampaignKey(rowKey);
+  if (!campKey) return {};
+
+  if (marketContext) {
+    const mktKey = superClean(marketContext);
+    if (metaMap[mktKey]?.[campKey]) return metaMap[mktKey][campKey];
+    if (metaMap[mktKey]?.[normalizedCampKey]) return metaMap[mktKey][normalizedCampKey];
+  }
+  for (const m in metaMap) {
+    if (metaMap[m][campKey]) return metaMap[m][campKey];
+    if (metaMap[m][normalizedCampKey]) return metaMap[m][normalizedCampKey];
+  }
+  return {};
 };
 
-const parseCSVData = (text, existingAcc = {}, metaMap = {}, searchPriority = ['Campaign', 'Campaign Name', 'Country', 'Market'], forceAbs = false) => {
+// Reads a CSV stream into an accumulator keyed by `${market}_${campaign}` so
+// the same campaign uploaded under different markets doesn't collide.
+//
+// Args:
+//   marketContext   — used when the CSV has no Country/Market column (e.g. a
+//                     market-hub upload), to seed the row's market.
+//   isGlobalFile    — every row on this file is the global anchor.
+//   isAlwaysOnData  — bypass the meta.targeting gate (Always-On rows ship
+//                     without per-demo targeting metadata).
+//
+// Each row also tracks dataMinDate/dataMaxDate plus any explicit Trend Start/
+// Trend End columns, so MasterTableView can render per-row date pills without
+// re-scanning the source CSV.
+const parseCSVData = (text, existingAcc = {}, metaMap = {}, searchPriority = ['Campaign', 'Campaign Name', 'Country', 'Market'], forceAbs = false, marketContext = null, isGlobalFile = false, isAlwaysOnData = false) => {
   try {
     const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
     if (lines.length < 2) return existingAcc;
     const headers = splitCSVLine(lines[0]);
     const identifierIdx = findHeader(headers, searchPriority);
+    const countryIdx = findHeader(headers, ['Country', 'Market', 'Market Name']);
     const valTypeIdx = findHeader(headers, ['Value Type', 'Metric Type']);
-    const sliceIdx = findHeader(headers, ['Slice']);
+    const sliceIdx = findHeader(headers, ['Slice', 'Segment']);
+    const dateIdx = findHeader(headers, ['Date', 'Reporting Date', 'Day', 'Latest Date']);
 
-    if (identifierIdx === -1 || valTypeIdx === -1) return existingAcc;
+    const explicitTrendStartIdx = findHeader(headers, ['Trend Start Date', 'Trend Start']);
+    const explicitTrendEndIdx = findHeader(headers, ['Trend End Date', 'Trend End']);
+
+    if (identifierIdx === -1) return existingAcc;
     const acc = { ...existingAcc };
 
     lines.slice(1).forEach(line => {
       const columns = splitCSVLine(line);
-      const rowValTypeRaw = (columns[valTypeIdx] || '').replace(/['"]/g, '').trim().toUpperCase();
+      const rowValTypeRaw = valTypeIdx !== -1 ? (columns[valTypeIdx] || '').replace(/['"]/g, '').trim().toUpperCase() : '';
       const rowSlice = sliceIdx !== -1 ? (columns[sliceIdx] || '').replace(/['"]/g, '').trim().toUpperCase() : '';
+      const rowDate = dateIdx !== -1 ? robustParseDate(columns[dateIdx]) : null;
 
-      const isRatioRow = !forceAbs && (rowValTypeRaw === 'RATIO (%)' || rowValTypeRaw === 'RATIO' || rowValTypeRaw.includes('LIFT'));
-      const isAbsRow = forceAbs && rowValTypeRaw === 'DELTA' && rowSlice === 'CONTROL';
-      const isSigRow = rowValTypeRaw.includes('TREND FAVORABILITY');
+      const isRatioRow = !forceAbs && (rowValTypeRaw === 'RATIO (%)' || rowValTypeRaw === 'RATIO' || rowValTypeRaw.includes('LIFT') || rowValTypeRaw === '') && (rowSlice === 'CONTROL' || rowSlice === '' || rowSlice === 'TOTAL');
+
+      const isAbsRow = forceAbs && (
+        rowValTypeRaw.includes('DELTA') ||
+        rowValTypeRaw === '' ||
+        rowValTypeRaw === 'TOTAL' ||
+        rowValTypeRaw.includes('IMPRESSIONS') ||
+        rowValTypeRaw.includes('ABSOLUTE') ||
+        rowValTypeRaw.includes('VOLUME') ||
+        rowValTypeRaw.includes('CTR')
+      ) && (
+        rowSlice === 'CONTROL' ||
+        rowSlice === 'TEST' ||
+        rowSlice === 'TREATMENT' ||
+        rowSlice === '' ||
+        rowSlice === 'TOTAL'
+      );
+
+      const isSigRow = rowValTypeRaw.includes('TREND FAVORABILITY') && (rowSlice === 'CONTROL' || rowSlice === '' || rowSlice === 'TOTAL');
 
       if (!isRatioRow && !isSigRow && !isAbsRow) return;
 
-      const rowKey = cleanStr(columns[identifierIdx]) || 'Unknown';
-      if (!acc[rowKey]) {
-        const meta = findMetadata(rowKey, metaMap);
-        acc[rowKey] = {
-          country: rowKey,
-          metrics: {},
-          isAnchor: superClean(rowKey).includes('GLOBALHOLDBACK'),
-          campaignStartDate: meta.campaignStartDate || null,
-          campaignEndDate: meta.campaignEndDate || null,
-          optimisationEndDate: meta.optimisationEndDate || null,
-          segmentTag: meta.subTab || 'Campaign Hub',
-          meta: meta
-        };
-        M_TYPES.forEach(m => {
-          acc[rowKey].metrics[m] = { female: {}, male: {}, total: {} };
-          GENDERS_KEYS.forEach(g => {
-            AGE_BUCKETS.forEach(a => acc[rowKey].metrics[m][g][a] = { v: 0, sig: 0, abs: 0, isPaused: false, launchDate: null });
-          });
-        });
-      }
+      const campaignName = cleanStr(columns[identifierIdx]) || 'Unknown';
+      let rowMarketRaw = countryIdx !== -1 ? cleanStr(columns[countryIdx]) : (marketContext || 'APAC');
+      let marketNameResolved = MARKET_KEYS_REV[rowMarketRaw.toUpperCase()] || rowMarketRaw;
 
-      let gender = 'total';
-      const gIdx = findHeader(headers, ['Gender']);
+      const meta = findMetadata(campaignName, metaMap, marketNameResolved === 'APAC' ? null : marketNameResolved);
+      if (marketNameResolved === 'APAC' && meta && meta.market) {
+        marketNameResolved = meta.market;
+      }
+      if (marketNameResolved === 'APAC') marketNameResolved = 'India';
+
+      const compositeKey = `${marketNameResolved}_${campaignName}`;
+
+      let gender = null;
+      const gIdx = findHeader(headers, ['Gender', 'Sex']);
       if (gIdx !== -1) {
         const rawG = (columns[gIdx] || '').toLowerCase().trim();
         if (rawG === 'female' || rawG === 'f') gender = 'female';
         else if (rawG === 'male' || rawG === 'm') gender = 'male';
+        else if (rawG === 'total' || rawG === 'all' || rawG === 'genpop' || rawG === 'gen pop') gender = 'total';
+      } else {
+        gender = 'total';
       }
+      if (!gender) return;
 
       let age = 'total';
       const aIdx = findHeader(headers, ['Age', 'Age Group']);
@@ -204,16 +286,54 @@ const parseCSVData = (text, existingAcc = {}, metaMap = {}, searchPriority = ['C
         else if (rawA.includes('35')) age = '35+';
       }
 
+      const isAnchorRow = isGlobalFile || superClean(campaignName).includes('GLOBALHOLDBACK');
+
+      if (!acc[compositeKey]) {
+        const expStart = explicitTrendStartIdx !== -1 ? robustParseDate(columns[explicitTrendStartIdx]) : null;
+        const expEnd = explicitTrendEndIdx !== -1 ? robustParseDate(columns[explicitTrendEndIdx]) : null;
+
+        acc[compositeKey] = {
+          country: campaignName,
+          market: marketNameResolved,
+          metrics: {},
+          isAnchor: isAnchorRow,
+          campaignStartDate: expStart || meta.campaignStartDate || null,
+          campaignEndDate: expEnd || meta.campaignEndDate || null,
+          optimisationEndDate: meta.optimisationEndDate || rowDate,
+          segmentTag: meta.subTab || 'Campaign Hub',
+          meta: meta,
+          dataMinDate: rowDate,
+          dataMaxDate: rowDate,
+          explicitTrendStart: expStart,
+          explicitTrendEnd: expEnd
+        };
+        M_TYPES.forEach(m => {
+          acc[compositeKey].metrics[m] = { female: {}, male: {}, total: {} };
+          GENDERS_KEYS.forEach(g => {
+            AGE_BUCKETS.forEach(a => acc[compositeKey].metrics[m][g][a] = { v: 0, sig: 0, abs: 0, isPaused: false, launchDate: null });
+          });
+        });
+      }
+
+      // Track date range as more rows arrive for the same campaign.
+      if (rowDate) {
+        if (!acc[compositeKey].dataMinDate || rowDate < acc[compositeKey].dataMinDate) acc[compositeKey].dataMinDate = rowDate;
+        if (!acc[compositeKey].dataMaxDate || rowDate > acc[compositeKey].dataMaxDate) acc[compositeKey].dataMaxDate = rowDate;
+      }
+
       M_TYPES.forEach(m => {
         const aliases = {
-          'DAU-SCT': ['DAILY SHORTS CREATION TOOL ACTIVE USERS', 'DAU-SCT'],
-          'DAC-SCT': ['DAILY SHORTS CONVERTERS', 'DAC-SCT'],
-          'GenAI DAU-SCT': ['GENAI DAU', 'GENAI DAILY ACTIVE USERS']
+          'DAU-SCT': ['DAU-SCT', 'DAILY SHORTS CREATION TOOL ACTIVE USERS'],
+          'DAC-SCT': ['DAC-SCT', 'DAILY SHORTS CONVERTERS'],
+          'GenAI DAU-SCT': ['GENAI DAU', 'GENAI DAILY ACTIVE USERS'],
+          'Impressions': ['IMPRESSIONS', 'TOTAL IMPRESSIONS', 'REACH', 'IMPS'],
+          'CTR': ['CTR', 'CLICK THROUGH RATE', 'CLICK-THROUGH RATE']
         };
         const targetCol = headers.findIndex(h => {
           const hUpper = h.toUpperCase();
           const matchAlias = (aliases[m] || []).some(alias => hUpper.includes(alias));
           const isCI = hUpper.includes('CONFIDENCE') || hUpper.includes('BOUND');
+          // DAU-SCT must not match GenAI columns.
           return matchAlias && !isCI && (m !== 'DAU-SCT' || !hUpper.includes('GENAI'));
         });
 
@@ -221,17 +341,72 @@ const parseCSVData = (text, existingAcc = {}, metaMap = {}, searchPriority = ['C
         const rawCell = (columns[targetCol] || '').replace(/['"]/g, '').trim();
         const numericVal = parseFloat(rawCell.replace(/[^\d.-]/g, '')) || 0;
 
-        if (isRatioRow) acc[rowKey].metrics[m][gender][age].v = numericVal;
-        else if (isAbsRow) acc[rowKey].metrics[m][gender][age].abs = numericVal;
-        else if (isSigRow) {
-          const sigText = rawCell.toUpperCase();
-          acc[rowKey].metrics[m][gender][age].sig = (sigText.includes('POSITIVE') || sigText.includes('SSP')) ? 1 : (sigText.includes('NEGATIVE') || sigText.includes('SSN') ? -1 : 0);
+        // Targeting gate: if the campaign metadata declares specific ages/genders,
+        // any demo outside that targeting renders as 'NA' rather than 0 (so the
+        // table doesn't lie about untargeted demos).
+        const targeting = acc[compositeKey].meta.targeting;
+        let isTargeted = false;
+        if (isAnchorRow || isAlwaysOnData) {
+          isTargeted = true;
+        } else if (targeting) {
+          const ageAllowed = targeting.ages.length === 0 || targeting.ages.includes(age);
+          const genderAllowed = targeting.genders.length === 0 || targeting.genders.includes(gender);
+          isTargeted = ageAllowed && genderAllowed;
+        } else {
+          // No targeting metadata yet — be permissive.
+          isTargeted = true;
+        }
+
+        const isGenAIMetric = m === 'GenAI DAU-SCT';
+        const isGenAICampaign = (acc[compositeKey].meta.tab || '').toLowerCase() === 'genai hub';
+        const isValid = isTargeted && (!isGenAIMetric || isGenAICampaign || isAnchorRow);
+        const finalVal = isValid ? numericVal : 'NA';
+
+        if (isRatioRow) {
+          if (finalVal !== 'NA' && finalVal !== 0) {
+            acc[compositeKey].metrics[m][gender][age].v = finalVal;
+          } else if (acc[compositeKey].metrics[m][gender][age].v === 0 || acc[compositeKey].metrics[m][gender][age].v === 'NA') {
+            acc[compositeKey].metrics[m][gender][age].v = finalVal;
+          }
+        } else if (isAbsRow) {
+          // Impressions / CTR ride the .v slot (they're not "deltas"); other
+          // absolute metrics ride .abs alongside the ratio in .v.
+          if (m === 'Impressions' || m === 'CTR') {
+            if (finalVal !== 'NA' && finalVal !== 0) {
+              acc[compositeKey].metrics[m][gender][age].v = finalVal;
+            } else if (acc[compositeKey].metrics[m][gender][age].v === 0 || acc[compositeKey].metrics[m][gender][age].v === 'NA') {
+              acc[compositeKey].metrics[m][gender][age].v = finalVal;
+            }
+          } else {
+            if (finalVal !== 'NA' && finalVal !== 0) {
+              acc[compositeKey].metrics[m][gender][age].abs = finalVal;
+            } else if (acc[compositeKey].metrics[m][gender][age].abs === 0 || acc[compositeKey].metrics[m][gender][age].abs === 'NA') {
+              acc[compositeKey].metrics[m][gender][age].abs = finalVal;
+            }
+          }
+        } else if (isSigRow) {
+          if (isValid) {
+            const sigText = rawCell.toUpperCase();
+            const newSig = (sigText.includes('POSITIVE') || sigText.includes('SSP')) ? 1 : (sigText.includes('NEGATIVE') || sigText.includes('SSN') ? -1 : 0);
+            if (newSig !== 0) acc[compositeKey].metrics[m][gender][age].sig = newSig;
+          }
         }
       });
     });
     return acc;
-  } catch { return existingAcc; }
+  } catch (err) {
+    console.error("CSV Parse Error:", err);
+    return existingAcc;
+  }
 };
+
+const DriveIcon = ({ className }) => (
+  <svg className={className} viewBox="0 0 1443 1250" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+    <path d="M485.29 0L0 839.25l242.42 410.74 485.29-839.25H485.29z" />
+    <path d="M957.66 0l-242.43 419.63 485.29 830.36 242.54-419.63L957.66 0z" opacity="0.8" />
+    <path d="M524.23 839.25l-242.42 410.74h960.54l242.42-410.74H524.23z" opacity="0.6" />
+  </svg>
+);
 
 const getStatusConfig = (pi, off) => off
   ? { cardBg: 'bg-[#1a1a1a]', color: 'text-[#808080]', accent: 'bg-[#3a3a3a]' }
@@ -243,123 +418,220 @@ const getStatusConfig = (pi, off) => off
 
 // --- 3. UI VIEW COMPONENTS ---
 
-const MetricControlHub = ({ activeMetrics, toggleMetric, handleAllToggle }) => (
+// `allowedMetrics` lets callers narrow the toggle set (e.g. Global Hub /
+// Always-On hide Impressions/CTR which only ship via the attribution stream).
+// Default falls through to the full `M_TYPES` list for back-compat.
+const MetricControlHub = ({ activeMetrics, toggleMetric, handleAllToggle, allowedMetrics = M_TYPES }) => (
   <div className="bg-[#1a1a1a] rounded-lg p-4 border border-[#3a3a3a] flex flex-col sm:flex-row items-center justify-between gap-4 mb-6">
     <div className="flex flex-wrap gap-2 bg-black p-1 rounded-lg border border-[#3a3a3a]">
-      {M_TYPES.map(m => (
+      {allowedMetrics.map(m => (
         <button key={m} onClick={() => toggleMetric(m)} className={`px-5 py-2.5 rounded-md text-[10px] font-bold tracking-widest uppercase transition-all cursor-pointer ${activeMetrics.includes(m) ? 'bg-[#FF0000] text-white' : 'text-[#808080] hover:text-white'}`}>
           {m}
         </button>
       ))}
     </div>
-    <button onClick={handleAllToggle} className={`px-6 py-2.5 rounded-md text-[10px] font-bold tracking-widest uppercase border transition-all cursor-pointer ${activeMetrics.length === M_TYPES.length ? 'bg-white text-black border-white' : 'bg-transparent text-[#808080] border-[#3a3a3a] hover:border-[#808080]'}`}>
-      {activeMetrics.length === M_TYPES.length ? 'Selective View' : 'Sync All Metrics'}
+    <button onClick={handleAllToggle} className={`px-6 py-2.5 rounded-md text-[10px] font-bold tracking-widest uppercase border transition-all cursor-pointer ${activeMetrics.length === allowedMetrics.length ? 'bg-white text-black border-white' : 'bg-transparent text-[#808080] border-[#3a3a3a] hover:border-[#808080]'}`}>
+      {activeMetrics.length === allowedMetrics.length ? 'Selective View' : 'Sync All Metrics'}
     </button>
   </div>
 );
 
-const MasterTableView = ({ data, activeMetrics, isCampaignView = false }) => {
+// `latestGlobalDate` caps non-Always-On end dates so a campaign's "Days Live"
+// doesn't overshoot the reporting window. `isAlwaysOn` swaps the date pill
+// labels to "Trend Start/End/Days Live". `hideDates` suppresses the pill
+// entirely (used for campaign-hub aggregate views where every row shares
+// the same dates).
+const MasterTableView = ({ data, activeMetrics, latestGlobalDate, isCampaignView = false, hideDates = false, isAlwaysOn = false }) => {
+  const scrollRef = useRef(null);
+
   const themes = {
-    FEMALE: { 1: 'bg-blue-900/40 text-blue-100', 2: 'bg-blue-900/20', 3: 'bg-blue-950/40 text-blue-400' },
-    MALE: { 1: 'bg-purple-900/40 text-purple-100', 2: 'bg-purple-900/20', 3: 'bg-purple-950/40 text-purple-400' },
-    GenPop: { 1: 'bg-amber-900/80 text-amber-50', 2: 'bg-amber-800/20', 3: 'bg-amber-950 text-amber-400 font-bold' }
+    female: { 1: 'bg-blue-900/40 text-blue-100', 2: 'bg-blue-900/20', 3: 'bg-blue-950/40 text-blue-400' },
+    male: { 1: 'bg-purple-900/40 text-purple-100', 2: 'bg-purple-900/20', 3: 'bg-purple-950/40 text-purple-400' },
+    total: { 1: 'bg-amber-900/80 text-amber-50', 2: 'bg-amber-800/20', 3: 'bg-amber-950 text-amber-400 font-bold' }
   };
+
+  const handleScroll = (direction) => {
+    if (scrollRef.current) {
+      const scrollAmount = 600;
+      scrollRef.current.scrollBy({ left: direction === 'left' ? -scrollAmount : scrollAmount, behavior: 'smooth' });
+    }
+  };
+
   if (!data || data.length === 0) return (
     <div className="py-40 text-center flex flex-col items-center justify-center gap-6">
       <div className="p-6 rounded-full bg-[#1a1a1a] border border-[#3a3a3a]"><ZapOff className="w-12 h-12 text-[#3a3a3a] animate-pulse" /></div>
       <p className="text-[#808080] font-bold text-sm uppercase tracking-widest">No Data Available</p>
     </div>
   );
+
   return (
-    <div className="bg-[#1a1a1a] rounded-lg border border-[#3a3a3a] overflow-hidden overflow-x-auto">
-      <table className="w-full text-center border-collapse">
-        <thead>
-          <tr className="text-[11px] font-bold uppercase tracking-widest border-b border-[#3a3a3a]">
-            <th rowSpan={3} className="px-8 py-8 text-left border-r border-[#3a3a3a] bg-[#1a1a1a] sticky left-0 z-40 text-white min-w-[280px]">
-              {isCampaignView ? 'Campaign Name' : 'Country / Market'}
-            </th>
-            {GENDERS_DISPLAY.map((g, gi) => (
-              <th key={g} colSpan={AGE_BUCKETS.length * activeMetrics.length} className={`py-6 border-white/10 ${themes[g][1]} ${gi < GENDERS_DISPLAY.length - 1 ? 'border-r-2 border-white/20' : ''}`}>
-                <div className="flex items-center justify-center gap-3"><Users className="w-4 h-4 opacity-50" />{g}</div>
+    <div className="relative group/table">
+      <button
+        onClick={() => handleScroll('left')}
+        className="absolute left-[-20px] top-1/2 -translate-y-1/2 z-50 w-10 h-10 rounded-full bg-red-600 text-white shadow-xl opacity-0 group-hover/table:opacity-100 transition-opacity flex items-center justify-center border border-white/20 hover:scale-110 active:scale-95"
+      >
+        <ChevronLeft className="w-6 h-6" />
+      </button>
+      <button
+        onClick={() => handleScroll('right')}
+        className="absolute right-[-20px] top-1/2 -translate-y-1/2 z-50 w-10 h-10 rounded-full bg-red-600 text-white shadow-xl opacity-0 group-hover/table:opacity-100 transition-opacity flex items-center justify-center border border-white/20 hover:scale-110 active:scale-95"
+      >
+        <ChevronRight className="w-6 h-6" />
+      </button>
+
+      <div ref={scrollRef} className="bg-[#1a1a1a] rounded-lg border border-[#3a3a3a] overflow-x-auto scroll-smooth">
+        <table className="w-full text-center border-collapse">
+          <thead>
+            <tr className="text-[11px] font-bold uppercase tracking-widest border-b border-[#3a3a3a]">
+              <th rowSpan={3} className="px-8 py-8 text-left border-r border-[#3a3a3a] bg-[#1a1a1a] sticky left-0 z-40 text-white min-w-[300px]">
+                {isAlwaysOn ? 'Trend Identifier' : (isCampaignView ? 'Campaign Entity' : 'Country / Market')}
               </th>
-            ))}
-          </tr>
-          <tr className="text-[10px] font-bold uppercase tracking-widest border-b border-[#3a3a3a]">
-            {GENDERS_DISPLAY.map((g) => (
-              <React.Fragment key={g}>
-                {AGE_BUCKETS_DISPLAY.map((a, ai) => (
-                  <th key={a} colSpan={activeMetrics.length} className={`py-4 transition-colors ${themes[g][2]} ${ai === AGE_BUCKETS_DISPLAY.length - 1 && GENDERS_DISPLAY.indexOf(g) < GENDERS_DISPLAY.length - 1 ? 'border-r-2 border-white/20' : 'border-r border-white/5'}`}>{a}</th>
-                ))}
-              </React.Fragment>
-            ))}
-          </tr>
-          <tr className="text-[9px] font-bold uppercase tracking-[0.2em] border-b border-[#3a3a3a]">
-            {GENDERS_DISPLAY.map((g) => (
-              <React.Fragment key={g}>
-                {AGE_BUCKETS.map((a, ai) => (
-                  <React.Fragment key={a}>
-                    {activeMetrics.map((m, mi) => (
-                      <th key={m} className={`py-3 px-3 font-mono ${themes[g][3]} ${ai === AGE_BUCKETS.length - 1 && mi === activeMetrics.length - 1 && GENDERS_DISPLAY.indexOf(g) < GENDERS_DISPLAY.length - 1 ? 'border-r-2 border-white/20' : 'border-r border-white/5'}`}>{m.includes('GenAI') ? 'GenAI' : m.split('-')[0]}</th>
-                    ))}
-                  </React.Fragment>
-                ))}
-              </React.Fragment>
-            ))}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-white/5">
-          {data.map((row, ri) => (
-            <tr key={ri} className={`transition-all duration-200 ${row.isAnchor ? 'bg-white/[0.05]' : 'hover:bg-white/[0.03]'}`}>
-              <td className={`px-8 py-5 text-left border-r border-[#3a3a3a] sticky left-0 z-10 font-bold text-[12px] uppercase tracking-tight bg-[#111] ${row.isAnchor ? 'text-blue-400' : 'text-[#e0e0e0]'}`}>{row.isAnchor ? `${row.country} (Reference)` : row.country}</td>
+              {GENDERS_KEYS.map((g, gi) => (
+                <th key={g} colSpan={AGE_BUCKETS.length * activeMetrics.length} className={`py-6 border-white/10 ${themes[g][1]} ${gi < GENDERS_KEYS.length - 1 ? 'border-r-2 border-white/20' : ''}`}>
+                  <div className="flex items-center justify-center gap-3"><Users className="w-4 h-4 opacity-50" />{GENDERS_DISPLAY_MAP[g]}</div>
+                </th>
+              ))}
+            </tr>
+            <tr className="text-[10px] font-bold uppercase tracking-widest border-b border-[#3a3a3a]">
+              {GENDERS_KEYS.map((g) => (
+                <React.Fragment key={g}>
+                  {AGE_BUCKETS.map((a, ai) => (
+                    <th key={a} colSpan={activeMetrics.length} className={`py-4 transition-colors ${themes[g][2]} ${ai === AGE_BUCKETS.length - 1 && GENDERS_KEYS.indexOf(g) < GENDERS_KEYS.length - 1 ? 'border-r-2 border-white/20' : 'border-r border-white/5'}`}>{AGE_BUCKETS_DISPLAY_MAP[a]}</th>
+                  ))}
+                </React.Fragment>
+              ))}
+            </tr>
+            <tr className="text-[9px] font-bold uppercase tracking-[0.2em] border-b border-[#3a3a3a]">
               {GENDERS_KEYS.map((g) => (
                 <React.Fragment key={g}>
                   {AGE_BUCKETS.map((a, ai) => (
                     <React.Fragment key={a}>
-                      {activeMetrics.map((m) => {
-                        const node = row.metrics[m][g][a];
-                        const isEnd = ai === AGE_BUCKETS.length - 1 && activeMetrics.indexOf(m) === activeMetrics.length - 1;
-                        let style = "text-slate-500 font-medium", bg = "";
-
-                        if (node.isPaused) {
-                          style = "text-[#808080] font-bold";
-                          bg = "bg-[#1a1a1a]";
-                        }
-                        else if (node.sig === -1) { style = "text-red-500 font-bold"; bg = "bg-red-500/10"; }
-                        else if (node.sig === 1) { style = "text-emerald-500 font-bold"; bg = "bg-emerald-500/10"; }
-                        else if (node.v !== 0) { style = "text-slate-100 font-bold"; }
-
-                        return (
-                          <td key={m} className={`py-5 px-3 font-mono text-[13px] tabular-nums ${style} ${bg} ${isEnd && GENDERS_KEYS.indexOf(g) < GENDERS_KEYS.length - 1 ? 'border-r-2 border-white/20' : 'border-r border-white/5'}`}>
-                            <div className="flex flex-col items-center text-center">
-                              {node.isPaused ? (
-                                <>
-                                  <span className="leading-none uppercase">Paused</span>
-                                  <span className={`text-[7px] opacity-60 font-sans tracking-tight block mt-0.5 font-normal leading-none uppercase italic ${row.isAnchor ? 'text-slate-600' : ''}`}>
-                                    {node.launchDate || 'No Data'}
-                                  </span>
-                                </>
-                              ) : (
-                                <>
-                                  <span>{node.v === 0 ? '0.00' : (node.v > 0 ? `+${node.v.toFixed(2)}` : `${node.v.toFixed(2)}`)}</span>
-                                  {node.abs !== 0 && (
-                                    <span className="text-[9px] opacity-50 font-sans tracking-tighter block mt-0.5 font-normal leading-none">
-                                      ({node.abs > 0 ? `+${Math.round(node.abs).toLocaleString()}` : Math.round(node.abs).toLocaleString()})
-                                    </span>
-                                  )}
-                                </>
-                              )}
-                            </div>
-                          </td>
-                        );
-                      })}
+                      {activeMetrics.map((m, mi) => (
+                        <th key={m} className={`py-3 px-3 font-mono ${themes[g][3]} ${ai === AGE_BUCKETS.length - 1 && mi === activeMetrics.length - 1 && GENDERS_KEYS.indexOf(g) < GENDERS_KEYS.length - 1 ? 'border-r-2 border-white/20' : 'border-r border-white/5'}`}>{m.includes('GenAI') ? 'GenAI' : (m === 'Impressions' ? 'Imprs' : m.split('-')[0])}</th>
+                      ))}
                     </React.Fragment>
                   ))}
                 </React.Fragment>
               ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody className="divide-y divide-white/5">
+            {data.map((row, ri) => {
+              const isAnchorRow = !!row.isAnchor;
+              const genPopNode = row.metrics?.[activeMetrics[0] || 'DAU-SCT']?.total?.total;
+              const capDate = (genPopNode?.isPaused && genPopNode?.launchDate && genPopNode.launchDate !== 'Ended')
+                ? genPopNode.launchDate
+                : null;
+
+              const effectiveStart = isAlwaysOn
+                ? (row.explicitTrendStart || row.dataMinDate || row.campaignStartDate)
+                : (row.campaignStartDate || row.explicitTrendStart || row.dataMinDate);
+
+              const metaEnd = row.campaignEndDate || capDate || row.optimisationEndDate;
+              const effectiveEndBase = isAlwaysOn
+                ? (row.explicitTrendEnd || row.dataMaxDate || metaEnd)
+                : (row.campaignEndDate || row.explicitTrendEnd || row.dataMaxDate || row.optimisationEndDate);
+
+              let endDateBoundary = effectiveEndBase;
+              if (!isAlwaysOn && latestGlobalDate && endDateBoundary) {
+                if (new Date(endDateBoundary) > new Date(latestGlobalDate)) {
+                  endDateBoundary = latestGlobalDate;
+                }
+              }
+              const daysLive = calcDaysLive(effectiveStart, endDateBoundary);
+
+              return (
+                <tr key={`${ri}-${row.country}`} className={`transition-all duration-200 ${isAnchorRow ? 'bg-white/[0.05]' : 'hover:bg-white/[0.03]'}`}>
+                  <td className={`px-8 py-5 text-left border-r border-[#3a3a3a] sticky left-0 z-10 bg-[#111] ${isAnchorRow ? 'text-blue-400 font-bold' : 'text-[#e0e0e0]'}`}>
+                    <div className="flex flex-col gap-1.5">
+                      <span className="font-bold text-[12px] uppercase tracking-tight">{isAnchorRow ? `${row.country} (Reference)` : String(row.country || 'Unknown')}</span>
+                      {!hideDates && !isAnchorRow && (effectiveStart || isAlwaysOn) && (
+                        <div className="flex flex-col gap-1.5 mt-2 p-2 rounded bg-black/40 border border-white/5 shadow-inner">
+                          <div className="flex items-center gap-2">
+                            <Calendar className="w-3 h-3 text-blue-400" />
+                            <span className="text-[9px] font-mono tracking-tighter text-[#888]">
+                              <span className="font-bold uppercase text-[8px] mr-1">{isAlwaysOn ? 'Trend Start:' : 'Start:'}</span>
+                              {String(effectiveStart || 'N/A')}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Calendar className="w-3 h-3 text-amber-400" />
+                            <span className="text-[9px] font-mono tracking-tighter text-[#888]">
+                              <span className="font-bold uppercase text-[8px] mr-1">{isAlwaysOn ? 'Trend End:' : 'End:'}</span>
+                              {String((isCampaignView && row.campaignEndDate) ? row.campaignEndDate : (endDateBoundary || 'Active'))}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 mt-1">
+                            <Clock className="w-3 h-3 text-emerald-400" />
+                            <span className="text-[9px] font-bold tracking-tighter uppercase text-emerald-400">
+                              {isAlwaysOn ? 'Trend Days Live:' : 'Days Live:'} {daysLive}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </td>
+                  {GENDERS_KEYS.map((g) => (
+                    <React.Fragment key={g}>
+                      {AGE_BUCKETS.map((a, ai) => (
+                        <React.Fragment key={a}>
+                          {activeMetrics.map((m) => {
+                            const node = row.metrics[m][g][a];
+                            const isEnd = ai === AGE_BUCKETS.length - 1 && activeMetrics.indexOf(m) === activeMetrics.length - 1;
+                            let style = "text-slate-500 font-medium", bg = "";
+                            // Don't paint the global anchor row as paused — it's a reference row.
+                            const showPaused = node.isPaused && !isAnchorRow;
+
+                            if (showPaused) {
+                              style = "text-[#808080] font-bold";
+                              bg = "bg-[#1a1a1a]";
+                            }
+                            else if (node.v !== 'NA' && node.sig === -1) { style = "text-red-500 font-bold"; bg = "bg-red-500/10"; }
+                            else if (node.v !== 'NA' && node.sig === 1) { style = "text-emerald-500 font-bold"; bg = "bg-emerald-500/10"; }
+                            else if (node.v !== 0 && node.v !== 'NA') { style = "text-slate-100 font-bold"; }
+
+                            return (
+                              <td key={`${ri}-${m}-${g}-${a}`} className={`py-5 px-3 font-mono text-[13px] tabular-nums ${style} ${bg} ${isEnd && GENDERS_KEYS.indexOf(g) < GENDERS_KEYS.length - 1 ? 'border-r-2 border-white/20' : 'border-r border-white/5'}`}>
+                                <div className="flex flex-col items-center text-center">
+                                  {showPaused ? (
+                                    <>
+                                      <span className="leading-none uppercase">Paused</span>
+                                      <span className="text-[7px] opacity-60 font-sans tracking-tight block mt-0.5 font-normal leading-none uppercase italic">
+                                        {String(node.launchDate || 'No Data')}
+                                      </span>
+                                    </>
+                                  ) : node.v === 'NA' ? (
+                                    <span className="text-gray-500 opacity-50 font-bold">NA</span>
+                                  ) : (
+                                    <>
+                                      <span>
+                                        {(isAnchorRow && (m === 'Impressions' || m === 'CTR') && node.v === 0) ? 'NA' : (
+                                          m === 'Impressions' ? formatCompactNumber(node.v) :
+                                            m === 'CTR' ? `${(node.v || 0).toFixed(2)}%` :
+                                              (node.v === 0 ? '0.00' : (node.v > 0 ? `+${node.v.toFixed(2)}` : `${node.v.toFixed(2)}`))
+                                        )}
+                                      </span>
+                                      {node.abs !== 0 && node.abs !== 'NA' && m !== 'Impressions' && m !== 'CTR' && (
+                                        <span className="text-[9px] opacity-50 font-sans tracking-tighter block mt-0.5 font-normal leading-none">
+                                          ({node.abs > 0 ? `+${Math.round(node.abs).toLocaleString()}` : Math.round(node.abs).toLocaleString()})
+                                        </span>
+                                      )}
+                                    </>
+                                  )}
+                                </div>
+                              </td>
+                            );
+                          })}
+                        </React.Fragment>
+                      ))}
+                    </React.Fragment>
+                  ))}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 };
@@ -827,11 +1099,23 @@ const App = () => {
     return keys.length > 0 ? keys.sort() : [];
   }, [campaignHubData]);
 
+  // Global Hub and the synthesised AlwaysOn aggregate hide Impressions/CTR — those
+  // metrics only ship via the Attribution stream (campaign-level granularity).
+  const allowedMetrics = useMemo(() => {
+    if (activeTab === 'Global Hub' || activeTab === 'AlwaysOn') {
+      return M_TYPES.filter(m => m !== 'Impressions' && m !== 'CTR');
+    }
+    return M_TYPES;
+  }, [activeTab]);
+
   const startAnalysis = async () => {
     setIsAnalyzing(true);
     try {
       const readFile = (f) => new Promise(res => { if (!f) res(""); const r = new FileReader(); r.onload = e => res(e.target.result); r.readAsText(f); });
 
+      // Two-level metaLookup: { [marketKey]: { [campaignKey]: meta } }.
+      // Adds optional targeting (ages/genders) so parseCSVData can flag
+      // out-of-targeting demos as 'NA' rather than 0.
       let metaLookup = {};
       const metaSource = uploadedFiles.shared.campaignInfo;
       if (metaSource) {
@@ -846,15 +1130,56 @@ const App = () => {
                 subSubTabIdx = findHeader(hdrs, ['Campaign Sub Sub tabs', 'Sub sub tabs', 'Sub-sub-tabs', 'Subsubtab']),
                 startIdx = findHeader(hdrs, ['Campaign Start Date', 'Start Date']),
                 endIdx = findHeader(hdrs, ['Campaign End Date', 'End Date']),
-                optIdx = findHeader(hdrs, ['Optimisation End Date', 'Optimization Date']);
+                optIdx = findHeader(hdrs, ['Optimisation End Date', 'Optimization Date']),
+                ageColIdx = findHeader(hdrs, ['Age']),
+                genderColIdx = findHeader(hdrs, ['Gender']);
 
           lines.slice(1).forEach(line => {
             const cols = splitCSVLine(line);
             const name = cleanStr(cols[cIdx]);
-            if (name) {
-              const rawMkt = cleanStr(cols[mktIdx]);
-              const resolvedMkt = MARKET_KEYS_REV[rawMkt.toUpperCase()] || MARKET_SEGMENTS.find(s => eq(s, rawMkt)) || 'India';
-              metaLookup[superClean(name)] = { market: resolvedMkt, tab: cleanStr(cols[tabIdx]), subTab: cleanStr(cols[subTabIdx]), subSubTab: cleanStr(cols[subSubTabIdx]), campaignStartDate: cleanStr(cols[startIdx]), campaignEndDate: cleanStr(cols[endIdx]), optimisationEndDate: cleanStr(cols[optIdx]) };
+            if (!name) return;
+            const rawMkt = cleanStr(cols[mktIdx]).toUpperCase();
+            const resolvedMkt = MARKET_KEYS_REV[rawMkt] || MARKET_SEGMENTS.find(s => eq(s, rawMkt)) || 'India';
+            const mktKey = superClean(resolvedMkt);
+            const campKey = superClean(name);
+            if (!metaLookup[mktKey]) metaLookup[mktKey] = {};
+
+            if (!metaLookup[mktKey][campKey]) {
+              metaLookup[mktKey][campKey] = {
+                market: resolvedMkt,
+                tab: cleanStr(cols[tabIdx]),
+                subTab: cleanStr(cols[subTabIdx]),
+                subSubTab: cleanStr(cols[subSubTabIdx]),
+                campaignStartDate: cleanStr(cols[startIdx]),
+                campaignEndDate: cleanStr(cols[endIdx]),
+                optimisationEndDate: cleanStr(cols[optIdx]),
+                targeting: { ages: [], genders: [] }
+              };
+            }
+
+            if (ageColIdx !== -1 && cols[ageColIdx]) {
+              const rawAges = cleanStr(cols[ageColIdx]).toLowerCase().split(',').map(s => s.trim());
+              const parsedAges = [];
+              rawAges.forEach(a => {
+                if (a.includes('18-24')) parsedAges.push('18-24');
+                if (a.includes('25-34')) parsedAges.push('25-34');
+                if (a.includes('18-34')) parsedAges.push('18-34');
+                if (a.includes('35-44') || a.includes('35+')) parsedAges.push('35+');
+              });
+              if (parsedAges.includes('18-24') && parsedAges.includes('25-34')) parsedAges.push('18-34');
+              parsedAges.push('total');
+              metaLookup[mktKey][campKey].targeting.ages = [...new Set([...metaLookup[mktKey][campKey].targeting.ages, ...parsedAges])];
+            }
+
+            if (genderColIdx !== -1 && cols[genderColIdx]) {
+              const rawGenders = cleanStr(cols[genderColIdx]).toLowerCase().split(',').map(s => s.trim());
+              const parsedGenders = [];
+              rawGenders.forEach(g => {
+                if (g === 'male' || g === 'm') parsedGenders.push('male');
+                if (g === 'female' || g === 'f') parsedGenders.push('female');
+              });
+              parsedGenders.push('total');
+              metaLookup[mktKey][campKey].targeting.genders = [...new Set([...metaLookup[mktKey][campKey].targeting.genders, ...parsedGenders])];
             }
           });
         }
@@ -962,25 +1287,52 @@ const App = () => {
               setLatestGlobalDate(maxDate);
             }
           }
-          streamGData = parseCSVData(text, {}, metaLookup, ['Country', 'Market', 'Campaign'], isAbs);
+          // Global file: every parsed row is the global anchor.
+          streamGData = parseCSVData(text, {}, metaLookup, ['Country', 'Market', 'Campaign'], isAbs, null, true, false);
         }
         const mHubParsed = {};
-        for (const m of MARKET_SEGMENTS) { if (stream.countryHB[m]) { const text = await readFile(stream.countryHB[m]); mHubParsed[m] = parseCSVData(text, {}, metaLookup, undefined, isAbs); } }
+        for (const m of MARKET_SEGMENTS) {
+          if (stream.countryHB[m]) {
+            const text = await readFile(stream.countryHB[m]);
+            // Market HB: parse rows under the named market when no Country col present.
+            mHubParsed[m] = parseCSVData(text, {}, metaLookup, undefined, isAbs, m, false, false);
+          }
+        }
         const alwaysOnParsed = {};
-        for (const cat of AO_CATEGORIES) { if (stream.alwaysOn[cat]) { const text = await readFile(stream.alwaysOn[cat]); alwaysOnParsed[cat] = parseCSVData(text, {}, metaLookup, undefined, isAbs); } }
+        for (const cat of AO_CATEGORIES) {
+          if (stream.alwaysOn[cat]) {
+            const text = await readFile(stream.alwaysOn[cat]);
+            // Always-On: bypass targeting gate (per-demo targeting metadata isn't shipped here).
+            alwaysOnParsed[cat] = parseCSVData(text, {}, metaLookup, undefined, isAbs, null, false, true);
+          }
+        }
         return { streamGData, mHubParsed, alwaysOnParsed };
       };
 
       const pctResults = await processStream('pct', false);
       const absResults = await processStream('abs', true);
 
+      // For DAU/DAC/GenAI: pct stream supplies .v (lift %), abs stream supplies .abs.
+      // For Impressions/CTR: only the abs stream supplies values, and they ride .v
+      // (parseCSVData routes them there explicitly).
       const mergeResults = (pctMap, absMap) => {
         const merged = { ...pctMap };
         Object.keys(absMap).forEach(key => {
-          if (!merged[key]) merged[key] = absMap[key];
-          else {
-            M_TYPES.forEach(m => { GENDERS_KEYS.forEach(g => { AGE_BUCKETS.forEach(a => { merged[key].metrics[m][g][a].abs = absMap[key].metrics[m][g][a].abs; }); }); });
+          if (!merged[key]) {
+            merged[key] = absMap[key];
+            return;
           }
+          M_TYPES.forEach(m => {
+            GENDERS_KEYS.forEach(g => {
+              AGE_BUCKETS.forEach(a => {
+                const absNode = absMap[key].metrics[m][g][a];
+                merged[key].metrics[m][g][a].abs = absNode.abs;
+                if ((m === 'Impressions' || m === 'CTR') && absNode.v !== 0 && absNode.v !== 'NA') {
+                  merged[key].metrics[m][g][a].v = absNode.v;
+                }
+              });
+            });
+          });
         });
         return merged;
       };
@@ -1068,7 +1420,10 @@ const App = () => {
         return;
       }
 
-      // Build metadata lookup from shared-meta CSV
+      // Build metadata lookup from shared-meta CSV (two-level shape).
+      // Targeting is intentionally absent here — historical snapshots predate the
+      // targeting metadata column. parseCSVData treats a row without targeting
+      // as fully permissive (no NA gating).
       let metaLookup = {};
       if (csvFiles['shared-meta']) {
         const lines = csvFiles['shared-meta'].split(/\r?\n/).filter(l => l.trim() !== '');
@@ -1085,10 +1440,15 @@ const App = () => {
 
           lines.slice(1).forEach(l => {
             const cols = splitCSVLine(l);
-            const camp = superClean(cols[cIdx]);
-            if (!camp) return;
-            metaLookup[camp] = {
-              market: cleanStr(cols[mktIdx]),
+            const name = cleanStr(cols[cIdx]);
+            if (!name) return;
+            const rawMkt = cleanStr(cols[mktIdx]).toUpperCase();
+            const resolvedMkt = MARKET_KEYS_REV[rawMkt] || MARKET_SEGMENTS.find(s => eq(s, rawMkt)) || 'India';
+            const mktKey = superClean(resolvedMkt);
+            const campKey = superClean(name);
+            if (!metaLookup[mktKey]) metaLookup[mktKey] = {};
+            metaLookup[mktKey][campKey] = {
+              market: resolvedMkt,
               tab: cleanStr(cols[tabIdx]),
               subTab: cleanStr(cols[subIdx]),
               subSubTab: cleanStr(cols[ssIdx]),
@@ -1179,20 +1539,34 @@ const App = () => {
       };
 
       // Parse percentage and absolute streams
+      // For DAU/DAC/GenAI: pct stream supplies .v (lift %), abs stream supplies .abs.
+      // For Impressions/CTR: only the abs stream supplies values, and they ride .v
+      // (parseCSVData routes them there explicitly).
       const mergeResults = (pctMap, absMap) => {
         const merged = { ...pctMap };
         Object.keys(absMap).forEach(key => {
-          if (!merged[key]) merged[key] = absMap[key];
-          else {
-            M_TYPES.forEach(m => { GENDERS_KEYS.forEach(g => { AGE_BUCKETS.forEach(a => { merged[key].metrics[m][g][a].abs = absMap[key].metrics[m][g][a].abs; }); }); });
+          if (!merged[key]) {
+            merged[key] = absMap[key];
+            return;
           }
+          M_TYPES.forEach(m => {
+            GENDERS_KEYS.forEach(g => {
+              AGE_BUCKETS.forEach(a => {
+                const absNode = absMap[key].metrics[m][g][a];
+                merged[key].metrics[m][g][a].abs = absNode.abs;
+                if ((m === 'Impressions' || m === 'CTR') && absNode.v !== 0 && absNode.v !== 'NA') {
+                  merged[key].metrics[m][g][a].v = absNode.v;
+                }
+              });
+            });
+          });
         });
         return merged;
       };
 
       // Parse global streams
-      const pctGlobal = csvFiles['pct-global'] ? parseCSVData(csvFiles['pct-global'], {}, metaLookup, ['Country', 'Market', 'Campaign'], false) : {};
-      const absGlobal = csvFiles['abs-global'] ? parseCSVData(csvFiles['abs-global'], {}, metaLookup, ['Country', 'Market', 'Campaign'], true) : {};
+      const pctGlobal = csvFiles['pct-global'] ? parseCSVData(csvFiles['pct-global'], {}, metaLookup, ['Country', 'Market', 'Campaign'], false, null, true, false) : {};
+      const absGlobal = csvFiles['abs-global'] ? parseCSVData(csvFiles['abs-global'], {}, metaLookup, ['Country', 'Market', 'Campaign'], true, null, true, false) : {};
       const mergedGlobal = mergeResults(pctGlobal, absGlobal);
       routeData(mergedGlobal, 'APAC');
 
@@ -1212,8 +1586,8 @@ const App = () => {
       // Parse market streams
       const regionalMerged = {};
       MARKET_SEGMENTS.forEach(m => {
-        const pctMarket = csvFiles[`pct-market-${m}`] ? parseCSVData(csvFiles[`pct-market-${m}`], {}, metaLookup, undefined, false) : {};
-        const absMarket = csvFiles[`abs-market-${m}`] ? parseCSVData(csvFiles[`abs-market-${m}`], {}, metaLookup, undefined, true) : {};
+        const pctMarket = csvFiles[`pct-market-${m}`] ? parseCSVData(csvFiles[`pct-market-${m}`], {}, metaLookup, undefined, false, m, false, false) : {};
+        const absMarket = csvFiles[`abs-market-${m}`] ? parseCSVData(csvFiles[`abs-market-${m}`], {}, metaLookup, undefined, true, m, false, false) : {};
         const mMerged = mergeResults(pctMarket, absMarket);
         regionalMerged[m] = Object.values(mMerged);
         routeData(mMerged, m);
@@ -1221,8 +1595,8 @@ const App = () => {
 
       // Parse always-on streams
       AO_CATEGORIES.forEach(cat => {
-        const pctAO = csvFiles[`pct-ao-${cat}`] ? parseCSVData(csvFiles[`pct-ao-${cat}`], {}, metaLookup, undefined, false) : {};
-        const absAO = csvFiles[`abs-ao-${cat}`] ? parseCSVData(csvFiles[`abs-ao-${cat}`], {}, metaLookup, undefined, true) : {};
+        const pctAO = csvFiles[`pct-ao-${cat}`] ? parseCSVData(csvFiles[`pct-ao-${cat}`], {}, metaLookup, undefined, false, null, false, true) : {};
+        const absAO = csvFiles[`abs-ao-${cat}`] ? parseCSVData(csvFiles[`abs-ao-${cat}`], {}, metaLookup, undefined, true, null, false, true) : {};
         const mergedAO = mergeResults(pctAO, absAO);
         routeData(mergedAO, 'India', 'AlwaysOn', cat);
       });
@@ -1371,7 +1745,12 @@ const App = () => {
           {activeTab === 'OKR' && <OKRAndRecsView globalData={globalData} regionalData={regionalData} latestDate={latestGlobalDate} />}
           {(activeTab === 'Global Hub' || activeTab === 'Market Hub') && (
             <div className="space-y-8 animate-in fade-in">
-              <MetricControlHub activeMetrics={activeMetrics} toggleMetric={m => setActiveMetrics(p => p.includes(m) ? (p.length > 1 ? p.filter(x => x !== m) : p) : [...p, m])} handleAllToggle={() => setActiveMetrics(p => p.length === M_TYPES.length ? ['DAU-SCT'] : [...M_TYPES])} />
+              <MetricControlHub
+                activeMetrics={activeMetrics.filter(m => allowedMetrics.includes(m))}
+                allowedMetrics={allowedMetrics}
+                toggleMetric={m => setActiveMetrics(p => p.includes(m) ? (p.length > 1 ? p.filter(x => x !== m) : p) : [...p, m])}
+                handleAllToggle={() => setActiveMetrics(p => p.length === allowedMetrics.length ? ['DAU-SCT'] : [...allowedMetrics])}
+              />
               {activeTab === 'Market Hub' && (
                 <div className="flex items-center gap-4 p-4 bg-[#1a1a1a] rounded-lg border border-[#3a3a3a] w-fit">
                   <MapPin className="w-6 h-6 text-red-600" />
@@ -1380,13 +1759,23 @@ const App = () => {
                   </select>
                 </div>
               )}
-              <MasterTableView data={activeTab === 'Global Hub' ? globalData : (regionalData[activeMarketSubTab] || [])} activeMetrics={activeMetrics} isCampaignView={activeTab === 'Market Hub'} />
+              <MasterTableView
+                data={activeTab === 'Global Hub' ? globalData : (regionalData[activeMarketSubTab] || [])}
+                activeMetrics={activeMetrics.filter(m => allowedMetrics.includes(m))}
+                isCampaignView={activeTab === 'Market Hub'}
+                latestGlobalDate={latestGlobalDate}
+              />
             </div>
           )}
 
           {(CAMPAIGN_CHILDREN.some(c => c.id === activeTab) || campaignHubData[activeTab]) && activeTab !== 'OKR' && (
             <div className="space-y-8 animate-in fade-in">
-              <MetricControlHub activeMetrics={activeMetrics} toggleMetric={m => setActiveMetrics(p => p.includes(m) ? (p.length > 1 ? p.filter(x => x !== m) : p) : [...p, m])} handleAllToggle={() => setActiveMetrics(p => p.length === M_TYPES.length ? ['DAU-SCT'] : [...M_TYPES])} />
+              <MetricControlHub
+                activeMetrics={activeMetrics.filter(m => allowedMetrics.includes(m))}
+                allowedMetrics={allowedMetrics}
+                toggleMetric={m => setActiveMetrics(p => p.includes(m) ? (p.length > 1 ? p.filter(x => x !== m) : p) : [...p, m])}
+                handleAllToggle={() => setActiveMetrics(p => p.length === allowedMetrics.length ? ['DAU-SCT'] : [...allowedMetrics])}
+              />
               <div className="flex flex-col gap-6">
                 <div className="flex items-center gap-4 p-4 bg-[#1a1a1a] rounded-lg border border-[#3a3a3a] w-fit">
                   <MapPin className="w-6 h-6 text-red-600" />
@@ -1417,8 +1806,10 @@ const App = () => {
                   const path = campaignHubData[activeTab]?.[mkt]?.[sub];
                   return ss === 'Default' || !ss ? (path ? Object.values(path).flat() : []) : (path?.[ss] || []);
                 })()}
-                activeMetrics={activeMetrics}
+                activeMetrics={activeMetrics.filter(m => allowedMetrics.includes(m))}
                 isCampaignView
+                isAlwaysOn={activeTab === 'AlwaysOn'}
+                latestGlobalDate={latestGlobalDate}
               />
             </div>
           )}
