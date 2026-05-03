@@ -8,7 +8,8 @@ import {
   ChevronDown, ChevronUp, FolderKanban, Lightbulb, Copy, Edit2, Save, Plus,
   RotateCcw, Binary, Power, Settings2, Trash2,
   Target as TargetIcon, Database, Clock, CheckCircle2, AlertCircle, Loader2,
-  Calendar, ChevronLeft, ChevronRight
+  Calendar, ChevronLeft, ChevronRight,
+  Menu, X, Filter, BarChart3, ListTree
 } from 'lucide-react';
 import { saveSnapshot, loadSnapshotIndex, loadSnapshotFiles, deleteSnapshot, getWeekId } from './firebase.js';
 
@@ -57,24 +58,6 @@ const CAMPAIGN_CHILDREN = [
   { id: 'CultMo', label: 'CultMo', icon: ComponentIcon },
   { id: 'ArtMo', label: 'ArtMo', icon: Palette },
   { id: 'GenAI Hub', label: 'GenAI Hub', icon: Wand2 }
-];
-
-const DEMO_PERMS = [
-  { g: 'total', a: 'total', label: 'GenPop' },
-  { g: 'total', a: '18-34', label: 'GenPop 18-34' },
-  { g: 'total', a: '18-24', label: 'GenPop 18-24' },
-  { g: 'total', a: '25-34', label: 'GenPop 25-34' },
-  { g: 'total', a: '35+', label: 'GenPop 35+' },
-  { g: 'male', a: 'total', label: 'Male GenPop' },
-  { g: 'female', a: 'total', label: 'Female GenPop' },
-  { g: 'female', a: '18-34', label: 'Female 18-34' },
-  { g: 'female', a: '18-24', label: 'Female 18-24' },
-  { g: 'female', a: '25-34', label: 'Female 25-34' },
-  { g: 'female', a: '35+', label: 'Female 35+' },
-  { g: 'male', a: '18-34', label: 'Male 18-34' },
-  { g: 'male', a: '18-24', label: 'Male 18-24' },
-  { g: 'male', a: '25-34', label: 'Male 25-34' },
-  { g: 'male', a: '35+', label: 'Male 35+' }
 ];
 
 // --- 2. GLOBAL UTILITIES ---
@@ -651,7 +634,14 @@ const copyToClipboard = async (text) => {
   }
 };
 
-const OKRAndRecsView = ({ globalData, regionalData, latestDate }) => {
+// Recommendation engine — hybrid (PR 2 rewrite, see Ivan's choice B).
+// - PAUSE/MAINTAIN trigger:  v < -0.0001  (sig only flavours the copy: "stat sig negative" vs "neutral negative")
+// - SCALE trigger:           sig === 1 && v > 0.001  AND GenPop AND not scaling-restricted
+// - Maturity gate applies to ALL pauses → swaps PAUSE → MAINTAIN with learning-phase justification when <14d
+// - GenPop consolidation done source-side: ages where both genders are negative emit a single "G{age}" row
+// - Restricted categories (SHELF/SSC/UTS/MVR/UTS-SFV) get a 5-7d "wait & decide" copy and SCALE is blocked
+// - MARKET HEALTH audit rows removed (they were redundant with the OKR cards above)
+const OKRAndRecsView = ({ globalData, regionalData, latestDate, quarterStart }) => {
   const [editingId, setEditingId] = useState(null);
   const [editedRows, setEditedRows] = useState({});
   const [manualPointers, setManualPointers] = useState([]);
@@ -676,76 +666,125 @@ const OKRAndRecsView = ({ globalData, regionalData, latestDate }) => {
   const okrStats = useMemo(() => {
     return ['APAC', 'India', 'Indonesia', 'Japan', 'South Korea', 'AUNZ'].map(mName => {
       const record = globalData.find(d => eq(d.country, mName) || eq(d.country, MARKET_KEYS[mName]));
-      const actual = record?.metrics?.['DAU-SCT']?.total?.total?.v || 0;
+      const rawActual = record?.metrics?.['DAU-SCT']?.total?.total?.v;
+      // Tolerate the parser's NA gating result.
+      const actual = (rawActual === 'NA' || rawActual === undefined || isNaN(rawActual)) ? 0 : rawActual;
       const target = OKR_TARGETS[mName.toUpperCase()] || 1.00;
-      return { market: mName.toUpperCase(), actual, target, perfIndex: target > 0 ? (actual / target) * 100 : 0, isOffline: !record };
+      const isOffline = !record || rawActual === 'NA';
+      return { market: mName.toUpperCase(), actual, target, perfIndex: target > 0 ? (actual / target) * 100 : 0, isOffline };
     });
   }, [globalData]);
 
   const recommendationRows = useMemo(() => {
     const tableData = [];
-    ['APAC', 'India', 'Indonesia', 'Japan', 'South Korea', 'AUNZ'].forEach(mName => {
-      const record = globalData.find(d => eq(d.country, mName) || eq(d.country, MARKET_KEYS[mName]));
-      if (record) {
-        const actual = record.metrics?.['DAU-SCT']?.total?.total?.v || 0;
-        const target = OKR_TARGETS[mName.toUpperCase()] || 1.00;
-        const perfIndex = (actual / target) * 100;
-        let recommendation = "MEET TARGET";
-        if (perfIndex < 70) recommendation = "AT RISK";
-        else if (perfIndex < 100) recommendation = "ON TRACK";
-        tableData.push({ id: `MARKET_${mName}`, country: mName.toUpperCase(), campaign: "GLOBAL HUB AUDIT", age: "GenPop", gender: "GenPop", segment: "MARKET HEALTH", recommendation, justification: `${mName} lift: ${actual.toFixed(3)}% (${perfIndex.toFixed(1)}% of target).`, isMarketAudit: true });
-      }
-    });
+    const scalingRestricted = ['SHELF', 'SSC', 'UTS', 'MVR', 'UTSSFV'];
 
     MARKET_SEGMENTS.forEach(market => {
       const allCampsInMarket = regionalData[market] || [];
       allCampsInMarket.forEach((camp, ci) => {
         if (isCampaignEnded(camp.optimisationEndDate, camp.campaignEndDate)) return;
-        const daysNum = calcDaysLive(camp.campaignStartDate, camp.optimisationEndDate);
-        const rawTriggers = [];
+        const metrics = camp.metrics?.['DAU-SCT'] || {};
 
-        DEMO_PERMS.forEach(demo => {
-          const node = camp.metrics?.['DAU-SCT']?.[demo.g]?.[demo.a] || { v: 0, sig: 0 };
-          const label = demo.label;
-          if (node.isPaused) return;
-          if (node.sig === -1) rawTriggers.push({ g: demo.g, a: demo.a, label, recommendation: "PAUSE", justification: `Pause ${label}: Stat-sig negative lift (-${Math.abs(node.v).toFixed(2)}%).`, statusType: "danger" });
-          else if (demo.g === 'total' && demo.a === 'total' && daysNum > 14 && node.v < -0.01) rawTriggers.push({ g: demo.g, a: demo.a, label, recommendation: "PAUSE", justification: `Pause ${label}: Negative lift observed post-learning.`, statusType: "danger" });
-          else if (node.sig === 1 && node.v > 0.001) rawTriggers.push({ g: demo.g, a: demo.a, label, recommendation: "SCALE", justification: `Scale ${label}: Stat-sig positive lift (+${node.v.toFixed(2)}%).`, statusType: "success" });
-          else if (demo.g === 'total' && demo.a === 'total' && daysNum <= 14 && daysNum > 0) rawTriggers.push({ g: demo.g, a: demo.a, label, recommendation: "MAINTAIN", justification: "Learning phase stage (<14d).", statusType: "warning" });
-        });
+        // Skip on the actual demo's pause status — we don't propagate
+        // male+female → total here (incoming did; we explicitly opted out
+        // because that propagation has rec-engine side effects).
+        if (metrics.total?.total?.isPaused) return;
 
-        if (rawTriggers.length > 0) {
-          const recTypes = ['PAUSE', 'SCALE', 'MAINTAIN'];
-          recTypes.forEach(rt => {
-            let group = rawTriggers.filter(t => t.recommendation === rt);
-            if (group.length === 0) return;
-            const maleT = group.find(t => t.g === 'male' && t.a === 'total');
-            const femaleT = group.find(t => t.g === 'female' && t.a === 'total');
-            if (maleT && femaleT) {
-              const existingGenPop = group.find(t => t.g === 'total' && t.a === 'total');
-              if (!existingGenPop) group.push({ g: 'total', a: 'total', label: 'GenPop', recommendation: rt, justification: `Consolidated ${rt}: Impact observed across GenPop.`, statusType: maleT.statusType });
-              group = group.filter(t => !(t.a === 'total' && (t.g === 'male' || t.g === 'female')));
+        const daysLiveCount = calcDaysLive(camp.campaignStartDate, camp.optimisationEndDate);
+        const isMature = daysLiveCount >= 14;
+        const mKey = MARKET_KEYS[market] || market.toUpperCase();
+
+        const currentCampaignNameSuper = superClean(camp.country);
+        const isScalingRestricted = scalingRestricted.some(cat => currentCampaignNameSuper.includes(cat));
+
+        const addPauseOrMaintain = (gK, aK, tag) => {
+          const node = metrics[gK]?.[aK];
+          if (!node || node.v === 'NA' || node.isPaused) return;
+
+          const v = node.v || 0;
+          const isSigNeg = node.sig === -1;
+          const rec = isMature ? "PAUSE" : "MAINTAIN";
+          const liftLabel = isSigNeg ? "stat sig negative" : "neutral negative";
+
+          let justification = "";
+          // Source-side GenPop consolidation: when tag is 'G', emit a single
+          // total/age row using both gender lifts in the copy.
+          if (tag === 'G' && aK !== 'total' && v >= 0) {
+            const mNode = metrics['male']?.[aK];
+            const fNode = metrics['female']?.[aK];
+            if (mNode?.v !== 'NA' && fNode?.v !== 'NA' && (mNode?.v || 0) < -0.0001 && (fNode?.v || 0) < -0.0001) {
+              const actionWord = isMature ? "Pause" : "Maintain (Learning Phase)";
+              const maturitySuffix = isMature ? "" : ` observed but hasn't reached maturity (Current: ${daysLiveCount}d / Required: 14d)`;
+
+              if (isMature && isScalingRestricted) {
+                justification = `${mKey} ${camp.country} - Pause G${aK} given negative lift across both males (${mNode.v.toFixed(2)}%) and females (${fNode.v.toFixed(2)}%) - pause the current trend and wait for 5-7d and decide to rollout next trend or not`;
+              } else {
+                justification = `${mKey} ${camp.country} - ${actionWord} G${aK} given negative lift across both males (${mNode.v.toFixed(2)}%) and females (${fNode.v.toFixed(2)}%)${maturitySuffix}`;
+              }
             }
-            const toPrune = new Set();
-            group.forEach(t1 => {
-              group.forEach(t2 => {
-                if (t1 === t2 || toPrune.has(t2)) return;
-                if (t1.g === 'total' && t1.a === 'total') { toPrune.add(t2); return; }
-                if (t1.a === 'total' && t1.g === t2.g && t2.a !== 'total') { toPrune.add(t2); return; }
-                if (t1.a === '18-34' && (t2.a === '18-24' || t2.a === '25-34') && t1.g === t2.g) { toPrune.add(t2); return; }
-              });
-            });
-            group.forEach((t, ti) => {
-              if (!toPrune.has(t)) tableData.push({ ...t, id: `CAMP_${market}_${ci}_${rt}_${ti}`, country: MARKET_KEYS[market] || market.toUpperCase(), campaign: camp.country, segment: camp.segmentTag || 'Campaign Hub', daysLive: daysNum.toString(), age: t.a === 'total' ? 'GenPop' : t.a, gender: t.g === 'total' ? 'GenPop' : t.g.toUpperCase() });
-            });
+          }
+
+          if (!justification) {
+            if (isMature) {
+              if (isScalingRestricted) {
+                justification = `${mKey} ${camp.country} - Pause ${tag}${aK} given ${liftLabel} (${v.toFixed(2)}%) - pause the current trend and wait for 5-7d and decide to rollout next trend or not`;
+              } else {
+                justification = `${mKey} ${camp.country} - Pause ${tag}${aK} given ${liftLabel} (${v.toFixed(2)}%)`;
+              }
+            } else {
+              justification = `${mKey} ${camp.country} - Maintain ${tag}${aK} (Learning Phase): Negative lift (${v.toFixed(2)}%) observed but hasn't reached maturity (Current: ${daysLiveCount}d / Required: 14d).`;
+            }
+          }
+
+          tableData.push({
+            id: `CAMP_${market}_${ci}_P_${gK}_${aK}`,
+            country: mKey,
+            campaign: camp.country,
+            age: aK === 'total' ? 'GenPop' : aK,
+            gender: gK === 'total' ? 'GenPop' : gK.toUpperCase(),
+            recommendation: rec,
+            justification,
+          });
+        };
+
+        // SCALE: GenPop total/total only, requires sig confirmation, blocked for restricted categories.
+        const gpNode = metrics.total?.total || { v: 0, sig: 0 };
+        if (!isScalingRestricted && gpNode.v !== 'NA' && gpNode.sig === 1 && gpNode.v > 0.001) {
+          tableData.push({
+            id: `CAMP_${market}_${ci}_SC`,
+            country: mKey,
+            campaign: camp.country,
+            age: "GenPop",
+            gender: "GenPop",
+            recommendation: "SCALE",
+            justification: `${mKey} ${camp.country} - Scale GenPop: Stat-sig positive lift (+${gpNode.v.toFixed(2)}%) observed.`,
           });
         }
+
+        // GenPop consolidation source-side: find ages where BOTH male and
+        // female show meaningful negatives. Common ages collapse into one
+        // "G{age}" row; uncommon stay gender-specific.
+        const getAgesToTrack = (gK) => {
+          const dirs = [];
+          ['18-24', '25-34', '35+'].forEach(a => {
+            if (metrics[gK]?.[a]?.v !== 'NA' && (metrics[gK]?.[a]?.v || 0) < -0.0001) dirs.push(a);
+          });
+          return dirs;
+        };
+
+        const mNeg = getAgesToTrack('male');
+        const fNeg = getAgesToTrack('female');
+        const common = mNeg.filter(a => fNeg.includes(a));
+
+        common.forEach(a => addPauseOrMaintain('total', a, 'G'));
+        mNeg.filter(a => !common.includes(a)).forEach(a => addPauseOrMaintain('male', a, 'M'));
+        fNeg.filter(a => !common.includes(a)).forEach(a => addPauseOrMaintain('female', a, 'F'));
       });
     });
 
     const merged = [...tableData, ...manualPointers].filter(r => !deletedRowIds.has(r.id));
     return merged.map(r => editedRows[r.id] ? { ...r, ...editedRows[r.id] } : r);
-  }, [globalData, regionalData, manualPointers, deletedRowIds, editedRows]);
+  }, [regionalData, manualPointers, deletedRowIds, editedRows]);
 
   const handleCopyRow = async (row) => {
     const text = `${row.country}\t${row.campaign}\t${row.age}\t${row.gender}\t${row.recommendation}\t${row.justification}`;
@@ -785,7 +824,7 @@ const OKRAndRecsView = ({ globalData, regionalData, latestDate }) => {
           <div className="flex flex-wrap gap-10 pt-4">
             <div className="space-y-1">
               <p className="text-[10px] font-bold text-[#808080] uppercase tracking-widest">Quarter Start</p>
-              <p className="text-lg font-bold text-white">2026-02-01</p>
+              <p className="text-lg font-bold text-white">{quarterStart || "2026-02-01"}</p>
             </div>
             <div className="space-y-1">
               <p className="text-[10px] font-bold text-[#808080] uppercase tracking-widest">Reporting Date (Latest)</p>
@@ -909,23 +948,34 @@ const OKRAndRecsView = ({ globalData, regionalData, latestDate }) => {
   );
 };
 
-const LandingPage = ({ uploadedFiles, handleFileUpload, startAnalysis, isAnalyzing, memoryIndex, loadHistoricalWeek, isLoadingMemory, historicalSnapshots }) => {
-  const HubRow = ({ type, title, icon: Icon, tag }) => (
-    <div className={`p-6 rounded-lg border ${type === 'pct' ? 'border-amber-500/30 bg-[#1a1500]' : 'border-blue-500/30 bg-[#0a0a1a]'} mb-6 transition-all`}>
+// 4-tile upload row: Global / Market / Always-On (sans JP Proactive) / JP Proactive Container.
+// JP Proactive ships in its own slot because the parser flow tags it
+// distinctly (`marketContext='Japan'`, isAlwaysOnData=true), and the dropdown
+// flow strictly isolates it from other AO categories.
+const HubRowV2 = ({ type, title, icon: Icon, tag, uploadedFiles, handleFileUpload }) => {
+  const isPct = type === 'pct';
+  const borderColor = isPct ? 'border-amber-500/30' : 'border-blue-500/30';
+  const bgColor = isPct ? 'bg-[#1a1500]' : 'bg-[#0a0a1a]';
+  const iconColor = isPct ? 'text-amber-500' : 'text-blue-500';
+  const iconBg = isPct ? 'bg-amber-500/20' : 'bg-blue-500/20';
+
+  return (
+    <div className={`p-6 rounded-lg border ${borderColor} ${bgColor} mb-6 transition-all`}>
       <div className="flex items-center gap-4 mb-6 px-4">
-        <div className={`p-2 rounded-lg flex items-center justify-center ${type === 'pct' ? 'bg-amber-500/20 text-amber-500' : 'bg-blue-500/20 text-blue-500'}`}>
+        <div className={`p-2 rounded-lg flex items-center justify-center ${iconBg} ${iconColor}`}>
           <Icon className="w-5 h-5" />
         </div>
         <div className="text-left">
-          <h2 className={`text-lg font-bold uppercase tracking-tight ${type === 'pct' ? 'text-amber-500' : 'text-blue-500'}`}>{title}</h2>
+          <h2 className={`text-lg font-bold uppercase tracking-tight ${iconColor}`}>{title}</h2>
           <p className="text-[8px] font-bold text-[#808080] uppercase tracking-[0.3em]">{tag}</p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-left items-stretch">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-left items-stretch">
+        {/* 1. Global Hub */}
         <div className="group relative border border-[#3a3a3a] bg-black rounded-lg p-5 flex flex-col items-center hover:border-[#555] transition-all justify-center text-center">
           <input type="file" className="absolute inset-0 opacity-0 cursor-pointer z-20" onChange={(e) => handleFileUpload(type, 'global', e.target.files[0])} />
-          <div className={`w-12 h-12 rounded-lg mb-4 flex items-center justify-center transition-all ${uploadedFiles[type].global ? (type === 'pct' ? 'bg-amber-500/20 text-amber-400' : 'bg-blue-500/20 text-blue-400') : 'bg-[#1a1a1a] text-[#555]'}`}>
+          <div className={`w-12 h-12 rounded-lg mb-4 flex items-center justify-center transition-all ${uploadedFiles[type].global ? (isPct ? 'bg-amber-500/20 text-amber-400' : 'bg-blue-500/20 text-blue-400') : 'bg-[#1a1a1a] text-[#555]'}`}>
             <Globe className="w-7 h-7" />
           </div>
           <h3 className="font-bold text-[10px] mb-1.5 uppercase tracking-wider text-[#e0e0e0]">Global Hub</h3>
@@ -934,8 +984,9 @@ const LandingPage = ({ uploadedFiles, handleFileUpload, startAnalysis, isAnalyzi
           </div>
         </div>
 
+        {/* 2. Market Hub */}
         <div className="group relative border border-[#3a3a3a] bg-black rounded-lg p-5 flex flex-col items-center hover:border-[#555] transition-all justify-center">
-          <div className={`w-12 h-12 rounded-lg mb-4 flex items-center justify-center transition-all ${Object.keys(uploadedFiles[type].countryHB).length > 0 ? (type === 'pct' ? 'bg-amber-500/20 text-amber-400' : 'bg-blue-500/20 text-blue-400') : 'bg-[#1a1a1a] text-[#555]'}`}>
+          <div className={`w-12 h-12 rounded-lg mb-4 flex items-center justify-center transition-all ${Object.keys(uploadedFiles[type].countryHB).length > 0 ? (isPct ? 'bg-amber-500/20 text-amber-400' : 'bg-blue-500/20 text-blue-400') : 'bg-[#1a1a1a] text-[#555]'}`}>
             <Flag className="w-7 h-7" />
           </div>
           <h3 className="font-bold text-[10px] mb-3 uppercase tracking-wider text-[#e0e0e0]">Market Hub</h3>
@@ -951,13 +1002,14 @@ const LandingPage = ({ uploadedFiles, handleFileUpload, startAnalysis, isAnalyzi
           </div>
         </div>
 
+        {/* 3. Always-On (excludes JP Proactive Container — has its own tile) */}
         <div className="group relative border border-[#3a3a3a] bg-black rounded-lg p-5 flex flex-col items-center hover:border-[#555] transition-all justify-center">
-          <div className={`w-12 h-12 rounded-lg mb-4 flex items-center justify-center transition-all ${Object.keys(uploadedFiles[type].alwaysOn).length > 0 ? (type === 'pct' ? 'bg-amber-500/20 text-amber-400' : 'bg-blue-500/20 text-blue-400') : 'bg-[#1a1a1a] text-[#555]'}`}>
+          <div className={`w-12 h-12 rounded-lg mb-4 flex items-center justify-center transition-all ${Object.keys(uploadedFiles[type].alwaysOn).length > 0 ? (isPct ? 'bg-amber-500/20 text-amber-400' : 'bg-blue-500/20 text-blue-400') : 'bg-[#1a1a1a] text-[#555]'}`}>
             <Zap className="w-7 h-7" />
           </div>
           <h3 className="font-bold text-[10px] mb-3 uppercase tracking-wider text-[#e0e0e0]">Always-On</h3>
           <div className="w-full grid grid-cols-2 gap-1.5 px-2">
-            {AO_CATEGORIES.map(cat => (
+            {AO_CATEGORIES.filter(cat => cat !== 'JP Proactive Container').map(cat => (
               <div key={cat} className="relative h-7 group/item">
                 <input type="file" className="absolute inset-0 opacity-0 cursor-pointer z-20" onChange={(e) => handleFileUpload(type, 'alwaysOn', e.target.files[0], cat)} />
                 <div className={`w-full h-full rounded-lg border flex items-center justify-center transition-all ${uploadedFiles[type].alwaysOn[cat] ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-black border-[#3a3a3a] text-[#555] hover:border-[#808080]'}`}>
@@ -967,10 +1019,24 @@ const LandingPage = ({ uploadedFiles, handleFileUpload, startAnalysis, isAnalyzi
             ))}
           </div>
         </div>
+
+        {/* 4. JP Proactive Container — dedicated slot, parsed with marketContext='Japan' */}
+        <div className="group relative border border-[#3a3a3a] bg-black rounded-lg p-5 flex flex-col items-center hover:border-[#555] transition-all justify-center text-center">
+          <input type="file" className="absolute inset-0 opacity-0 cursor-pointer z-20" onChange={(e) => handleFileUpload(type, 'jpProactive', e.target.files[0])} />
+          <div className={`w-12 h-12 rounded-lg mb-4 flex items-center justify-center transition-all ${uploadedFiles[type].jpProactive ? 'bg-red-500/10 text-red-500' : 'bg-[#1a1a1a] text-[#555]'}`}>
+            <Zap className="w-7 h-7" />
+          </div>
+          <h3 className="font-bold text-[10px] mb-1.5 uppercase tracking-wider text-[#e0e0e0]">JP Proactive Container</h3>
+          <div className="text-[8px] font-mono truncate w-full px-2 py-1.5 rounded bg-black border border-[#3a3a3a] text-[#808080] mb-2 text-center">
+            {uploadedFiles[type].jpProactive ? uploadedFiles[type].jpProactive.name : 'PUSH_JP_PROACTIVE_CSV'}
+          </div>
+        </div>
       </div>
     </div>
   );
+};
 
+const LandingPage = ({ uploadedFiles, handleFileUpload, startAnalysis, isAnalyzing, memoryIndex, loadHistoricalWeek, isLoadingMemory, historicalSnapshots }) => {
   return (
     <div className="min-h-screen bg-black relative flex flex-col items-center py-10 px-6 text-[#e0e0e0]">
       <div className="max-w-[1500px] w-full z-10 text-center">
@@ -978,7 +1044,12 @@ const LandingPage = ({ uploadedFiles, handleFileUpload, startAnalysis, isAnalyzi
           <div className="inline-block mb-4">
             <div className="bg-[#FF0000] w-14 h-14 rounded-xl flex items-center justify-center mx-auto"><Brain className="text-white w-7 h-7" /></div>
           </div>
-          <h1 className="text-3xl font-bold tracking-tight mb-1 uppercase">Shorts Brain <span className="text-[#FF0000]">2.0</span></h1>
+          <h1 className="text-3xl font-bold tracking-tight mb-1 uppercase flex items-center justify-center gap-4">
+            Shorts Brain <span className="text-[#FF0000]">2.0</span>
+            <a href={DRIVE_RESOURCE_LINK} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center w-10 h-10 rounded-xl bg-white/5 border border-white/10 text-[#555] hover:text-white hover:bg-white/10 transition-all" title="Open Resource Drive">
+              <DriveIcon className="w-5 h-5" />
+            </a>
+          </h1>
           <p className="text-[#808080] text-[10px] font-bold tracking-[0.4em] uppercase">APAC Marketing Hub</p>
         </div>
 
@@ -1020,8 +1091,35 @@ const LandingPage = ({ uploadedFiles, handleFileUpload, startAnalysis, isAnalyzi
           </div>
         </div>
 
-        <HubRow type="pct" title="Percentage Input Hub" tag="Relative Lift Streams" icon={TrendingUp} />
-        <HubRow type="abs" title="Absolute Input Hub" tag="Discrete Volume Streams" icon={Binary} />
+        <HubRowV2 type="pct" title="Percentage Input Hub" tag="Relative Lift Streams" icon={TrendingUp} uploadedFiles={uploadedFiles} handleFileUpload={handleFileUpload} />
+        <HubRowV2 type="abs" title="Absolute Input Hub" tag="Discrete Volume Streams" icon={Binary} uploadedFiles={uploadedFiles} handleFileUpload={handleFileUpload} />
+
+        {/* Attribution Analysis — Impressions/CTR ship at campaign granularity */}
+        <div className="p-6 rounded-lg border border-purple-500/30 bg-[#0d0a1a] mb-6 transition-all">
+          <div className="flex items-center gap-4 mb-6 px-4">
+            <div className="p-2 rounded-lg flex items-center justify-center bg-purple-500/20 text-purple-500">
+              <Target className="w-5 h-5" />
+            </div>
+            <div className="text-left">
+              <h2 className="text-lg font-bold uppercase tracking-tight text-purple-500">Attribution Analysis</h2>
+              <p className="text-[8px] font-bold text-[#808080] uppercase tracking-[0.3em]">Marketing Pressure & Reach Metrics</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 px-4">
+            <div className="group relative border border-[#3a3a3a] bg-black rounded-lg p-5 flex items-center gap-6 hover:border-[#555] transition-all">
+              <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${uploadedFiles.attribution?.impressions ? 'bg-purple-500/10 text-purple-400' : 'bg-[#1a1a1a] text-[#555]'}`}>
+                <BarChart3 className="w-6 h-6" />
+              </div>
+              <div className="flex-1 text-left min-w-0">
+                <h4 className="text-[10px] font-bold uppercase text-[#e0e0e0] mb-1">Impressions/CTR CSV</h4>
+                <div className="text-[8px] font-mono truncate px-2 py-1.5 rounded bg-black border border-[#3a3a3a] text-[#808080]">
+                  {uploadedFiles.attribution?.impressions ? uploadedFiles.attribution.impressions.name : 'PUSH_IMPRESSIONS_CTR_CSV'}
+                </div>
+              </div>
+              <input type="file" className="absolute inset-0 opacity-0 cursor-pointer z-20" onChange={(e) => handleFileUpload('attribution', 'impressions', e.target.files[0])} />
+            </div>
+          </div>
+        </div>
 
         <button onClick={startAnalysis} disabled={isAnalyzing} className="px-10 py-4 rounded-lg font-bold text-base bg-[#FF0000] text-white transition-all hover:bg-red-500 flex items-center gap-3 mx-auto uppercase mt-4 border border-[#3a3a3a]">
           {isAnalyzing ? <RefreshCcw className="w-5 h-5 animate-spin" /> : <Play className="w-5 h-5" />}
@@ -1074,11 +1172,14 @@ const App = () => {
   const [globalData, setGlobalData] = useState([]);
   const [regionalData, setRegionalData] = useState({});
   const [campaignHubData, setCampaignHubData] = useState({});
+  // quarterStart drives OKR header copy; defaults to current Q1.
+  const [quarterStart, setQuarterStart] = useState("2026-02-01");
 
   const [uploadedFiles, setUploadedFiles] = useState({
-    pct: { global: null, countryHB: {}, alwaysOn: {} },
-    abs: { global: null, countryHB: {}, alwaysOn: {} },
-    shared: { campaignInfo: null, pauseRelive: null }
+    pct: { global: null, countryHB: {}, alwaysOn: {}, jpProactive: null },
+    abs: { global: null, countryHB: {}, alwaysOn: {}, jpProactive: null },
+    shared: { campaignInfo: null, pauseRelive: null },
+    attribution: { impressions: null }
   });
 
   // Memory system state
@@ -1086,18 +1187,6 @@ const App = () => {
   const [memoryStatus, setMemoryStatus] = useState('idle'); // idle | saving | saved | error
   const [isLoadingMemory, setIsLoadingMemory] = useState(false);
   const [historicalSnapshots, setHistoricalSnapshots] = useState([]);
-
-  const getSubTabs = useCallback((tab, market) => {
-    const marketData = campaignHubData[tab]?.[market] || {};
-    const keys = Object.keys(marketData).filter(k => k !== 'Generic');
-    return keys.length > 0 ? keys.sort() : [];
-  }, [campaignHubData]);
-
-  const getSubSubTabs = useCallback((tab, market, sub) => {
-    const subData = campaignHubData[tab]?.[market]?.[sub] || {};
-    const keys = Object.keys(subData).filter(k => k !== 'Default');
-    return keys.length > 0 ? keys.sort() : [];
-  }, [campaignHubData]);
 
   // Global Hub and the synthesised AlwaysOn aggregate hide Impressions/CTR — those
   // metrics only ship via the Attribution stream (campaign-level granularity).
@@ -1107,6 +1196,23 @@ const App = () => {
     }
     return M_TYPES;
   }, [activeTab]);
+
+  // Dropdown-driven subtab filters with implicit "ALL" (empty-string sentinel)
+  // — replaces the pill-row UX so users can flatten across all sub-sub buckets.
+  const dynamicSubTabs = useMemo(() => {
+    const market = tabMarketFilter[activeTab];
+    const tabData = campaignHubData[activeTab]?.[market];
+    if (!tabData) return [];
+    return Object.keys(tabData).sort();
+  }, [activeTab, tabMarketFilter, campaignHubData]);
+
+  const dynamicSubSubTabs = useMemo(() => {
+    const market = tabMarketFilter[activeTab];
+    const subTab = subTabFilter[activeTab];
+    const subTabData = campaignHubData[activeTab]?.[market]?.[subTab];
+    if (!subTabData) return [];
+    return Object.keys(subTabData).sort();
+  }, [activeTab, tabMarketFilter, subTabFilter, campaignHubData]);
 
   const startAnalysis = async () => {
     setIsAnalyzing(true);
@@ -1299,23 +1405,60 @@ const App = () => {
           }
         }
         const alwaysOnParsed = {};
+        // JP Proactive Container is parsed separately via the dedicated jpProactive
+        // upload slot (different searchPriority + marketContext='Japan').
         for (const cat of AO_CATEGORIES) {
+          if (cat === 'JP Proactive Container') continue;
           if (stream.alwaysOn[cat]) {
             const text = await readFile(stream.alwaysOn[cat]);
             // Always-On: bypass targeting gate (per-demo targeting metadata isn't shipped here).
             alwaysOnParsed[cat] = parseCSVData(text, {}, metaLookup, undefined, isAbs, null, false, true);
           }
         }
-        return { streamGData, mHubParsed, alwaysOnParsed };
+        let jpProactiveParsed = {};
+        if (stream.jpProactive) {
+          const text = await readFile(stream.jpProactive);
+          jpProactiveParsed = parseCSVData(
+            text,
+            {},
+            metaLookup,
+            ['Campaign', 'Campaign Name', 'Entity', 'Trend Identifier', 'Trend', 'Name'],
+            isAbs,
+            'Japan',
+            false,
+            true
+          );
+        }
+        return { streamGData, mHubParsed, alwaysOnParsed, jpProactiveParsed };
       };
 
       const pctResults = await processStream('pct', false);
       const absResults = await processStream('abs', true);
 
+      // Attribution stream — Impressions/CTR ship at campaign granularity here,
+      // and we overlay them onto matching campaigns from the regular streams.
+      let attrData = {};
+      if (uploadedFiles.attribution?.impressions) {
+        const text = await readFile(uploadedFiles.attribution.impressions);
+        attrData = parseCSVData(
+          text,
+          {},
+          metaLookup,
+          ['Campaign', 'Campaign Name', 'Entity'],
+          true,
+          null,
+          false,
+          false
+        );
+      }
+
       // For DAU/DAC/GenAI: pct stream supplies .v (lift %), abs stream supplies .abs.
-      // For Impressions/CTR: only the abs stream supplies values, and they ride .v
-      // (parseCSVData routes them there explicitly).
-      const mergeResults = (pctMap, absMap) => {
+      // For Impressions/CTR: only the abs stream supplies values, and they ride .v.
+      // When `attribution` is given, overlay its Impressions/CTR onto rows whose
+      // campaign name (case- and suffix-insensitive) matches.
+      const getCampName = (key) => key.includes('_') ? key.substring(key.indexOf('_') + 1) : key;
+
+      const mergeResults = (pctMap, absMap, attribution = {}) => {
         const merged = { ...pctMap };
         Object.keys(absMap).forEach(key => {
           if (!merged[key]) {
@@ -1334,23 +1477,59 @@ const App = () => {
             });
           });
         });
+
+        // Attribution overlay: write Impressions/CTR .v onto matching rows.
+        // Anchor rows match by market; standard campaigns by name (with normalisation).
+        Object.keys(merged).forEach(rk => {
+          const matchingAttrKey = Object.keys(attribution).find(ak => {
+            const rkCamp = getCampName(rk);
+            const akCamp = getCampName(ak);
+            if (merged[rk].isAnchor && attribution[ak].isAnchor) {
+              const resMarket = merged[rk].market;
+              const attrMarket = attribution[ak].market;
+              return eq(resMarket, attrMarket) || eq(merged[rk].country, attribution[ak].country);
+            }
+            return eq(rk, ak) || rk.includes(ak) || ak.includes(rk) || eq(rkCamp, akCamp);
+          });
+          if (!matchingAttrKey) return;
+          GENDERS_KEYS.forEach(g => {
+            AGE_BUCKETS.forEach(a => {
+              const impVal = attribution[matchingAttrKey].metrics['Impressions']?.[g]?.[a]?.v || 0;
+              if (impVal > 0 && impVal !== 'NA') merged[rk].metrics['Impressions'][g][a].v = impVal;
+              const ctrVal = attribution[matchingAttrKey].metrics['CTR']?.[g]?.[a]?.v || 0;
+              if (ctrVal > 0 && ctrVal !== 'NA') merged[rk].metrics['CTR'][g][a].v = ctrVal;
+            });
+          });
+        });
+
         return merged;
       };
 
-      const mergedGlobal = mergeResults(pctResults.streamGData, absResults.streamGData);
+      const mergedGlobal = mergeResults(pctResults.streamGData, absResults.streamGData, attrData);
       routeData(mergedGlobal, 'APAC');
 
       const regionalMerged = {};
       MARKET_SEGMENTS.forEach(m => {
-        const mMerged = mergeResults(pctResults.mHubParsed[m] || {}, absResults.mHubParsed[m] || {});
+        const mMerged = mergeResults(pctResults.mHubParsed[m] || {}, absResults.mHubParsed[m] || {}, attrData);
         regionalMerged[m] = Object.values(mMerged);
         routeData(mMerged, m);
       });
 
+      // Regular AO categories — JP Proactive handled separately below.
       AO_CATEGORIES.forEach((cat) => {
-        const mergedAO = mergeResults(pctResults.alwaysOnParsed[cat] || {}, absResults.alwaysOnParsed[cat] || {});
+        if (cat === 'JP Proactive Container') return;
+        const mergedAO = mergeResults(pctResults.alwaysOnParsed[cat] || {}, absResults.alwaysOnParsed[cat] || {}, attrData);
         routeData(mergedAO, 'India', 'AlwaysOn', cat);
       });
+
+      // JP Proactive Container: routed into AlwaysOn → Japan → JP Proactive Container.
+      // The dedicated lane keeps it visible in the AlwaysOn tab without colliding with
+      // the standard categories that ship without trend dates.
+      const mergedJp = mergeResults(pctResults.jpProactiveParsed || {}, absResults.jpProactiveParsed || {}, attrData);
+      Object.values(mergedJp).forEach(row => {
+        if (!row.market) row.market = 'Japan';
+      });
+      routeData(mergedJp, 'Japan', 'AlwaysOn', 'JP Proactive Container');
 
       const finalStructData = {};
       Object.keys(structDataTemp).forEach(tab => {
@@ -1380,11 +1559,14 @@ const App = () => {
         if (uFiles.pct.global) rawFiles['pct-global'] = uFiles.pct.global;
         for (const [m, f] of Object.entries(uFiles.pct.countryHB)) { if (f) rawFiles[`pct-market-${m}`] = f; }
         for (const [c, f] of Object.entries(uFiles.pct.alwaysOn)) { if (f) rawFiles[`pct-ao-${c}`] = f; }
+        if (uFiles.pct.jpProactive) rawFiles['pct-jp-proactive'] = uFiles.pct.jpProactive;
         if (uFiles.abs.global) rawFiles['abs-global'] = uFiles.abs.global;
         for (const [m, f] of Object.entries(uFiles.abs.countryHB)) { if (f) rawFiles[`abs-market-${m}`] = f; }
         for (const [c, f] of Object.entries(uFiles.abs.alwaysOn)) { if (f) rawFiles[`abs-ao-${c}`] = f; }
+        if (uFiles.abs.jpProactive) rawFiles['abs-jp-proactive'] = uFiles.abs.jpProactive;
         if (uFiles.shared.campaignInfo) rawFiles['shared-meta'] = uFiles.shared.campaignInfo;
         if (uFiles.shared.pauseRelive) rawFiles['shared-instructions'] = uFiles.shared.pauseRelive;
+        if (uFiles.attribution?.impressions) rawFiles['attribution-impressions'] = uFiles.attribution.impressions;
 
         await saveSnapshot({
           weekId,
@@ -1564,10 +1746,15 @@ const App = () => {
         return merged;
       };
 
+      // Attribution stream — overlays Impressions/CTR onto matching campaigns.
+      const attrData = csvFiles['attribution-impressions']
+        ? parseCSVData(csvFiles['attribution-impressions'], {}, metaLookup, ['Campaign', 'Campaign Name', 'Entity'], true, null, false, false)
+        : {};
+
       // Parse global streams
       const pctGlobal = csvFiles['pct-global'] ? parseCSVData(csvFiles['pct-global'], {}, metaLookup, ['Country', 'Market', 'Campaign'], false, null, true, false) : {};
       const absGlobal = csvFiles['abs-global'] ? parseCSVData(csvFiles['abs-global'], {}, metaLookup, ['Country', 'Market', 'Campaign'], true, null, true, false) : {};
-      const mergedGlobal = mergeResults(pctGlobal, absGlobal);
+      const mergedGlobal = mergeResults(pctGlobal, absGlobal, attrData);
       routeData(mergedGlobal, 'APAC');
 
       // Detect reporting date from pct-global
@@ -1588,18 +1775,30 @@ const App = () => {
       MARKET_SEGMENTS.forEach(m => {
         const pctMarket = csvFiles[`pct-market-${m}`] ? parseCSVData(csvFiles[`pct-market-${m}`], {}, metaLookup, undefined, false, m, false, false) : {};
         const absMarket = csvFiles[`abs-market-${m}`] ? parseCSVData(csvFiles[`abs-market-${m}`], {}, metaLookup, undefined, true, m, false, false) : {};
-        const mMerged = mergeResults(pctMarket, absMarket);
+        const mMerged = mergeResults(pctMarket, absMarket, attrData);
         regionalMerged[m] = Object.values(mMerged);
         routeData(mMerged, m);
       });
 
-      // Parse always-on streams
+      // Parse always-on streams (skip JP Proactive — it's loaded via dedicated keys)
       AO_CATEGORIES.forEach(cat => {
+        if (cat === 'JP Proactive Container') return;
         const pctAO = csvFiles[`pct-ao-${cat}`] ? parseCSVData(csvFiles[`pct-ao-${cat}`], {}, metaLookup, undefined, false, null, false, true) : {};
         const absAO = csvFiles[`abs-ao-${cat}`] ? parseCSVData(csvFiles[`abs-ao-${cat}`], {}, metaLookup, undefined, true, null, false, true) : {};
-        const mergedAO = mergeResults(pctAO, absAO);
+        const mergedAO = mergeResults(pctAO, absAO, attrData);
         routeData(mergedAO, 'India', 'AlwaysOn', cat);
       });
+
+      // JP Proactive Container (own searchPriority + Japan marketContext, isAlwaysOnData)
+      const pctJp = csvFiles['pct-jp-proactive']
+        ? parseCSVData(csvFiles['pct-jp-proactive'], {}, metaLookup, ['Campaign', 'Campaign Name', 'Entity', 'Trend Identifier', 'Trend', 'Name'], false, 'Japan', false, true)
+        : {};
+      const absJp = csvFiles['abs-jp-proactive']
+        ? parseCSVData(csvFiles['abs-jp-proactive'], {}, metaLookup, ['Campaign', 'Campaign Name', 'Entity', 'Trend Identifier', 'Trend', 'Name'], true, 'Japan', false, true)
+        : {};
+      const mergedJp = mergeResults(pctJp, absJp, attrData);
+      Object.values(mergedJp).forEach(row => { if (!row.market) row.market = 'Japan'; });
+      routeData(mergedJp, 'Japan', 'AlwaysOn', 'JP Proactive Container');
 
       // Build final campaign hub structure
       const finalStructData = {};
@@ -1633,26 +1832,13 @@ const App = () => {
     }
   }, []);
 
+  // Reset subtab filters back to "ALL" when the user switches markets — old
+  // selections from a different market won't have matching buckets.
   useEffect(() => {
-    if (activeTab && campaignHubData[activeTab]) {
-      const activeMarket = tabMarketFilter[activeTab] || 'India';
-      const subs = getSubTabs(activeTab, activeMarket);
-      if (subs.length > 0) {
-        const currentSub = subTabFilter[activeTab];
-        const nextSub = subs.includes(currentSub) ? currentSub : subs[0];
-        if (currentSub !== nextSub) setSubTabFilter(p => ({...p, [activeTab]: nextSub}));
-        const subSubs = getSubSubTabs(activeTab, activeMarket, nextSub);
-        if (subSubs.length > 0) {
-          const currentSS = subSubTabFilter[activeTab];
-          const nextSS = subSubs.includes(currentSS) ? currentSS : subSubs[0];
-          if (currentSS !== nextSS) setSubSubTabFilter(p => ({...p, [activeTab]: nextSS}));
-        } else setSubSubTabFilter(p => ({...p, [activeTab]: 'Default'}));
-      } else {
-        setSubTabFilter(p => ({...p, [activeTab]: 'Generic'}));
-        setSubSubTabFilter(p => ({...p, [activeTab]: 'Default'}));
-      }
-    }
-  }, [activeTab, tabMarketFilter, campaignHubData, getSubTabs, getSubSubTabs, subTabFilter, subSubTabFilter]);
+    setSubTabFilter(p => ({ ...p, [activeTab]: '' }));
+    setSubSubTabFilter(p => ({ ...p, [activeTab]: '' }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, tabMarketFilter[activeTab]]);
 
   const handleFileUpload = (stream, type, f, k) => {
     setUploadedFiles(prev => {
@@ -1671,7 +1857,15 @@ const App = () => {
       <aside className={`${isSidebarOpen ? 'w-72' : 'w-20'} transition-all duration-300 bg-[#1a1a1a] border-r border-[#3a3a3a] flex flex-col z-50`}>
         <div className="p-6 flex items-center gap-3 mb-6 shrink-0 border-b border-[#3a3a3a]">
           <div className="bg-[#FF0000] p-2 rounded-lg flex items-center justify-center"><Brain className="w-5 h-5 text-white" /></div>
-          {isSidebarOpen && <div><h2 className="text-lg font-bold tracking-tight">BRAIN <span className="text-[#FF0000]">2.0</span></h2><p className="text-[8px] font-bold uppercase text-[#808080] tracking-widest">APAC Shorts</p></div>}
+          {isSidebarOpen && (
+            <div className="flex-1">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-bold tracking-tight">BRAIN <span className="text-[#FF0000]">2.0</span></h2>
+                <a href={DRIVE_RESOURCE_LINK} target="_blank" rel="noopener noreferrer" className="text-[#444] hover:text-white transition-colors" title="Source Drive"><DriveIcon className="w-4 h-4" /></a>
+              </div>
+              <p className="text-[8px] font-bold uppercase text-[#808080] tracking-widest">APAC Shorts</p>
+            </div>
+          )}
         </div>
         <nav className="flex-1 px-4 space-y-1 overflow-y-auto">
           {NAV_ITEMS.map(item => (
@@ -1731,6 +1925,15 @@ const App = () => {
             </div>
           )}
         </nav>
+        {/* Sidebar collapse toggle — at the bottom so it's always reachable */}
+        <button
+          type="button"
+          onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+          className="p-6 border-t border-[#3a3a3a] text-[#555] hover:text-white flex items-center justify-center transition-colors"
+          title={isSidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
+        >
+          {isSidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+        </button>
       </aside>
 
       <div className="flex-1 flex flex-col overflow-hidden relative">
@@ -1742,7 +1945,7 @@ const App = () => {
         </header>
 
         <main className="flex-1 overflow-auto p-10 relative">
-          {activeTab === 'OKR' && <OKRAndRecsView globalData={globalData} regionalData={regionalData} latestDate={latestGlobalDate} />}
+          {activeTab === 'OKR' && <OKRAndRecsView globalData={globalData} regionalData={regionalData} latestDate={latestGlobalDate} quarterStart={quarterStart} />}
           {(activeTab === 'Global Hub' || activeTab === 'Market Hub') && (
             <div className="space-y-8 animate-in fade-in">
               <MetricControlHub
@@ -1760,9 +1963,20 @@ const App = () => {
                 </div>
               )}
               <MasterTableView
-                data={activeTab === 'Global Hub' ? globalData : (regionalData[activeMarketSubTab] || [])}
+                data={activeTab === 'Global Hub' ? globalData : (() => {
+                  // Anchor-row injection: prepend the global anchor for the selected
+                  // market so users can see Market Hub campaigns alongside their reference.
+                  const campaigns = (regionalData[activeMarketSubTab] || []).filter(c =>
+                    c.country && c.country.toUpperCase() !== 'UNKNOWN'
+                  );
+                  const globalRef = globalData.find(d =>
+                    eq(d.country, activeMarketSubTab) || eq(d.country, MARKET_KEYS[activeMarketSubTab])
+                  );
+                  return globalRef ? [{ ...globalRef, isAnchor: true }, ...campaigns] : campaigns;
+                })()}
                 activeMetrics={activeMetrics.filter(m => allowedMetrics.includes(m))}
                 isCampaignView={activeTab === 'Market Hub'}
+                hideDates={activeTab === 'Global Hub'}
                 latestGlobalDate={latestGlobalDate}
               />
             </div>
@@ -1776,35 +1990,67 @@ const App = () => {
                 toggleMetric={m => setActiveMetrics(p => p.includes(m) ? (p.length > 1 ? p.filter(x => x !== m) : p) : [...p, m])}
                 handleAllToggle={() => setActiveMetrics(p => p.length === allowedMetrics.length ? ['DAU-SCT'] : [...allowedMetrics])}
               />
-              <div className="flex flex-col gap-6">
+              {/* Pill rows replaced with dropdowns; empty value = "ALL" (flatten across buckets) */}
+              <div className="flex flex-wrap gap-4">
                 <div className="flex items-center gap-4 p-4 bg-[#1a1a1a] rounded-lg border border-[#3a3a3a] w-fit">
                   <MapPin className="w-6 h-6 text-red-600" />
                   <select value={tabMarketFilter[activeTab]} onChange={e => setTabMarketFilter(p => ({ ...p, [activeTab]: e.target.value }))} className="bg-transparent text-white font-bold uppercase outline-none cursor-pointer pr-4">
                     {MARKET_SEGMENTS.map(m => <option key={m} value={m} className="bg-neutral-900">{m}</option>)}
                   </select>
                 </div>
-                {getSubTabs(activeTab, tabMarketFilter[activeTab]).length > 0 && (
-                  <div className="flex gap-2 p-1 bg-[#1a1a1a] rounded-lg w-fit border border-[#3a3a3a] overflow-x-auto max-w-full">
-                    {getSubTabs(activeTab, tabMarketFilter[activeTab]).map(s => (
-                      <button key={s} onClick={() => setSubTabFilter(p => ({ ...p, [activeTab]: s }))} className={`px-5 py-2 rounded-md text-[9px] font-bold uppercase transition-all cursor-pointer whitespace-nowrap ${subTabFilter[activeTab] === s ? 'bg-[#FF0000] text-white' : 'text-[#808080] hover:text-white'}`}>{s}</button>
-                    ))}
+                {dynamicSubTabs.length > 0 && (
+                  <div className="flex items-center gap-4 p-4 bg-[#1a1a1a] rounded-lg border border-[#3a3a3a] w-fit">
+                    <Filter className="w-6 h-6 text-amber-500" />
+                    <select value={subTabFilter[activeTab]} onChange={e => setSubTabFilter(p => ({ ...p, [activeTab]: e.target.value }))} className="bg-transparent text-white font-bold uppercase outline-none cursor-pointer pr-4">
+                      <option value="" className="bg-neutral-900">ALL SUB TABS</option>
+                      {dynamicSubTabs.map(cat => <option key={cat} value={cat} className="bg-neutral-900">{cat}</option>)}
+                    </select>
                   </div>
                 )}
-                {getSubSubTabs(activeTab, tabMarketFilter[activeTab], subTabFilter[activeTab]).length > 0 && (
-                  <div className="flex gap-2 p-1 bg-[#1a1a1a] rounded-lg w-fit border border-[#3a3a3a] overflow-x-auto max-w-full">
-                    {getSubSubTabs(activeTab, tabMarketFilter[activeTab], subTabFilter[activeTab]).map(ss => (
-                      <button key={ss} onClick={() => setSubSubTabFilter(p => ({ ...p, [activeTab]: ss }))} className={`px-4 py-1.5 rounded-md text-[8px] font-bold uppercase transition-all cursor-pointer whitespace-nowrap ${subSubTabFilter[activeTab] === ss ? 'bg-white text-black' : 'text-[#555] hover:text-white'}`}>{ss}</button>
-                    ))}
+                {activeTab !== 'AlwaysOn' && dynamicSubSubTabs.length > 0 && subTabFilter[activeTab] !== "" && (
+                  <div className="flex items-center gap-4 p-4 bg-[#1a1a1a] rounded-lg border border-[#3a3a3a] w-fit">
+                    <ListTree className="w-6 h-6 text-purple-500" />
+                    <select value={subSubTabFilter[activeTab]} onChange={e => setSubSubTabFilter(p => ({ ...p, [activeTab]: e.target.value }))} className="bg-transparent text-white font-bold uppercase outline-none cursor-pointer pr-4">
+                      <option value="" className="bg-neutral-900">ALL SUB SUB TABS</option>
+                      {dynamicSubSubTabs.map(cat => <option key={cat} value={cat} className="bg-neutral-900">{cat}</option>)}
+                    </select>
                   </div>
                 )}
               </div>
               <MasterTableView
                 data={(() => {
                   const mkt = tabMarketFilter[activeTab];
-                  const sub = subTabFilter[activeTab] || 'Generic';
-                  const ss = subSubTabFilter[activeTab] || 'Default';
-                  const path = campaignHubData[activeTab]?.[mkt]?.[sub];
-                  return ss === 'Default' || !ss ? (path ? Object.values(path).flat() : []) : (path?.[ss] || []);
+                  const sub = subTabFilter[activeTab];
+                  const ss = subSubTabFilter[activeTab];
+
+                  // Strict isolation for JP Proactive Container — the routing override
+                  // dumps everything tagged with this subtab into the Japan/AlwaysOn lane;
+                  // the flatten walk handles the slightly different nested shape it produces.
+                  if (activeTab === 'AlwaysOn' && sub === 'JP Proactive Container') {
+                    const jpData = campaignHubData['AlwaysOn']?.['Japan']?.['JP Proactive Container'];
+                    if (!jpData) return [];
+                    return Object.values(jpData).flatMap(x => Array.isArray(x) ? x : Object.values(x).flat());
+                  }
+
+                  // ALL SUB TABS: flatten across every sub/sub-sub bucket for the market.
+                  if (!sub) {
+                    const allForMarket = campaignHubData[activeTab]?.[mkt];
+                    if (!allForMarket) return [];
+                    return Object.values(allForMarket).flatMap(st => Object.values(st).flat());
+                  }
+
+                  // ALL SUB SUB TABS (or AlwaysOn — flat trend list): flatten the subtab.
+                  if (!ss || activeTab === 'AlwaysOn') {
+                    const allForSub = campaignHubData[activeTab]?.[mkt]?.[sub];
+                    if (!allForSub) return [];
+                    const rows = Object.values(allForSub).flat();
+                    // Sort AlwaysOn trends by start date so the table reads chronologically.
+                    return activeTab === 'AlwaysOn'
+                      ? [...rows].sort((a, b) => (a.explicitTrendStart || a.dataMinDate || '').localeCompare(b.explicitTrendStart || b.dataMinDate || ''))
+                      : rows;
+                  }
+
+                  return campaignHubData[activeTab]?.[mkt]?.[sub]?.[ss] || [];
                 })()}
                 activeMetrics={activeMetrics.filter(m => allowedMetrics.includes(m))}
                 isCampaignView
