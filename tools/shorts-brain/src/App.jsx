@@ -216,6 +216,12 @@ const parseCSVData = (text, existingAcc = {}, metaMap = {}, searchPriority = ['C
 
       const isRatioRow = !forceAbs && (rowValTypeRaw === 'RATIO (%)' || rowValTypeRaw === 'RATIO' || rowValTypeRaw.includes('LIFT') || rowValTypeRaw === '') && (rowSlice === 'CONTROL' || rowSlice === '' || rowSlice === 'TOTAL');
 
+      // Impressions/CTR rows often ship with arbitrary slice values like
+      // 'Sub-Total' or 'Aggregate' since they're whole-population reach
+      // metrics, not test-vs-control deltas. Skip the slice gate for these
+      // value types so legitimate Impressions/CTR data isn't dropped.
+      const isImpsCtrRow = rowValTypeRaw.includes('IMPRESSIONS') || rowValTypeRaw.includes('CTR');
+
       const isAbsRow = forceAbs && (
         rowValTypeRaw.includes('DELTA') ||
         rowValTypeRaw === '' ||
@@ -225,6 +231,7 @@ const parseCSVData = (text, existingAcc = {}, metaMap = {}, searchPriority = ['C
         rowValTypeRaw.includes('VOLUME') ||
         rowValTypeRaw.includes('CTR')
       ) && (
+        isImpsCtrRow ||
         rowSlice === 'CONTROL' ||
         rowSlice === 'TEST' ||
         rowSlice === 'TREATMENT' ||
@@ -589,11 +596,11 @@ const MasterTableView = ({ data, activeMetrics, latestGlobalDate, isCampaignView
                                   ) : (
                                     <>
                                       <span>
-                                        {(isAnchorRow && (m === 'Impressions' || m === 'CTR') && node.v === 0) ? 'NA' : (
-                                          m === 'Impressions' ? formatCompactNumber(node.v) :
-                                            m === 'CTR' ? `${(node.v || 0).toFixed(2)}%` :
-                                              (node.v === 0 ? '0.00' : (node.v > 0 ? `+${node.v.toFixed(2)}` : `${node.v.toFixed(2)}`))
-                                        )}
+                                        {/* Trust parser output: 'NA' string already handled above; here numeric 0
+                                            renders as a real zero rather than masquerading as missing data. */}
+                                        {m === 'Impressions' ? formatCompactNumber(node.v) :
+                                          m === 'CTR' ? `${(node.v || 0).toFixed(2)}%` :
+                                            (node.v === 0 ? '0.00' : (node.v > 0 ? `+${node.v.toFixed(2)}` : `${node.v.toFixed(2)}`))}
                                       </span>
                                       {node.abs !== 0 && node.abs !== 'NA' && m !== 'Impressions' && m !== 'CTR' && (
                                         <span className="text-[9px] opacity-50 font-sans tracking-tighter block mt-0.5 font-normal leading-none">
@@ -1202,9 +1209,22 @@ const App = ({ userEmail }) => {
 
   // Dropdown-driven subtab filters with implicit "ALL" (empty-string sentinel)
   // — replaces the pill-row UX so users can flatten across all sub-sub buckets.
+  // For AlwaysOn we union across markets: AO categories are market-agnostic
+  // and JP Proactive Container lives only under 'Japan' so picking market=India
+  // would otherwise hide it from the dropdown. The render-layer isolation
+  // branch (search "STRICT ISOLATE JP") routes the lookup correctly when picked.
   const dynamicSubTabs = useMemo(() => {
+    const tabAll = campaignHubData[activeTab];
+    if (!tabAll) return [];
+    if (activeTab === 'AlwaysOn') {
+      const acc = new Set();
+      Object.values(tabAll).forEach(mktBucket => {
+        Object.keys(mktBucket || {}).forEach(k => acc.add(k));
+      });
+      return [...acc].sort();
+    }
     const market = tabMarketFilter[activeTab];
-    const tabData = campaignHubData[activeTab]?.[market];
+    const tabData = tabAll[market];
     if (!tabData) return [];
     return Object.keys(tabData).sort();
   }, [activeTab, tabMarketFilter, campaignHubData]);
