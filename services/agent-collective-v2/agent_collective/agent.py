@@ -57,6 +57,23 @@ MARKET_OUTPUT_DIR = OUTPUT_DIR / MARKET
 KB_CACHE_DIR = OUTPUT_DIR / "kb_cache"
 
 
+# =========================================================================
+# Template catalog
+# =========================================================================
+# Maps Shorts Creation Tool feature_name → Remotion template schema.
+# 1:1 for now. Extend to a list per key when multiple templates exist per tool.
+
+TEMPLATE_CATALOG: dict[str, dict] = {
+    "Photo to Video": {
+        "template_id": "veo_shorts_v1",
+        "template_version": "1.0",
+        "selected_image_count": 2,
+        "has_generated_video": True,
+        "has_prompt_text": True,
+    },
+}
+
+
 def _get_kb_dirs(market: str) -> list[Path]:
     """Return the ordered list of KB folders for a given market.
 
@@ -575,6 +592,32 @@ def _make_timing_before_callback(agent_name: str):
     """Factory: before_agent_callback that records when an agent starts."""
     async def callback(callback_context):
         _record_agent_start(callback_context.session.id, agent_name)
+    return callback
+
+
+def _make_creative_phase_before_callback():
+    """Before-callback for creative_phase.
+
+    Reads marketing_brief from session state, looks up the featured tool in
+    TEMPLATE_CATALOG, and writes the matching template schema (or None) as
+    template_schema to session state. All downstream prompt conditionals gate
+    on this key.
+    """
+    async def callback(callback_context) -> None:
+        brief_raw = callback_context.state.get("marketing_brief")
+        if not brief_raw:
+            callback_context.state["template_schema"] = None
+            return
+        brief = _parse_state_value(brief_raw)
+        feature_name = (
+            brief.get("proposition", {})
+                 .get("featured_tool", {})
+                 .get("feature_name", "")
+        ) or ""
+        template = TEMPLATE_CATALOG.get(feature_name)
+        callback_context.state["template_schema"] = (
+            json.dumps(template) if template else None
+        )
     return callback
 
 
@@ -2036,6 +2079,7 @@ creative_presenter = LlmAgent(
 creative_phase = SequentialAgent(
     name="creative_phase",
     sub_agents=[creative_director, creative_presenter],
+    before_agent_callback=_make_creative_phase_before_callback(),
 )
 
 
