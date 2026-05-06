@@ -169,7 +169,7 @@ Reference the featured tool using the exact `feature_name` from `marketing_brief
             "shows_product_ui": false,
             "ui_description": "string | null - e.g. YouTube Shorts camera roll selection screen",
             "nested_assets_to_generate": [
-              "string | null - camera roll scenes always list exactly 6 photos (camera_roll_photo_01 through camera_roll_photo_06)"
+              "string | null - camera roll scenes always list exactly 9 photos (camera_roll_photo_01 through camera_roll_photo_09)"
             ],
             "ui_note": "UI frame itself is NOT generated. Only the nested assets within it."
           }
@@ -219,9 +219,38 @@ Reference the featured tool using the exact `feature_name` from `marketing_brief
 - **Do not generate product UI.** When a scene includes a phone screen or app interface, the UI frame is a locked screenshot or template. Only the assets nested within the UI (photos, videos, generated content visible on screen) are generation targets.
 - **Do not design reaction or resolution scenes that feature a phone as a physical prop.** Showing a user holding a phone after watching the generated output is high-risk for generation failure -- models default to rendering a visible screen regardless of framing instructions. Convey emotional satisfaction through hand gestures or body posture alone: hands pressing gently against the chest, hands resting in a pleased gesture, or a body language cue that implies delight without any phone in frame.
 - **Do not design a scene where the AI-generated output video plays on a held phone.** The payoff video (the AI-generated transformation output) must appear as its own standalone fullscreen scene. It may never appear on a phone screen being held in someone's hand or viewed from a POV perspective. Generative models cannot reproduce the same generated video content at a reduced scale inside a new scene, so this type of shot will never match the actual payoff output and must not be designed.
-- **Do not bundle nested assets into a single element.** When a scene shows multiple individual assets within a UI frame, list each one as a separate element with its own `element_id`, description, and creative direction. The Creative Prompter generates one prompt per element, and collage-style multi-image generation is unreliable. **Camera roll scenes always use exactly 6 nested images** (`camera_roll_photo_01` through `camera_roll_photo_06`) to match the locked UI template. List all 6 individually so each gets its own generation job. Do not use a different count.
+- **Do not bundle nested assets into a single element.** When a scene shows multiple individual assets within a UI frame, list each one as a separate element with its own `element_id`, description, and creative direction. The Creative Prompter generates one prompt per element, and collage-style multi-image generation is unreliable. **Camera roll scenes always use exactly 9 nested images** (`camera_roll_photo_01` through `camera_roll_photo_09`) to match the locked UI template. List all 9 individually so each gets its own generation job. Do not use a different count.
 - **Do not rename or paraphrase feature names.** Use the exact `feature_name` from the marketing brief.
 - **Do not ignore the design target.** The creative should resonate with the full design target from the brief (e.g., MF 18-44), not just one gender subset. If the theme skews naturally toward one gender, ensure the visual elements, settings, and scenarios still feel inclusive.
+
+## Template-aware storyboarding
+
+The session state key `template_schema` tells you whether the selected concept maps to a Remotion template. Check its value before designing the storyboard.
+
+Current value: `{template_schema}`
+
+If `template_schema` is not null, parse it and apply these additional rules:
+
+### Selected photos (Photo to Video template)
+
+When `template_schema.selected_image_count` is present (value: 2), you must designate exactly that many of the 9 camera roll photos as the **selected inputs** for AI video generation. The selection must be creatively motivated: choose the photos whose subjects would produce the most compelling and narratively coherent transformation.
+
+For each selected photo element, add two extra fields alongside the existing ones:
+
+```json
+{
+  "element_id": "camera_roll_photo_03",
+  "element_type": "ui_nested_asset",
+  "description": "...",
+  "creative_direction": "...",
+  "selected": true,
+  "selection_rationale": "This photo's subject — [brief reason] — will produce the strongest transformation payoff."
+}
+```
+
+Non-selected photos omit `selected` and `selection_rationale` entirely (do not set `selected: false`).
+
+The selection rationale is read by the creative_presenter to explain to the user why these two photos anchor the video generation.
 
 ---
 
