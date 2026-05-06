@@ -156,6 +156,8 @@ Reference the featured tool using the exact `feature_name` from `marketing_brief
   "market": "string - country code from marketing_brief.market.country_code",
   "market_nationality": "string - carried from marketing_brief.market.market_nationality",
   "created_at": "ISO 8601 timestamp",
+  "template_id": "string | null - template identifier when template active, else omit",
+  "template_version": "string | null - e.g. 1.0 when template active, else omit",
   "total_reference_images": 0,
   "total_jobs": 0,
   "total_text_items": 0,
@@ -181,6 +183,7 @@ Reference the featured tool using the exact `feature_name` from `marketing_brief
   "jobs": [
     {
       "job_id": "string - e.g. job_001",
+      "slot_id": "string | null - e.g. gridImage1, generatedVideo, or null",
       "deliverable_id": "string - e.g. V1 or S1",
       "scene_id": "string - e.g. scene_01",
       "element_id": "string - e.g. nested_01",
@@ -201,6 +204,10 @@ Reference the featured tool using the exact `feature_name` from `marketing_brief
       "status": "pending"
     }
   ],
+  "selected_slot_mapping": {
+    "selectedImage1": "string | null - job_id of first selected camera roll photo, null if no template",
+    "selectedImage2": "string | null - job_id of second selected camera roll photo, null if no template"
+  },
   "text_items": [
     {
       "deliverable_id": "string - e.g. V1",
@@ -215,6 +222,49 @@ Reference the featured tool using the exact `feature_name` from `marketing_brief
   ]
 }
 ```
+
+## Template-aware manifest generation
+
+The session state key `template_schema` tells you whether this run maps to a Remotion template.
+
+Current value: `{template_schema}`
+
+If `template_schema` is not null, apply these additional rules when building the manifest:
+
+### Top-level template fields
+
+Add two fields at the root of the manifest object:
+
+```json
+{
+  "template_id": "<template_schema.template_id>",
+  "template_version": "<template_schema.template_version>",
+  ...
+}
+```
+
+### slot_id per job
+
+For every job, add a `slot_id` field. Set it according to these rules:
+
+- **Camera roll photos** (`element_type: "ui_nested_asset"`, `element_id` matching `camera_roll_photo_01` through `camera_roll_photo_09`): assign `slot_id` values `gridImage1` through `gridImage9` in the same order (photo_01 → gridImage1, photo_02 → gridImage2, … photo_09 → gridImage9).
+- **Veo payoff video** (the climax scene's video job, `asset_type: "video"` from a `hook`/`body`/`climax`/`resolution` scene that is not a camera roll photo): assign `slot_id: "generatedVideo"`.
+- **All other jobs**: assign `slot_id: null`.
+
+### selected_slot_mapping
+
+After the `jobs` array, add a `selected_slot_mapping` object. Read the creative_package storyboard and find the camera roll photos that have `"selected": true`. Map their template slot IDs to their job IDs:
+
+```json
+"selected_slot_mapping": {
+  "selectedImage1": "job_003",
+  "selectedImage2": "job_007"
+}
+```
+
+Where `job_003` and `job_007` are the `job_id` values of the selected camera roll photo jobs. The order matches the order the selected photos appear in the storyboard element list.
+
+If `template_schema` is null, omit `template_id`, `template_version`, and `selected_slot_mapping` from the manifest entirely, and set `slot_id: null` on all jobs.
 
 ## What to avoid
 
@@ -245,6 +295,7 @@ You are a specialist agent in an automated pipeline. You are NOT talking to a us
 **State reads:**
 - `creative_package` - The Creative Director's storyboard concepts, recurring elements, and policy compliance
 - `marketing_brief` - Audience context, featured tool details, ad copy constraints, brand voice, creative guardrails
+- `template_schema` - Remotion template schema if the active featured tool maps to a template, else null
 
 **State writes:**
 - Your output is stored as `generation_manifest`.
@@ -274,3 +325,6 @@ The values below are injected from session state. Use them as your primary input
 
 ### marketing_brief
 {marketing_brief}
+
+### template_schema
+{template_schema}
