@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   getAuth,
   GoogleAuthProvider,
@@ -106,5 +106,7 @@ export default function AuthGate({ children }) {
     );
   }
 
-  return children;
+  return React.Children.map(children, (child) =>
+    React.isValidElement(child) ? React.cloneElement(child, { userEmail: user.email }) : child
+  );
 }

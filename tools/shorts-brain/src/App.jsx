@@ -19,6 +19,7 @@ import { saveSnapshot, loadSnapshotIndex, loadSnapshotFiles, deleteSnapshot, get
 
 // --- 1. CONFIGURATION & CONSTANTS ---
 const DRIVE_RESOURCE_LINK = "https://drive.google.com/corp/drive/folders/18GCtCrz-Bs1YdXKtQs-tjugb6xudULaX?resourcekey=0-gMJCegK7SZkhgJeT_YTjSw";
+const DATA_INGESTION_ADMINS = ['ivanho.wz@gmail.com', 'kanishak@google.com'];
 
 const M_TYPES = ['DAU-SCT', 'DAC-SCT', 'GenAI DAU-SCT', 'Impressions', 'CTR'];
 const MARKET_SEGMENTS = ['India', 'Indonesia', 'Japan', 'South Korea', 'AUNZ'];
@@ -1155,9 +1156,11 @@ const LandingPage = ({ uploadedFiles, handleFileUpload, startAnalysis, isAnalyzi
   );
 };
 
-const App = () => {
+const App = ({ userEmail }) => {
+  const isDataIngestionAdmin = DATA_INGESTION_ADMINS.includes(userEmail?.toLowerCase());
   const [isAnalyzed, setIsAnalyzed] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('OKR');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [activeMetrics, setActiveMetrics] = useState(['DAU-SCT']);
@@ -1585,13 +1588,6 @@ const App = () => {
     } catch (e) { console.error(e); } finally { setIsAnalyzing(false); }
   };
 
-  // Load memory index on mount
-  useEffect(() => {
-    loadSnapshotIndex(new Date().getFullYear())
-      .then(idx => setMemoryIndex(idx.snapshots || []))
-      .catch(() => {});
-  }, []);
-
   // Load a historical snapshot: download raw CSVs and re-parse them
   const loadHistoricalWeek = useCallback(async (weekId) => {
     setIsLoadingMemory(true);
@@ -1832,6 +1828,21 @@ const App = () => {
     }
   }, []);
 
+  // Load memory index on mount and auto-load the most recent snapshot
+  useEffect(() => {
+    loadSnapshotIndex(new Date().getFullYear())
+      .then(async (idx) => {
+        const snaps = idx.snapshots || [];
+        setMemoryIndex(snaps);
+        if (snaps.length > 0) {
+          const latest = snaps[snaps.length - 1];
+          await loadHistoricalWeek(latest.weekId);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setInitialLoading(false));
+  }, [loadHistoricalWeek]);
+
   // Reset subtab filters back to "ALL" when the user switches markets — old
   // selections from a different market won't have matching buckets.
   useEffect(() => {
@@ -1849,6 +1860,15 @@ const App = () => {
       return { ...prev, [stream]: updatedStream };
     });
   };
+
+  if (initialLoading) return (
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0a0a0a', color: '#e5e5e5', fontFamily: 'system-ui, sans-serif' }}>
+      <div style={{ textAlign: 'center' }}>
+        <div style={{ fontSize: 22, fontWeight: 700 }}>BRAIN <span style={{ color: '#FF0000' }}>2.0</span></div>
+        <p style={{ color: '#737373', fontSize: 13, marginTop: 8 }}>Loading latest data…</p>
+      </div>
+    </div>
+  );
 
   if (!isAnalyzed) return <LandingPage uploadedFiles={uploadedFiles} handleFileUpload={handleFileUpload} startAnalysis={startAnalysis} isAnalyzing={isAnalyzing} memoryIndex={memoryIndex} loadHistoricalWeek={loadHistoricalWeek} isLoadingMemory={isLoadingMemory} historicalSnapshots={historicalSnapshots} />;
 
@@ -1868,11 +1888,14 @@ const App = () => {
           )}
         </div>
         <nav className="flex-1 px-4 space-y-1 overflow-y-auto">
-          {NAV_ITEMS.map(item => (
-            <button key={item.id} onClick={() => { if (item.id === 'Upload') setIsAnalyzed(false); else setActiveTab(item.id); }} className={`w-full flex items-center gap-3 p-3 rounded-lg transition-all group relative cursor-pointer ${activeTab === item.id ? 'bg-[#FF0000]/10 text-[#FF0000] border border-[#FF0000]/20' : 'text-[#808080] hover:bg-white/5 hover:text-white border border-transparent'}`}>
-              <item.icon className="w-5 h-5 shrink-0" />{isSidebarOpen && <span className="text-[11px] font-bold uppercase tracking-wider">{item.label}</span>}
-            </button>
-          ))}
+          {NAV_ITEMS.map(item => {
+            const locked = item.id === 'Upload' && !isDataIngestionAdmin;
+            return (
+              <button key={item.id} onClick={() => { if (locked) return; if (item.id === 'Upload') setIsAnalyzed(false); else setActiveTab(item.id); }} className={`w-full flex items-center gap-3 p-3 rounded-lg transition-all group relative ${locked ? 'cursor-not-allowed opacity-40' : 'cursor-pointer'} ${activeTab === item.id ? 'bg-[#FF0000]/10 text-[#FF0000] border border-[#FF0000]/20' : 'text-[#808080] hover:bg-white/5 hover:text-white border border-transparent'}`} title={locked ? 'Restricted — admin access only' : item.label}>
+                <item.icon className="w-5 h-5 shrink-0" />{isSidebarOpen && <span className="text-[11px] font-bold uppercase tracking-wider">{item.label}{locked ? ' 🔒' : ''}</span>}
+              </button>
+            );
+          })}
           <button onClick={() => setIsCampaignTypeExpanded(!isCampaignTypeExpanded)} className="w-full flex items-center justify-between p-3 rounded-lg text-[#808080] hover:text-white cursor-pointer border border-transparent">
             <div className="flex items-center gap-3"><FolderKanban className="w-5 h-5 shrink-0" />{isSidebarOpen && <span className="text-[11px] font-bold uppercase tracking-wider">Campaign Deepdive</span>}</div>
             {isSidebarOpen && (isCampaignTypeExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />)}
