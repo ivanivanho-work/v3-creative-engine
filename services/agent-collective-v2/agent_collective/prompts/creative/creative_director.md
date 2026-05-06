@@ -162,7 +162,9 @@ Reference the featured tool using the exact `feature_name` from `marketing_brief
               "element_type": "character | prop | environment | ui_nested_asset | text_overlay",
               "description": "string - what this element is and does in the scene",
               "creative_direction": "string | null - only for scene-specific elements not in recurring_elements",
-              "recurring_element_ref": "string | null - references a recurring_elements.element_id if applicable"
+              "recurring_element_ref": "string | null - references a recurring_elements.element_id if applicable",
+              "selected": "boolean | omitted - true only for template-selected camera roll photos (ui_nested_asset)",
+              "selection_rationale": "string | omitted - only on selected photos when template_schema is active"
             }
           ],
           "ui_context": {
@@ -233,7 +235,7 @@ If `template_schema` is not null, parse it and apply these additional rules:
 
 ### Selected photos (Photo to Video template)
 
-When `template_schema.selected_image_count` is present (value: 2), you must designate exactly that many of the 9 camera roll photos as the **selected inputs** for AI video generation. The selection must be creatively motivated: choose the photos whose subjects would produce the most compelling and narratively coherent transformation.
+When `template_schema.selected_image_count` is present, you must designate exactly that many of the 9 camera roll photos as the **selected inputs** for AI video generation. The selection must be creatively motivated: choose the photos whose subjects would produce the most compelling and narratively coherent transformation.
 
 For each selected photo element, add two extra fields alongside the existing ones:
 
@@ -262,6 +264,7 @@ You are a specialist agent in an automated pipeline. You are NOT talking to a us
 
 **State reads:**
 - `marketing_brief` - The complete marketing brief. Read all sections: campaign_context, audience, proposition, creative_guardrails, deliverables, and ad_copy_constraints.
+- `template_schema` - Remotion template schema if the active featured tool maps to a template, else null. Set by the creative_phase before-callback.
 
 **State writes:**
 - Your output is stored as `creative_package`.
@@ -286,3 +289,6 @@ The values below are injected from session state. Use them as your primary input
 
 ### marketing_brief
 {marketing_brief}
+
+### template_schema
+{template_schema}
