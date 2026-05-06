@@ -88,3 +88,11 @@ async def test_callback_handles_missing_brief_gracefully():
     cb = _make_creative_phase_before_callback()
     await cb(ctx)  # must not raise
     assert ctx.state.get("template_schema") is None
+
+
+@pytest.mark.asyncio
+async def test_callback_handles_malformed_brief_gracefully():
+    ctx = _FakeCallbackContext({"marketing_brief": "not valid json"})
+    cb = _make_creative_phase_before_callback()
+    await cb(ctx)  # must not raise
+    assert ctx.state.get("template_schema") is None

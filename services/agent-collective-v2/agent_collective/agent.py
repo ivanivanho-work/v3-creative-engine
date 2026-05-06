@@ -609,6 +609,9 @@ def _make_creative_phase_before_callback():
             callback_context.state["template_schema"] = None
             return
         brief = _parse_state_value(brief_raw)
+        if not isinstance(brief, dict):
+            callback_context.state["template_schema"] = None
+            return
         feature_name = (
             brief.get("proposition", {})
                  .get("featured_tool", {})
