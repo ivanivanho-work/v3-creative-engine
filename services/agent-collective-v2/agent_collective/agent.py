@@ -132,29 +132,23 @@ def _load_prompt(filename: str) -> str:
 
 
 def _load_kb_documents(market: str) -> str:
-    """Read all files from kb/global/ and kb/{market}/ and format them as a
-    block that gets appended to the kb_analyzer's instruction.
+    """Read valid KB files for the market and format them as a block appended
+    to the kb_analyzer's instruction. Intel-hub-brief-* files older than 14
+    days are excluded by _get_valid_kb_files before reaching the LLM.
 
     Global documents are loaded first; market-specific documents follow so the
     agent understands that market-specific files take priority. Each file is
     wrapped with BEGIN/END markers so the agent knows where one document ends
     and the next begins.
     """
-    kb_dirs = _get_kb_dirs(market)
-    if not kb_dirs:
+    valid_files = _get_valid_kb_files(market)
+    if not valid_files:
         return "\n\n--- NO KB DOCUMENTS FOUND ---\n"
 
     docs = []
-    for folder in kb_dirs:
-        for f in sorted(folder.iterdir()):
-            if f.is_file():
-                content = f.read_text(encoding="utf-8")
-                docs.append(
-                    f"--- BEGIN {f.name} ---\n{content}\n--- END {f.name} ---"
-                )
-
-    if not docs:
-        return "\n\n--- NO KB DOCUMENTS FOUND ---\n"
+    for f in valid_files:
+        content = f.read_text(encoding="utf-8")
+        docs.append(f"--- BEGIN {f.name} ---\n{content}\n--- END {f.name} ---")
 
     current_date = datetime.now().strftime("%Y-%m-%d")
     metadata = f"--- SYSTEM METADATA ---\ncurrent_date: {current_date}\n--- END SYSTEM METADATA ---"
@@ -396,11 +390,9 @@ def _compute_kb_fingerprint(model: str, market: str) -> str:
     """
     hasher = hashlib.sha256()
     hasher.update(model.encode("utf-8"))
-    for folder in _get_kb_dirs(market):
-        for f in sorted(folder.iterdir()):
-            if f.is_file():
-                hasher.update(f.name.encode("utf-8"))
-                hasher.update(f.read_bytes())
+    for f in _get_valid_kb_files(market):
+        hasher.update(f.name.encode("utf-8"))
+        hasher.update(f.read_bytes())
     kb_analyzer_prompt = PROMPTS_DIR / "discovery" / "kb_analyzer.md"
     if kb_analyzer_prompt.exists():
         hasher.update(kb_analyzer_prompt.read_bytes())
