@@ -35,10 +35,15 @@
   if (!firebase.apps.length) {
     firebase.initializeApp(FIREBASE_CONFIG);
   }
-  const auth = firebase.auth();
-  if (['localhost', '127.0.0.1'].includes(window.location.hostname)) {
-    auth.useEmulator('http://127.0.0.1:9099');
+  // Bypass auth for local dev (localhost or Cloud Shell preview).
+  const _host = window.location.hostname;
+  if (_host === 'localhost' || _host === '127.0.0.1' || /^\d+-cs-.+\.cloudshell\.dev$/.test(_host)) {
+    document.documentElement.classList.remove('auth-gate-pending');
+    window.__authGatePassed = true;
+    return;
   }
+
+  const auth = firebase.auth();
   const provider = new firebase.auth.GoogleAuthProvider();
 
   function buildOverlay() {
