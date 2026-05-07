@@ -19,7 +19,7 @@ import hashlib
 import json
 import os
 import re
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 from google.adk.agents import LlmAgent, SequentialAgent, LoopAgent, ParallelAgent
@@ -71,6 +71,55 @@ def _get_kb_dirs(market: str) -> list[Path]:
 def _get_kb_cache_file(market: str) -> Path:
     """Return the path to the KB cache file for a given market."""
     return KB_CACHE_DIR / f"kb_cache_{market}.json"
+
+
+def _parse_intel_hub_week(content: str) -> date | None:
+    """Extract the **Week:** field from an intel hub brief and return the
+    Monday of that week. Returns None if the field is missing or unparseable.
+
+    Supports two formats:
+      ISO week:    2026-W19
+      Human label: Week of 04 May 2026  (always a Monday)
+    """
+    match = re.search(r'\*\*Week:\*\*\s+(.+)', content)
+    if not match:
+        return None
+    week_str = match.group(1).strip()
+
+    iso_match = re.fullmatch(r'(\d{4})-W(\d{1,2})', week_str)
+    if iso_match:
+        try:
+            return date.fromisocalendar(int(iso_match.group(1)), int(iso_match.group(2)), 1)
+        except ValueError:
+            return None
+
+    try:
+        return datetime.strptime(week_str, "Week of %d %B %Y").date()
+    except ValueError:
+        return None
+
+
+def _get_valid_kb_files(market: str) -> list[Path]:
+    """Return sorted KB files for global and market dirs, excluding stale
+    intel-hub-brief-* files (week Monday more than 14 days ago).
+
+    Used by both _load_kb_documents and _compute_kb_fingerprint so the
+    document loader and cache fingerprint always agree on which files are
+    in scope.
+    """
+    today = date.today()
+    valid: list[Path] = []
+    for folder in _get_kb_dirs(market):
+        for f in sorted(folder.iterdir()):
+            if not f.is_file():
+                continue
+            if f.name.startswith("intel-hub-brief-"):
+                content = f.read_text(encoding="utf-8")
+                week_start = _parse_intel_hub_week(content)
+                if week_start is None or (today - week_start).days > 14:
+                    continue
+            valid.append(f)
+    return valid
 
 
 # =========================================================================
