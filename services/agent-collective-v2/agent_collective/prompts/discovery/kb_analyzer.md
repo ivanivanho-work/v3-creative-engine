@@ -12,6 +12,7 @@ You will receive a set of knowledge base documents. Each document's filename ind
 - `target_audience_*` - Audience segmentation, volume data, psychographic insights, and targeting strategy.
 - `content_insights_*` - **Primary content intelligence source.** Quantitative data: top content categories by audience segment, ranked by creation volume and view engagement. This is the most reliable signal for what content is actually working in the market right now. Downstream agents use this to anchor campaign themes.
 - `content_trends_*` - Qualitative trend analysis: narrative formats, hooks, and cultural shifts. Useful as supporting context and creative color, but trends change rapidly and should not be the primary driver of campaign themes. Market-specific files take priority over regional (APAC) files when both exist.
+- `intel_hub_brief_*` - Human-approved trend signals from Shorts Intel Hub, published weekly by the PMM team. Contains ranked topics with quantitative scores and engagement data. Only valid files (within 2 weeks of their week's Monday) are ever provided — no date filtering needed here. Treat as premium supplementary context: higher confidence than `content_trends_*` because topics are human-curated and scored, but still supplementary to `content_insights_*` as the primary campaign anchor.
 - `campaign_learnings_*` - What worked and what did not work in previous campaigns, with performance data (percentage lifts or declines). Extract learnings relevant to the market specified in market_config.
 - `feature_usage_*` - How creators actually use Shorts Creation Tools: entry points (Camera vs Gallery), feature clusters by market, motivational drivers, and competitive gaps.
 - `brand_voice_*` - Tone of voice guidelines, copy principles, dos and don'ts for user-facing messaging.
@@ -89,6 +90,7 @@ Extract information from every provided document and produce a single JSON outpu
     {
       "source": "Document filename the trend came from",
       "trend": "The trend or cultural shift, stated concisely",
+      "description": "Optional. For intel_hub_brief_* entries only: the trend description verbatim from the source file. Null or omitted for all other sources.",
       "relevance": "Why this matters for a campaign in this market targeting this audience. Note: trends are supplementary context, not primary theme drivers. They change rapidly and should be used for creative color, not as the foundation of campaign concepts.",
       "content_category": "The content category this trend belongs to (e.g. Food, Travel, Pets, Entertainment)"
     }
@@ -145,6 +147,8 @@ Extract information from every provided document and produce a single JSON outpu
 8. **Filter GenAI tools by market availability -- this rule overrides all other criteria.** For any feature where `tool_type` is `"GenAI"` and a `market_availability` field exists, check whether the availability date for the current market (using `country_code`) is on or before `current_date` from the System Metadata block. If the availability date is in the future, `recommendation_strength` MUST be `"low"`. Strategic alignment, behavioral fit, and campaign learnings do NOT change this -- a GenAI feature unavailable in the current market is always "low". Add a note in `usage_insight` that the feature is not yet available in this market. Do not omit it from the output - Rule 7 still applies.
 
 9. **Deliverables and ad_copy_constraints come from market_config.** Extract these exactly as specified. Do not infer or modify.
+
+10. **Extract intel hub briefs into content_trends.** For `intel_hub_brief_*` files: extract each approved topic as a separate `content_trends` entry. Set `trend` to the topic title, `description` to the topic description verbatim from the source file, `relevance` to "Human-approved. Rank #[N], score [X], engagement [Y]%. Targets [demo]. [velocity] velocity. [GenAI: Yes/No].", and `content_category` to the value of the Trend bucket field. Set `source` to the exact filename. Each topic is its own entry — do not combine topics into a single entry.
 
 ---
 

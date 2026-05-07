@@ -1,15 +1,13 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import {
-  getAuth,
   GoogleAuthProvider,
   signInWithPopup,
   signOut,
   onAuthStateChanged,
   type User,
 } from 'firebase/auth';
-import { app } from './config/firebase';
+import { auth } from './config/firebase';
 
-const auth = getAuth(app);
 const provider = new GoogleAuthProvider();
 
 function isAllowed(email: string | null | undefined): boolean {

@@ -19,7 +19,7 @@ import hashlib
 import json
 import os
 import re
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 from google.adk.agents import LlmAgent, SequentialAgent, LoopAgent, ParallelAgent
@@ -90,6 +90,55 @@ def _get_kb_cache_file(market: str) -> Path:
     return KB_CACHE_DIR / f"kb_cache_{market}.json"
 
 
+def _parse_intel_hub_week(content: str) -> date | None:
+    """Extract the **Week:** field from an intel hub brief and return the
+    Monday of that week. Returns None if the field is missing or unparseable.
+
+    Supports two formats:
+      ISO week:    2026-W19
+      Human label: Week of 04 May 2026  (always a Monday)
+    """
+    match = re.search(r'\*\*Week:\*\*\s+(.+)', content)
+    if not match:
+        return None
+    week_str = match.group(1).strip()
+
+    iso_match = re.fullmatch(r'(\d{4})-W(\d{1,2})', week_str)
+    if iso_match:
+        try:
+            return date.fromisocalendar(int(iso_match.group(1)), int(iso_match.group(2)), 1)
+        except ValueError:
+            return None
+
+    try:
+        return datetime.strptime(week_str, "Week of %d %B %Y").date()
+    except ValueError:
+        return None
+
+
+def _get_valid_kb_files(market: str) -> list[Path]:
+    """Return sorted KB files for global and market dirs, excluding stale
+    intel-hub-brief-* files (week Monday more than 14 days ago).
+
+    Used by both _load_kb_documents and _compute_kb_fingerprint so the
+    document loader and cache fingerprint always agree on which files are
+    in scope.
+    """
+    today = date.today()
+    valid: list[Path] = []
+    for folder in _get_kb_dirs(market):
+        for f in sorted(folder.iterdir()):
+            if not f.is_file():
+                continue
+            if f.name.startswith("intel-hub-brief-"):
+                content = f.read_text(encoding="utf-8")
+                week_start = _parse_intel_hub_week(content)
+                if week_start is None or (today - week_start).days > 14:
+                    continue
+            valid.append(f)
+    return valid
+
+
 # =========================================================================
 # Prompt loading
 # =========================================================================
@@ -100,29 +149,23 @@ def _load_prompt(filename: str) -> str:
 
 
 def _load_kb_documents(market: str) -> str:
-    """Read all files from kb/global/ and kb/{market}/ and format them as a
-    block that gets appended to the kb_analyzer's instruction.
+    """Read valid KB files for the market and format them as a block appended
+    to the kb_analyzer's instruction. Intel-hub-brief-* files older than 14
+    days are excluded by _get_valid_kb_files before reaching the LLM.
 
     Global documents are loaded first; market-specific documents follow so the
     agent understands that market-specific files take priority. Each file is
     wrapped with BEGIN/END markers so the agent knows where one document ends
     and the next begins.
     """
-    kb_dirs = _get_kb_dirs(market)
-    if not kb_dirs:
+    valid_files = _get_valid_kb_files(market)
+    if not valid_files:
         return "\n\n--- NO KB DOCUMENTS FOUND ---\n"
 
     docs = []
-    for folder in kb_dirs:
-        for f in sorted(folder.iterdir()):
-            if f.is_file():
-                content = f.read_text(encoding="utf-8")
-                docs.append(
-                    f"--- BEGIN {f.name} ---\n{content}\n--- END {f.name} ---"
-                )
-
-    if not docs:
-        return "\n\n--- NO KB DOCUMENTS FOUND ---\n"
+    for f in valid_files:
+        content = f.read_text(encoding="utf-8")
+        docs.append(f"--- BEGIN {f.name} ---\n{content}\n--- END {f.name} ---")
 
     current_date = datetime.now().strftime("%Y-%m-%d")
     metadata = f"--- SYSTEM METADATA ---\ncurrent_date: {current_date}\n--- END SYSTEM METADATA ---"
@@ -364,11 +407,9 @@ def _compute_kb_fingerprint(model: str, market: str) -> str:
     """
     hasher = hashlib.sha256()
     hasher.update(model.encode("utf-8"))
-    for folder in _get_kb_dirs(market):
-        for f in sorted(folder.iterdir()):
-            if f.is_file():
-                hasher.update(f.name.encode("utf-8"))
-                hasher.update(f.read_bytes())
+    for f in _get_valid_kb_files(market):
+        hasher.update(f.name.encode("utf-8"))
+        hasher.update(f.read_bytes())
     kb_analyzer_prompt = PROMPTS_DIR / "discovery" / "kb_analyzer.md"
     if kb_analyzer_prompt.exists():
         hasher.update(kb_analyzer_prompt.read_bytes())
@@ -958,28 +999,35 @@ async def write_selected_concept(
 # Root agent tool: write_campaign_constraints
 # =========================================================================
 # The root agent calls this on the initial campaign request when the user
-# specifies a particular Shorts Creation Tool to focus the campaign on.
+# specifies a particular Shorts Creation Tool and/or a campaign topic.
 # Written to state before discovery_phase runs so concept_generator can
-# lock all three concepts to the requested tool.
+# lock all three concepts to the requested tool and anchor at least one
+# concept to the stated topic.
 
 
 async def write_campaign_constraints(
     featured_tool: str,
+    campaign_topic: str,
     tool_context,
 ):
     """Write user-specified campaign constraints to session state.
 
     Called before transferring to discovery_phase. Captures any specific
-    Shorts Creation Tool the user wants all concepts to feature.
+    Shorts Creation Tool the user wants all concepts to feature, and the
+    campaign topic/theme direction stated by the user.
 
     Args:
         featured_tool: The tool name as the user stated it, or empty string
             if the user did not specify a particular tool.
+        campaign_topic: The campaign theme or topic direction as the user
+            stated it (e.g. "pets", "summer", "gaming", "beauty"), or empty
+            string if the user did not specify a topic direction.
     """
     import json
 
     constraints = {
         "featured_tool": featured_tool if featured_tool else None,
+        "campaign_topic": campaign_topic if campaign_topic else None,
     }
     tool_context.state["campaign_constraints"] = json.dumps(constraints)
     return "Saved campaign constraints."

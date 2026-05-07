@@ -35,7 +35,6 @@
   if (!firebase.apps.length) {
     firebase.initializeApp(FIREBASE_CONFIG);
   }
-
   // Bypass auth for local dev (localhost or Cloud Shell preview).
   const _host = window.location.hostname;
   if (_host === 'localhost' || _host === '127.0.0.1' || /^\d+-cs-.+\.cloudshell\.dev$/.test(_host)) {
