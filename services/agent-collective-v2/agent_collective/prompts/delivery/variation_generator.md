@@ -226,11 +226,11 @@ If `template_schema` is not null, apply these additional rules to your output:
 - Video generation job from the climax/resolution scene (`output_type: "video_generation_prompt"`): assign `slot_id: "generatedVideo"`
 - All other outputs: assign `slot_id: null`
 
-**`selected_slot_mapping`** — after `scene_outputs`, add this object. Read the scene map for elements marked `"selected": true` (the camera roll photos chosen as Photo to Video inputs in the V1). For each adapted variation, pick the same number of selected photos (`template_schema.selected_image_count`) from your adapted camera roll — choose the ones whose subjects produce the most compelling Photo to Video transformation. Map their template slot IDs to their output job's `element_id`:
+**`selected_slot_mapping`** — after `scene_outputs`, add this object. Read the scene map for elements marked `"selected": true` (the camera roll photos chosen as Photo to Video inputs in the V1). For each adapted variation, pick the same number of selected photos (`template_schema.selected_image_count`) from your adapted camera roll — choose the ones whose subjects produce the most compelling Photo to Video transformation. Look up the `slot_id` you assigned to each chosen job (`gridImage[N]`) and use that as the key, with the `element_id` as the value. Do NOT use keys like `selectedImage1` — keys must be the `gridImage[N]` slot IDs:
 ```json
 "selected_slot_mapping": {
-  "gridImage2": "nested_asset_02",
-  "gridImage5": "nested_asset_05"
+  "gridImage2": "camera_roll_photo_02",
+  "gridImage5": "camera_roll_photo_05"
 }
 ```
 

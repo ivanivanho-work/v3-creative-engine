@@ -253,16 +253,16 @@ For every job, add a `slot_id` field. Set it according to these rules:
 
 ### selected_slot_mapping
 
-After the `jobs` array, add a `selected_slot_mapping` object. Read the creative_package storyboard and find the camera roll photos that have `"selected": true`. Map their template slot IDs to their job IDs:
+After the `jobs` array, add a `selected_slot_mapping` object. Read the creative_package storyboard and find the camera roll photos that have `"selected": true`. For each selected photo, look up the `slot_id` you already assigned to its job (e.g. `gridImage1`, `gridImage5`). Use that `slot_id` as the key and the `job_id` as the value:
 
 ```json
 "selected_slot_mapping": {
-  "selectedImage1": "job_003",
-  "selectedImage2": "job_007"
+  "gridImage1": "job_002",
+  "gridImage5": "job_006"
 }
 ```
 
-Where `job_003` and `job_007` are the `job_id` values of the selected camera roll photo jobs. The order matches the order the selected photos appear in the storyboard element list.
+Where `gridImage1` and `gridImage5` are the `slot_id` values already assigned to those jobs (matching the `camera_roll_photo_01` → `gridImage1` mapping), and `job_002`/`job_006` are their `job_id` values. Do NOT use key names like `selectedImage1` or `selectedImage2` — the keys must be the `gridImage[N]` slot IDs.
 
 If `template_schema` is null, omit `template_id`, `template_version`, and `selected_slot_mapping` from the manifest entirely, and set `slot_id: null` on all jobs.
 
