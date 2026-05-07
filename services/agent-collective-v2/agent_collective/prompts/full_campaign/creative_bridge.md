@@ -49,6 +49,10 @@ Apply these rules to classify each scene:
 
 For any scene where `ui_context.shows_product_ui == true`, include a `nested_asset_analysis` block listing each item in `ui_context.nested_assets_to_generate`. For each nested asset, note whether it can be swapped for audience adaptation (it always can, unless the array is empty).
 
+### Template Passthrough
+
+If `template_schema` (from session state) is not null, include it verbatim as a top-level `template_schema` field in your output JSON. Also, for any element in the scene map that had `"selected": true` in the original `creative_package` storyboard (camera roll photos selected as Photo to Video inputs), add `"selected": true` to that element's entry in the scene map `elements` array. This lets the variation generators know which camera roll slots feed into AI video generation.
+
 ### Adaptation Feasibility
 
 Since this is a storyboard (not a recorded video), there are no real human faces. Set `overall_assessment.adaptation_feasibility` to `"full"` unless the creative direction explicitly describes a frontal face with visible identity - in that case, use `"partial"`.
@@ -118,7 +122,8 @@ Respond with ONLY the JSON below. No preamble. No explanation. Raw JSON only.
     "locked_count": 2,
     "keep_count": 1,
     "notes": "[any important notes about the creative package that adaptation agents should know]"
-  }
+  },
+  "template_schema": "[verbatim from session state template_schema, or null if not set]"
 }
 ```
 
@@ -130,6 +135,7 @@ You run inside the Full Campaign pipeline as part of a parallel intake phase alo
 
 **State reads:**
 - `creative_package` - the creative director's output
+- `template_schema` - Remotion template schema if the active featured tool maps to a template, else null. Pass through verbatim as a top-level field in your output.
 
 **State writes:**
 - `fc_scene_map` - your output, captured via `output_key`
@@ -147,4 +153,7 @@ The values below are injected from session state. Use them as your primary input
 
 ### fc_end_card_copy
 {fc_end_card_copy}
+
+### template_schema
+{template_schema}
 

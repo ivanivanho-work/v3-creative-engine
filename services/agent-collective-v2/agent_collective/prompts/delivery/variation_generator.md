@@ -207,6 +207,37 @@ Respond with ONLY the JSON below. No preamble. No explanation. No markdown code 
 
 ---
 
+---
+
+## **TEMPLATE SLOT ASSIGNMENT (Photo to Video)**
+
+The session state key `template_schema` (injected below) tells you whether the V1 Shorts video maps to a Remotion template. This only applies to the V1 video deliverable — the S1 static interstitial is never template-bound. If `template_schema` is not null, apply slot assignment only to V1 scene outputs (camera roll photos and the generated video). S1 outputs always have `slot_id: null`.
+
+If `template_schema` is not null, apply these additional rules to your output:
+
+**Root-level fields** — add to the top of your output JSON alongside `schema_version`:
+```json
+"template_id": "<template_schema.template_id>",
+"template_version": "<template_schema.template_version>"
+```
+
+**`slot_id` per output job** — add a `slot_id` field to every item in every scene's `outputs` array:
+- Camera roll photo jobs (`element_id` matching `camera_roll_photo_01` through `camera_roll_photo_09`): assign `slot_id` values `gridImage1` through `gridImage9` in order (photo_01 → gridImage1, photo_02 → gridImage2, … photo_09 → gridImage9)
+- Video generation job from the climax/resolution scene (`output_type: "video_generation_prompt"`): assign `slot_id: "generatedVideo"`
+- All other outputs: assign `slot_id: null`
+
+**`selected_slot_mapping`** — after `scene_outputs`, add this object. Read the scene map for elements marked `"selected": true` (the camera roll photos chosen as Photo to Video inputs in the V1). For each adapted variation, pick the same number of selected photos (`template_schema.selected_image_count`) from your adapted camera roll — choose the ones whose subjects produce the most compelling Photo to Video transformation. Map their template slot IDs to their output job's `element_id`:
+```json
+"selected_slot_mapping": {
+  "gridImage2": "nested_asset_02",
+  "gridImage5": "nested_asset_05"
+}
+```
+
+If `template_schema` is null, omit `template_id`, `template_version`, and `selected_slot_mapping` entirely, and set `slot_id: null` on all jobs.
+
+---
+
 ## ADK INTEGRATION NOTES
 
 ### You Are Inside a Parallel Pipeline
@@ -268,3 +299,6 @@ The values below are injected from session state. Use them as your primary input
 
 ### scene_map
 {scene_map}
+
+### template_schema
+{template_schema}
