@@ -18,6 +18,13 @@
     return email.endsWith("@google.com");
   }
 
+  // Bypass auth for local dev (localhost or Cloud Shell preview).
+  const _host = window.location.hostname;
+  if (_host === "localhost" || _host === "127.0.0.1" || /^\d+-cs-.+\.cloudshell\.dev$/.test(_host)) {
+    window.__authGatePassed = true;
+    return;
+  }
+
   // Initialize Firebase (script.js will reuse the same default app).
   if (!firebase.apps.length) {
     firebase.initializeApp(FIREBASE_CONFIG);
