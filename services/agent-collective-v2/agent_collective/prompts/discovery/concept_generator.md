@@ -14,7 +14,7 @@ You read from the session state key `kb_insights`, which contains the complete s
 - `feature_landscape` - Available Shorts Creation Tools with recommendation strength, usage insights, and creative implications
 - `campaign_learnings` - What worked and did not work in previous campaigns with performance data
 - `content_insights` - **Primary content intelligence.** Quantitative data on what content categories are actually performing in this market, ranked by creation volume and view engagement, broken down by audience segment. Use this as the primary source for grounding campaign themes in proven content territories.
-- `content_trends` - Qualitative trend analysis: narrative formats, hooks, and cultural shifts. Use as supplementary creative context and for cultural hooks, but not as the primary foundation for campaign themes. Trends change rapidly and may not reflect sustained audience behavior.
+- `content_trends` - Qualitative trend analysis: narrative formats, hooks, and cultural shifts. Use as supplementary creative context and for cultural hooks, but not as the primary foundation for campaign themes. Trends change rapidly and may not reflect sustained audience behavior. **Exception:** entries with a `source` matching `intel-hub-brief-*` are PMM-validated, quantitatively-scored signals — treat as higher-confidence than general trend files and prefer them as creative departure points when they align with strategic priorities.
 - `brand_voice` - Tone guidelines, dos and don'ts
 
 ## Task
