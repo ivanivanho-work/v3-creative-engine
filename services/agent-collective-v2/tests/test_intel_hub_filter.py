@@ -2,7 +2,7 @@ import pytest
 from datetime import date, timedelta
 from pathlib import Path
 
-from agent_collective.agent import _parse_intel_hub_week, _get_valid_kb_files
+from agent_collective.agent import _parse_intel_hub_week, _get_valid_kb_files, _compute_kb_fingerprint
 
 
 VALID_ISO = "**Week:** 2026-W19\n**Sent:** 2026-05-07\n"
@@ -107,3 +107,64 @@ class TestGetValidKbFiles:
         monkeypatch.setattr("agent_collective.agent._get_kb_dirs", lambda m: [market_dir])
 
         assert _get_valid_kb_files("kr") == []
+
+
+class TestComputeKbFingerprint:
+    def _write(self, directory, name, content):
+        path = directory / name
+        path.write_text(content, encoding="utf-8")
+        return path
+
+    def test_stale_brief_does_not_change_fingerprint(self, tmp_path, monkeypatch):
+        """Adding a stale brief must not bust the cache fingerprint."""
+        market_dir = tmp_path / "kr"
+        market_dir.mkdir()
+        self._write(market_dir, "content_trends_kr.md", "# Trends")
+        monkeypatch.setattr("agent_collective.agent._get_kb_dirs", lambda m: [market_dir])
+
+        fingerprint_without_stale = _compute_kb_fingerprint("gemini-2.5-pro", "kr")
+
+        stale_monday = date.today() - timedelta(days=15)
+        self._write(market_dir, "intel-hub-brief-kr-stale.md",
+                    f"**Week:** {stale_monday.strftime('Week of %d %B %Y')}\n")
+
+        fingerprint_with_stale = _compute_kb_fingerprint("gemini-2.5-pro", "kr")
+
+        assert fingerprint_without_stale == fingerprint_with_stale
+
+    def test_fresh_brief_does_change_fingerprint(self, tmp_path, monkeypatch):
+        """Adding a valid (fresh) brief must bust the cache fingerprint."""
+        market_dir = tmp_path / "kr"
+        market_dir.mkdir()
+        self._write(market_dir, "content_trends_kr.md", "# Trends")
+        monkeypatch.setattr("agent_collective.agent._get_kb_dirs", lambda m: [market_dir])
+
+        fingerprint_without_brief = _compute_kb_fingerprint("gemini-2.5-pro", "kr")
+
+        valid_monday = date.today() - timedelta(days=7)
+        self._write(market_dir, "intel-hub-brief-kr-fresh.md",
+                    f"**Week:** {valid_monday.strftime('Week of %d %B %Y')}\ncontent: trending now\n")
+
+        fingerprint_with_brief = _compute_kb_fingerprint("gemini-2.5-pro", "kr")
+
+        assert fingerprint_without_brief != fingerprint_with_brief
+
+    def test_brief_expiring_from_fresh_to_stale_reverts_fingerprint(self, tmp_path, monkeypatch):
+        """Simulates a brief aging past 14 days: fingerprint returns to baseline."""
+        market_dir = tmp_path / "kr"
+        market_dir.mkdir()
+        self._write(market_dir, "content_trends_kr.md", "# Trends")
+        monkeypatch.setattr("agent_collective.agent._get_kb_dirs", lambda m: [market_dir])
+
+        baseline = _compute_kb_fingerprint("gemini-2.5-pro", "kr")
+
+        # Brief is fresh — fingerprint changes
+        fresh_monday = date.today() - timedelta(days=7)
+        brief = self._write(market_dir, "intel-hub-brief-kr.md",
+                            f"**Week:** {fresh_monday.strftime('Week of %d %B %Y')}\ncontent\n")
+        assert _compute_kb_fingerprint("gemini-2.5-pro", "kr") != baseline
+
+        # Brief becomes stale — fingerprint returns to baseline
+        stale_monday = date.today() - timedelta(days=15)
+        brief.write_text(f"**Week:** {stale_monday.strftime('Week of %d %B %Y')}\ncontent\n")
+        assert _compute_kb_fingerprint("gemini-2.5-pro", "kr") == baseline
