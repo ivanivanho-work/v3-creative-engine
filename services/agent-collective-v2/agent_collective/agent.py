@@ -953,28 +953,35 @@ async def write_selected_concept(
 # Root agent tool: write_campaign_constraints
 # =========================================================================
 # The root agent calls this on the initial campaign request when the user
-# specifies a particular Shorts Creation Tool to focus the campaign on.
+# specifies a particular Shorts Creation Tool and/or a campaign topic.
 # Written to state before discovery_phase runs so concept_generator can
-# lock all three concepts to the requested tool.
+# lock all three concepts to the requested tool and anchor at least one
+# concept to the stated topic.
 
 
 async def write_campaign_constraints(
     featured_tool: str,
+    campaign_topic: str,
     tool_context,
 ):
     """Write user-specified campaign constraints to session state.
 
     Called before transferring to discovery_phase. Captures any specific
-    Shorts Creation Tool the user wants all concepts to feature.
+    Shorts Creation Tool the user wants all concepts to feature, and the
+    campaign topic/theme direction stated by the user.
 
     Args:
         featured_tool: The tool name as the user stated it, or empty string
             if the user did not specify a particular tool.
+        campaign_topic: The campaign theme or topic direction as the user
+            stated it (e.g. "pets", "summer", "gaming", "beauty"), or empty
+            string if the user did not specify a topic direction.
     """
     import json
 
     constraints = {
         "featured_tool": featured_tool if featured_tool else None,
+        "campaign_topic": campaign_topic if campaign_topic else None,
     }
     tool_context.state["campaign_constraints"] = json.dumps(constraints)
     return "Saved campaign constraints."
