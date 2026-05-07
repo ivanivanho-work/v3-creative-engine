@@ -253,7 +253,9 @@ All jobs outside the V1 template (S1 static, text items, end card) always get `s
 
 ### selected_slot_mapping
 
-After the `jobs` array, add a `selected_slot_mapping` object. Read the storyboard for elements with `"selected": true`. For each, look up the `slot_id` already assigned to its job and use that as the key, with the `job_id` as the value:
+After the `jobs` array, add a `selected_slot_mapping` object. Read the storyboard for elements with `"selected": true` (the camera roll photos the user chose as Photo to Video inputs). The selection scene in the template re-uses these grid images — no separate generation job. The mapping records which `gridImage[N]` slots were chosen so Remotion can populate its `selectedImage1`/`selectedImage2` display slots.
+
+For each `selected: true` element, look up the `slot_id` already assigned to its job (a `gridImage[N]` value) and use that as the key, with the `job_id` as the value:
 
 ```json
 "selected_slot_mapping": {
@@ -262,9 +264,28 @@ After the `jobs` array, add a `selected_slot_mapping` object. Read the storyboar
 }
 ```
 
-The keys are the slot IDs from the slot table (e.g. `gridImage1`, `gridImage5`) — never invented names like `selectedImage1`. The values are the `job_id` values of those jobs.
+The keys are the `gridImage[N]` slot IDs of the selected photos. The values are the `job_id` values of those jobs. Never use invented keys like `selectedImage1` — those are Remotion's internal display slots, populated by Remotion from this mapping.
 
-If `template_schema` is null, omit `template_id`, `template_version`, and `selected_slot_mapping` from the manifest entirely, and set `slot_id: null` on all jobs.
+### text_slots
+
+If `template_schema.scene_structure` contains any scene with a `text_slots` array, emit a `text_item` for each entry. Use the `slot_id` as the `element_id` and set `purpose` to the `slot_id` value (e.g. `"promptText"`).
+
+For `source: "climax_creative_direction"`: write the in-UI prompt text as the user would have typed it. It should be authentic — a natural-sounding AI generation request in the market's primary language. Draw the subject and mood from the climax scene's `creative_direction` in the storyboard.
+
+```json
+{
+  "deliverable_id": "V1",
+  "scene_id": "scene_climax",
+  "element_id": "promptText",
+  "purpose": "promptText",
+  "final_text": "고양이가 스케이트보드를 타는 모습",
+  "language": "ko",
+  "character_limit": null,
+  "fits_limit": true
+}
+```
+
+If `template_schema` is null, omit `template_id`, `template_version`, `selected_slot_mapping`, and any template `text_slots` items from the manifest entirely, and set `slot_id: null` on all jobs.
 
 ## What to avoid
 

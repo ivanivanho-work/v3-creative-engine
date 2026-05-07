@@ -70,7 +70,10 @@ TEMPLATE_CATALOG: dict[str, dict] = {
     # template_id       Remotion template identifier (string)
     # template_version  Semver string (string)
     # selected_image_count  Number of camera roll photos the user selects as
-    #                   Photo to Video inputs (int, omit if not applicable)
+    #                   Photo to Video inputs (int, omit if not applicable).
+    #                   These are chosen FROM the generated gridImage slots —
+    #                   no separate generation job. The pipeline records which
+    #                   grid slots were selected in selected_slot_mapping.
     # scene_structure   Ordered list of scenes the template supports. The
     #                   creative director MUST produce exactly these scene
     #                   types in this order for the V1 deliverable — no extras.
@@ -78,17 +81,24 @@ TEMPLATE_CATALOG: dict[str, dict] = {
     #   Each scene entry:
     #     scene_type    Matches the storyboard scene_type field
     #     label         Human-readable name (for docs/debugging)
-    #     generates     True if this scene produces new generation jobs.
-    #                   False means the prompter skips it entirely.
+    #     generates     True if this scene produces new AI generation jobs.
+    #                   False means the prompter skips it entirely (locked
+    #                   UI frames, selection scenes, loading screens, end cards).
     #     reuses_from   scene_type whose slots this scene re-uses (omit if
     #                   not applicable). Prompter emits no jobs for this scene.
-    #     slots         List of slot definitions (only on generates: True scenes).
+    #     slots         List of AI-generated slot definitions (generates: True only).
     #       slot_id       The Remotion slot name the generated asset lands in
     #       element_id    The storyboard element_id that maps to this slot.
-    #                     Use exact strings for fixed elements; use a prefix
-    #                     pattern ending in * for numbered sets (e.g.
-    #                     "camera_roll_photo_*" covers _01 through _09).
     #       asset_type    "image" or "video"
+    #     text_slots    List of text values the pipeline must pass to Remotion
+    #                   (optional — omit if none). These are user-authored or
+    #                   creative-direction-derived strings, not generated assets.
+    #       slot_id       The Remotion text slot name
+    #       source        Where the value comes from:
+    #                       "climax_creative_direction" — the AI generation prompt
+    #                         text from the climax scene's creative direction
+    #                       "end_card_tagline"          — the end card tagline
+    #       note          Guidance for the prompter on how to populate this field
     #     note          Prose guidance for the creative director / prompter
     # -----------------------------------------------------------------------
     "Photo to Video": {
@@ -133,13 +143,20 @@ TEMPLATE_CATALOG: dict[str, dict] = {
                 "slots": [
                     {"slot_id": "generatedVideo", "element_id": "generated_video", "asset_type": "video"},
                 ],
-                "note": "The AI-generated video payoff. One video job landing in the generatedVideo slot.",
+                "text_slots": [
+                    {
+                        "slot_id": "promptText",
+                        "source": "climax_creative_direction",
+                        "note": "The AI generation prompt text (what the user 'typed' in the tool). Write it in the market's primary language. It should describe the desired video output and feel authentic — like a real user's input.",
+                    },
+                ],
+                "note": "The AI-generated video payoff. One video job landing in the generatedVideo slot. Also write the promptText text_item — the in-UI prompt text the user typed to generate the video.",
             },
             {
                 "scene_type": "end_card",
                 "label": "Brand end card",
                 "generates": False,
-                "note": "Locked brand assets. Tagline is adaptable, CTA and logo are locked. Text items only.",
+                "note": "Locked brand assets. Tagline is adaptable, CTA and logo are locked. Text items only. The endCardVideo slot is a pre-made brand video handled natively by Remotion — no generation job needed.",
             },
         ],
     },

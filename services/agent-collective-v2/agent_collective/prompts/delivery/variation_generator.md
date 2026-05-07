@@ -224,15 +224,17 @@ If `template_schema` is not null, apply these additional rules to your output:
 
 **`slot_id` per output job** — add a `slot_id` field to every item in every scene's `outputs` array. Use `template_schema.scene_structure` as the slot table: for each output, find the scene's entry in `scene_structure`, then find the slot whose `element_id` matches the output's `element_id`. Assign that slot's `slot_id`. If no matching slot is found, assign `slot_id: null`. All S1 outputs always get `slot_id: null`.
 
-**`selected_slot_mapping`** — after `scene_outputs`, add this object. Read the scene map for elements marked `"selected": true` (the camera roll photos chosen as Photo to Video inputs in the V1). For each adapted variation, pick the same number of selected photos (`template_schema.selected_image_count`) from your adapted camera roll — choose the ones whose subjects produce the most compelling Photo to Video transformation. Look up the `slot_id` you assigned to each chosen job (`gridImage[N]`) and use that as the key, with the `element_id` as the value. Do NOT use keys like `selectedImage1` — keys must be the `gridImage[N]` slot IDs:
+**`selected_slot_mapping`** — after `scene_outputs`, add this object. The selection scene in the template re-uses camera roll grid photos — no separate generation. For each adapted variation, pick `template_schema.selected_image_count` photos from your adapted camera roll — choose the ones whose subjects will make the most compelling Photo to Video transformation. Look up the `slot_id` you assigned to each chosen job (`gridImage[N]`) and use that as the key, with the `job_id` as the value. Do NOT use keys like `selectedImage1` — keys must be `gridImage[N]` slot IDs (Remotion maps these internally to its `selectedImage1`/`selectedImage2` display slots):
 ```json
 "selected_slot_mapping": {
-  "gridImage2": "camera_roll_photo_02",
-  "gridImage5": "camera_roll_photo_05"
+  "gridImage2": "job_012",
+  "gridImage5": "job_015"
 }
 ```
 
-If `template_schema` is null, omit `template_id`, `template_version`, and `selected_slot_mapping` entirely, and set `slot_id: null` on all jobs.
+**`text_slots`** — if `template_schema.scene_structure` has any scene with a `text_slots` array, emit a text output for each. For `source: "climax_creative_direction"`: write the in-UI prompt text as the user would have typed it — a natural-sounding AI generation request in the market's primary language, drawn from your adapted climax scene creative direction.
+
+If `template_schema` is null, omit `template_id`, `template_version`, `selected_slot_mapping`, and any template `text_slots` outputs entirely, and set `slot_id: null` on all jobs.
 
 ---
 
