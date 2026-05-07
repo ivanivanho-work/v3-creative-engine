@@ -233,6 +233,10 @@ Current value: `{template_schema}`
 
 If `template_schema` is not null, parse it and apply these additional rules:
 
+### Scene structure (applies to V1 only)
+
+When `template_schema.scene_structure` is present, the V1 (`shorts_featured_video`) storyboard MUST contain exactly those scene types in that order — no more, no less. Do NOT add a hook, resolution, or any other scene type not listed in `scene_structure`. The Remotion template only renders slots defined in its structure; any scene outside `scene_structure` produces a generation job with no slot to land in and is discarded at render time. All creative storytelling must happen within the allowed scenes.
+
 ### Selected photos (Photo to Video template)
 
 When `template_schema.selected_image_count` is present, you must designate exactly that many of the 9 camera roll photos as the **selected inputs** for AI video generation. The selection must be creatively motivated: choose the photos whose subjects would produce the most compelling and narratively coherent transformation.

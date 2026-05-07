@@ -70,6 +70,24 @@ TEMPLATE_CATALOG: dict[str, dict] = {
         "selected_image_count": 2,
         "has_generated_video": True,
         "has_prompt_text": True,
+        "scene_structure": [
+            {
+                "scene_type": "body",
+                "note": "Camera roll UI — exactly 9 nested photos, selected_image_count of them marked selected: true",
+            },
+            {
+                "scene_type": "loading",
+                "note": "AI generation progress screen — locked, no generation jobs",
+            },
+            {
+                "scene_type": "climax",
+                "note": "Generated video reveal — one generatedVideo slot",
+            },
+            {
+                "scene_type": "end_card",
+                "note": "Brand end card — locked brand assets, adaptable tagline",
+            },
+        ],
     },
 }
 
