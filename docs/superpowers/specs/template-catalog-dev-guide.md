@@ -5,7 +5,7 @@
 
 The Agent Collective generates campaign assets through a multi-agent pipeline. When a campaign's featured tool maps to a Remotion template, the pipeline switches into **template mode** — the creative director designs a storyboard locked to the template's scene structure, and the manifest emitter assigns every generated asset to a named slot that Remotion reads.
 
-Your job as the template developer is to **submit a catalog entry** for your template. The entry lives in `agent.py` and describes your template's scene structure, which slots need AI-generated assets, which slots carry text, and how selected photos are handled. Once the entry is complete and correct, the pipeline handles everything automatically — no prompt edits needed.
+Your job as the template developer is to **submit a catalog entry** for your template. The entry lives in `agent.py` and describes your template's scene structure, which slots need AI-generated assets, which slots carry text, and how selected photos are handled. Once the entry is complete and correct, the pipeline handles everything automatically.
 
 ---
 
@@ -309,7 +309,7 @@ Suppose you're building `story_reel_v1` for the **Add Audio** feature. It has th
 },
 ```
 
-That's it. No prompt edits. The pipeline reads the catalog and handles the rest.
+That's it. The pipeline reads the catalog and handles the rest.
 
 ---
 
