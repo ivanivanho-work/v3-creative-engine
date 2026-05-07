@@ -53,8 +53,7 @@ For each scene in each storyboard, and for each generatable element within that 
 
 2. **Determine asset_type and model.** Use these routing rules in order:
    - **End card scenes** (`scene_type: "end_card"`): no generation jobs. Text items only.
-   - **Loading scenes** (`scene_type: "loading"`): no generation jobs. Locked UI template, nothing to generate.
-   - **Selection scenes** (`scene_type: "selection"`): no generation jobs. This scene displays the already-generated selected photos in a larger highlighted view — assets are shared with the `gridImage` slots already produced from the body scene. No new jobs needed.
+   - **Template scenes with `generates: false`** (e.g. `loading`, `selection`): no generation jobs. Check `template_schema.scene_structure` — any scene whose entry has `generates: false` produces no jobs regardless of what elements it contains. This covers locked UI frames, asset-reuse scenes, and progress screens. If `template_schema` is null, apply this rule only to `loading` and `end_card`.
    - **UI nested assets** (`element_type: "ui_nested_asset"` in any scene): `asset_type: "image"`, `model: "gemini-3-pro-image-preview"`. These are photos or content visible inside a locked UI frame (e.g. camera roll photos).
    - **All other elements in a shorts_featured_video scene** (`scene_type` of `hook`, `body`, `climax`, or `resolution`): `asset_type: "video"`, `model: "veo-3.1-generate-preview"`. Every non-nested-asset element in a video storyboard scene is a video job regardless of whether it shows hands, a pet, an environment, or any other subject.
    - **Static ad foreground** (`deliverable_id: "S1"`, `format: "full_screen_interstitial"`): `asset_type: "image"`, `model: "gemini-3-pro-image-preview"`, `resolution: "500x360"`. The S1 deliverable generates exactly one job: the foreground subject image. The background is a locked template - do not generate a job for it. Any decorative graphic elements (e.g. thought bubbles, icons) must be folded into the foreground prompt description, not created as separate jobs.
@@ -246,15 +245,15 @@ Add two fields at the root of the manifest object:
 
 ### slot_id per job
 
-For every job, add a `slot_id` field. Set it according to these rules:
+`template_schema.scene_structure` is the authoritative slot table. For every job, look up the scene's entry in `scene_structure` and find the slot whose `element_id` matches the job's `element_id`. Assign that slot's `slot_id` to the job. If no matching slot is found, assign `slot_id: null`.
 
-- **Camera roll photos** (`element_type: "ui_nested_asset"`, `element_id` matching `camera_roll_photo_01` through `camera_roll_photo_09`): assign `slot_id` values `gridImage1` through `gridImage9` in the same order (photo_01 → gridImage1, photo_02 → gridImage2, … photo_09 → gridImage9).
-- **Veo payoff video** (the climax scene's video job, `asset_type: "video"` from a `hook`/`body`/`climax`/`resolution` scene that is not a camera roll photo): assign `slot_id: "generatedVideo"`.
-- **All other jobs**: assign `slot_id: null`.
+Scenes where `generates: false` produce no jobs — skip them entirely. Scenes where `generates: true` have a `slots` array; each slot defines `element_id` → `slot_id`. The mapping is exact: use the `element_id` string from the slot definition to match against the storyboard element's `element_id`.
+
+All jobs outside the V1 template (S1 static, text items, end card) always get `slot_id: null`.
 
 ### selected_slot_mapping
 
-After the `jobs` array, add a `selected_slot_mapping` object. Read the creative_package storyboard and find the camera roll photos that have `"selected": true`. For each selected photo, look up the `slot_id` you already assigned to its job (e.g. `gridImage1`, `gridImage5`). Use that `slot_id` as the key and the `job_id` as the value:
+After the `jobs` array, add a `selected_slot_mapping` object. Read the storyboard for elements with `"selected": true`. For each, look up the `slot_id` already assigned to its job and use that as the key, with the `job_id` as the value:
 
 ```json
 "selected_slot_mapping": {
@@ -263,14 +262,14 @@ After the `jobs` array, add a `selected_slot_mapping` object. Read the creative_
 }
 ```
 
-Where `gridImage1` and `gridImage5` are the `slot_id` values already assigned to those jobs (matching the `camera_roll_photo_01` → `gridImage1` mapping), and `job_002`/`job_006` are their `job_id` values. Do NOT use key names like `selectedImage1` or `selectedImage2` — the keys must be the `gridImage[N]` slot IDs.
+The keys are the slot IDs from the slot table (e.g. `gridImage1`, `gridImage5`) — never invented names like `selectedImage1`. The values are the `job_id` values of those jobs.
 
 If `template_schema` is null, omit `template_id`, `template_version`, and `selected_slot_mapping` from the manifest entirely, and set `slot_id: null` on all jobs.
 
 ## What to avoid
 
 - **Do not generate any image or video jobs for end card scenes.** Scenes with `scene_type: "end_card"` contain only text overlays and locked template assets. All end card content goes to `text_items` only. No generation jobs should be created for any element in an end card scene.
-- **Do not generate any image or video jobs for selection scenes.** Scenes with `scene_type: "selection"` display already-generated selected photos at larger size — they share assets with the `gridImage` slots from the body scene. No new generation jobs.
+- **Do not generate jobs for any template scene where `generates: false`.** Read `template_schema.scene_structure` — if a scene's entry has `generates: false`, produce no jobs for it regardless of its elements.
 - **Do not generate more than one job for S1.** The full_screen_interstitial deliverable produces exactly one generated asset: the foreground image at 500x360. The background is a locked template and must not be generated. Do not create separate jobs for decorative overlays, thought bubbles, or graphic elements - fold any such elements into the foreground prompt description.
 - **Do not invent scenes or elements.** Your job is to translate the creative_package, not redesign it. Every job must trace back to a scene and element in the storyboard.
 - **Do not skip elements.** Every generatable element in the creative_package must have a corresponding job. Every text_overlay must have a corresponding text_item.

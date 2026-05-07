@@ -64,32 +64,82 @@ KB_CACHE_DIR = OUTPUT_DIR / "kb_cache"
 # 1:1 for now. Extend to a list per key when multiple templates exist per tool.
 
 TEMPLATE_CATALOG: dict[str, dict] = {
+    # -----------------------------------------------------------------------
+    # Schema contract for each entry:
+    #
+    # template_id       Remotion template identifier (string)
+    # template_version  Semver string (string)
+    # selected_image_count  Number of camera roll photos the user selects as
+    #                   Photo to Video inputs (int, omit if not applicable)
+    # scene_structure   Ordered list of scenes the template supports. The
+    #                   creative director MUST produce exactly these scene
+    #                   types in this order for the V1 deliverable — no extras.
+    #
+    #   Each scene entry:
+    #     scene_type    Matches the storyboard scene_type field
+    #     label         Human-readable name (for docs/debugging)
+    #     generates     True if this scene produces new generation jobs.
+    #                   False means the prompter skips it entirely.
+    #     reuses_from   scene_type whose slots this scene re-uses (omit if
+    #                   not applicable). Prompter emits no jobs for this scene.
+    #     slots         List of slot definitions (only on generates: True scenes).
+    #       slot_id       The Remotion slot name the generated asset lands in
+    #       element_id    The storyboard element_id that maps to this slot.
+    #                     Use exact strings for fixed elements; use a prefix
+    #                     pattern ending in * for numbered sets (e.g.
+    #                     "camera_roll_photo_*" covers _01 through _09).
+    #       asset_type    "image" or "video"
+    #     note          Prose guidance for the creative director / prompter
+    # -----------------------------------------------------------------------
     "Photo to Video": {
         "template_id": "veo_shorts_v1",
         "template_version": "1.0",
         "selected_image_count": 2,
-        "has_generated_video": True,
-        "has_prompt_text": True,
         "scene_structure": [
             {
                 "scene_type": "body",
-                "note": "Camera roll UI — exactly 9 nested photos, selected_image_count of them marked selected: true",
+                "label": "Camera roll grid",
+                "generates": True,
+                "slots": [
+                    {"slot_id": "gridImage1", "element_id": "camera_roll_photo_01", "asset_type": "image"},
+                    {"slot_id": "gridImage2", "element_id": "camera_roll_photo_02", "asset_type": "image"},
+                    {"slot_id": "gridImage3", "element_id": "camera_roll_photo_03", "asset_type": "image"},
+                    {"slot_id": "gridImage4", "element_id": "camera_roll_photo_04", "asset_type": "image"},
+                    {"slot_id": "gridImage5", "element_id": "camera_roll_photo_05", "asset_type": "image"},
+                    {"slot_id": "gridImage6", "element_id": "camera_roll_photo_06", "asset_type": "image"},
+                    {"slot_id": "gridImage7", "element_id": "camera_roll_photo_07", "asset_type": "image"},
+                    {"slot_id": "gridImage8", "element_id": "camera_roll_photo_08", "asset_type": "image"},
+                    {"slot_id": "gridImage9", "element_id": "camera_roll_photo_09", "asset_type": "image"},
+                ],
+                "note": "Camera roll UI — 9 ui_nested_asset photos in a grid. selected_image_count of them are marked selected: true with a selection_rationale.",
             },
             {
                 "scene_type": "selection",
-                "note": "Selected photos featured prominently before generation — shows only the selected_image_count chosen photos in a larger highlighted view. These are ui_nested_asset elements referencing the same selected photos from the body scene (no new generation jobs needed — assets are shared with the gridImage slots already generated in body).",
+                "label": "Selected photos highlight",
+                "generates": False,
+                "reuses_from": "body",
+                "note": "Shows only the selected photos at larger size before generation starts. No new jobs — assets are shared with the body scene's gridImage slots.",
             },
             {
                 "scene_type": "loading",
-                "note": "AI generation progress screen — locked, no generation jobs",
+                "label": "AI generation progress",
+                "generates": False,
+                "note": "Locked UI frame — AI generation progress screen. Nothing to generate.",
             },
             {
                 "scene_type": "climax",
-                "note": "Generated video reveal — one generatedVideo slot",
+                "label": "Generated video reveal",
+                "generates": True,
+                "slots": [
+                    {"slot_id": "generatedVideo", "element_id": "generated_video", "asset_type": "video"},
+                ],
+                "note": "The AI-generated video payoff. One video job landing in the generatedVideo slot.",
             },
             {
                 "scene_type": "end_card",
-                "note": "Brand end card — locked brand assets, adaptable tagline",
+                "label": "Brand end card",
+                "generates": False,
+                "note": "Locked brand assets. Tagline is adaptable, CTA and logo are locked. Text items only.",
             },
         ],
     },

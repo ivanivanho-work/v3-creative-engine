@@ -235,17 +235,22 @@ If `template_schema` is not null, parse it and apply these additional rules:
 
 ### Scene structure (applies to V1 only)
 
-When `template_schema.scene_structure` is present, the V1 (`shorts_featured_video`) storyboard MUST contain exactly those scene types in that order — no more, no less. Do NOT add a hook, resolution, or any other scene type not listed in `scene_structure`. The Remotion template only renders slots defined in its structure; any scene outside `scene_structure` produces a generation job with no slot to land in and is discarded at render time. All creative storytelling must happen within the allowed scenes.
+`template_schema.scene_structure` is the authoritative list of scenes the Remotion template supports. The V1 (`shorts_featured_video`) storyboard MUST contain exactly those scene types in that order — no more, no less. Do NOT add any scene type not listed. Any scene outside `scene_structure` produces a generation job with no slot to land in and is discarded at render time.
 
-### Selection scene
+For each scene in `scene_structure`:
+- Use the `scene_type` value exactly as the storyboard `scene_type` field
+- Read `note` for guidance on what the scene shows and how to design it
+- Scenes with `generates: false` require no generation elements — design them as UI frames or locked screens
+- Scenes with `reuses_from` display assets from that other scene — use the same `element_id` values as the referenced scene, mark them as `ui_nested_asset`, set `shows_product_ui: true`, and leave `nested_assets_to_generate` empty
+- Scenes with `generates: true` and `slots` — use the exact `element_id` values from each slot definition for your storyboard elements
 
-When `scene_structure` includes a `selection` scene type, include a scene between `body` and `loading` with `scene_type: "selection"`. This scene shows only the `selected_image_count` chosen photos displayed prominently in a larger highlighted view — the moment the user has made their selection and is about to generate. The elements here are `ui_nested_asset` references to the same selected photos from the body scene (use the same `element_id` values, e.g. `camera_roll_photo_01`, `camera_roll_photo_05`). No new assets are generated for this scene — it reuses the gridImage slots from body. Set `shows_product_ui: true` in `ui_context` and leave `nested_assets_to_generate` empty.
+### Slots and element IDs
 
-### Selected photos (Photo to Video template)
+For scenes with `generates: true`, read `template_schema.scene_structure[*].slots` to find the exact `element_id` each slot expects. Use those `element_id` values verbatim in your storyboard elements. Do not invent element IDs for template scenes — the prompter maps `element_id` → `slot_id` directly from this table.
 
-When `template_schema.selected_image_count` is present, you must designate exactly that many of the 9 camera roll photos as the **selected inputs** for AI video generation. The selection must be creatively motivated: choose the photos whose subjects would produce the most compelling and narratively coherent transformation.
+### Selected inputs
 
-For each selected photo element, add two extra fields alongside the existing ones:
+When `template_schema.selected_image_count` is present, designate exactly that many elements from the body scene as the **selected inputs** for AI generation. Choose creatively — pick the subjects that will produce the most compelling transformation. For each selected element, add:
 
 ```json
 {
@@ -258,9 +263,7 @@ For each selected photo element, add two extra fields alongside the existing one
 }
 ```
 
-Non-selected photos omit `selected` and `selection_rationale` entirely (do not set `selected: false`).
-
-The selection rationale is read by the creative_presenter to explain to the user why these two photos anchor the video generation.
+Non-selected elements omit `selected` and `selection_rationale` entirely (do not set `selected: false`).
 
 ---
 

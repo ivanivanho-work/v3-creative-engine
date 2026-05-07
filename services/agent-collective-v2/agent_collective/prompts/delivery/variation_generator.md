@@ -47,7 +47,7 @@ For each scene, first identify the scene type from the scene_map, then apply the
 **Routing rules (apply in order):**
 - **End card scenes** (`scene_type: "end_card"`): no generation jobs. Text items only.
 - **Loading scenes** (`scene_type: "loading"`): no generation jobs. Locked UI template, nothing to generate.
-- **Selection scenes** (`scene_type: "selection"`): no generation jobs. Displays already-generated selected photos at larger size — assets shared with `gridImage` slots from the body scene.
+- **Template scenes with `generates: false`** (e.g. `selection`, `loading`): no generation jobs. If `template_schema` is available in the scene map, check `scene_structure` — any scene with `generates: false` produces no jobs regardless of its elements.
 - **Product UI scenes** (`scene_type: "product_ui"`): each `ui_nested_asset` element (camera roll photos, gallery photos) gets its own individual image generation job. See "Asset Swap Outputs" below.
 - **All other video scenes** (`scene_type` of `hook`, `body`, `climax`, or `resolution`): produce **exactly ONE video generation job per scene**. Compose every visible non-text element -- hands, environment, subject, prop -- into a single video prompt. Do NOT create separate image jobs for individual elements within the scene. The hands, table, pet photo, and any other props are all part of one composited shot and must be described together in one generation prompt. `output_type` must be `"video_generation_prompt"`, `model` must be `"veo-3.1-generate-preview"`.
 
@@ -222,10 +222,7 @@ If `template_schema` is not null, apply these additional rules to your output:
 "template_version": "<template_schema.template_version>"
 ```
 
-**`slot_id` per output job** — add a `slot_id` field to every item in every scene's `outputs` array:
-- Camera roll photo jobs (`element_id` matching `camera_roll_photo_01` through `camera_roll_photo_09`): assign `slot_id` values `gridImage1` through `gridImage9` in order (photo_01 → gridImage1, photo_02 → gridImage2, … photo_09 → gridImage9)
-- Video generation job from the climax/resolution scene (`output_type: "video_generation_prompt"`): assign `slot_id: "generatedVideo"`
-- All other outputs: assign `slot_id: null`
+**`slot_id` per output job** — add a `slot_id` field to every item in every scene's `outputs` array. Use `template_schema.scene_structure` as the slot table: for each output, find the scene's entry in `scene_structure`, then find the slot whose `element_id` matches the output's `element_id`. Assign that slot's `slot_id`. If no matching slot is found, assign `slot_id: null`. All S1 outputs always get `slot_id: null`.
 
 **`selected_slot_mapping`** — after `scene_outputs`, add this object. Read the scene map for elements marked `"selected": true` (the camera roll photos chosen as Photo to Video inputs in the V1). For each adapted variation, pick the same number of selected photos (`template_schema.selected_image_count`) from your adapted camera roll — choose the ones whose subjects produce the most compelling Photo to Video transformation. Look up the `slot_id` you assigned to each chosen job (`gridImage[N]`) and use that as the key, with the `element_id` as the value. Do NOT use keys like `selectedImage1` — keys must be the `gridImage[N]` slot IDs:
 ```json
