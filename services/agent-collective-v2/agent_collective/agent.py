@@ -736,11 +736,11 @@ def _make_creative_phase_before_callback():
     async def callback(callback_context) -> None:
         brief_raw = callback_context.state.get("marketing_brief")
         if not brief_raw:
-            callback_context.state["template_schema"] = None
+            callback_context.state["template_schema"] = "null"
             return
         brief = _parse_state_value(brief_raw)
         if not isinstance(brief, dict):
-            callback_context.state["template_schema"] = None
+            callback_context.state["template_schema"] = "null"
             return
         feature_name = (
             brief.get("proposition", {})
@@ -749,7 +749,7 @@ def _make_creative_phase_before_callback():
         ) or ""
         template = TEMPLATE_CATALOG.get(feature_name)
         callback_context.state["template_schema"] = (
-            json.dumps(template) if template else None
+            json.dumps(template) if template else "null"
         )
     return callback
 
