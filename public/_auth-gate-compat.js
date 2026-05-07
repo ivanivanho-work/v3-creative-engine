@@ -36,6 +36,9 @@
     firebase.initializeApp(FIREBASE_CONFIG);
   }
   const auth = firebase.auth();
+  if (['localhost', '127.0.0.1'].includes(window.location.hostname)) {
+    auth.useEmulator('http://127.0.0.1:9099');
+  }
   const provider = new firebase.auth.GoogleAuthProvider();
 
   function buildOverlay() {
