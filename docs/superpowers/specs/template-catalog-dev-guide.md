@@ -5,50 +5,7 @@
 
 The Agent Collective generates campaign assets through a multi-agent pipeline. When a campaign's featured tool maps to a Remotion template, the pipeline switches into **template mode** — the creative director designs a storyboard locked to the template's scene structure, and the manifest emitter assigns every generated asset to a named slot that Remotion reads.
 
-Your job as the template developer is to **fill out a catalog entry** in `agent.py`. Once the entry is complete and correct, the pipeline handles everything automatically — no prompt edits needed.
-
----
-
-## What the template dev provides vs. what the catalog needs
-
-When you hand off a new Remotion template, you'll typically provide a rendering contract like this:
-
-```json
-{
-  "template_id": "veo_shorts_v1",
-  "template_version": "1.0",
-  "asset_slots": [
-    {"slot_id": "gridImage1", "type": "image"},
-    {"slot_id": "gridImage2", "type": "image"},
-    {"slot_id": "gridImage3", "type": "image"},
-    {"slot_id": "gridImage4", "type": "image"},
-    {"slot_id": "gridImage5", "type": "image"},
-    {"slot_id": "gridImage6", "type": "image"},
-    {"slot_id": "gridImage7", "type": "image"},
-    {"slot_id": "gridImage8", "type": "image"},
-    {"slot_id": "gridImage9", "type": "image"},
-    {"slot_id": "selectedImage1", "type": "image"},
-    {"slot_id": "selectedImage2", "type": "image"},
-    {"slot_id": "generatedVideo", "type": "video"},
-    {"slot_id": "endCardVideo", "type": "video"}
-  ],
-  "text_slots": [
-    {"slot_id": "promptText", "final_text": "...", "language": "en"}
-  ]
-}
-```
-
-**This is a rendering contract, not a production contract.** It tells the pipeline what Remotion can render — but the pipeline also needs to know *how* each slot is filled. There are four fundamentally different filling mechanisms, and a flat slot list doesn't distinguish between them:
-
-| Slot | Mechanism | Catalog needs? |
-|---|---|---|
-| `gridImage1`–`gridImage9` | AI-generated (image model) | Yes — `slots` in a `generates: true` scene |
-| `selectedImage1`, `selectedImage2` | Remotion-internal — Remotion populates these from whichever gridImage slots the pipeline marks as selected | No — handled automatically via `selected_slot_mapping` |
-| `generatedVideo` | AI-generated (video model) | Yes — `slots` in a `generates: true` scene |
-| `endCardVideo` | Pre-made brand video, locked in Remotion | No — Remotion handles it natively, no generation needed |
-| `promptText` | User-authored text (the AI generation prompt) | Yes — `text_slots` entry pointing to climax scene |
-
-The catalog entry only needs to describe slots the pipeline is responsible for filling. Remotion-internal slots (`selectedImage*`) and locked brand assets (`endCardVideo`) are handled by Remotion itself.
+Your job as the template developer is to **submit a catalog entry** for your template. The entry lives in `agent.py` and describes your template's scene structure, which slots need AI-generated assets, which slots carry text, and how selected photos are handled. Once the entry is complete and correct, the pipeline handles everything automatically — no prompt edits needed.
 
 ---
 
@@ -62,6 +19,21 @@ Look for `TEMPLATE_CATALOG` near the top of the file. Add your template as a new
 
 ---
 
+## What to put in the catalog
+
+Your Remotion template has slots. Not all slots are the same — the catalog only describes slots that the **pipeline is responsible for filling**. Before writing your entry, classify each slot in your template:
+
+| Slot type | Who fills it | Catalog entry needed? |
+|---|---|---|
+| AI-generated images or videos | Generation pipeline (image/video model) | Yes — add to `slots` in a `generates: true` scene |
+| Selected photo display slots (e.g. `selectedImage1`) | Remotion fills internally from the pipeline's `selected_slot_mapping` | No — set `selected_image_count` and the rest is automatic |
+| Text values the user authors (e.g. an AI prompt the user typed) | Pipeline writes as a text item and routes to Remotion | Yes — add to `text_slots` in the relevant scene |
+| Locked brand assets (e.g. a pre-made brand video, logo) | Remotion loads natively | No — Remotion handles these, do not add to catalog |
+
+Only slots in the first and third rows need catalog entries. Everything else is handled automatically.
+
+---
+
 ## Full catalog entry schema
 
 ```python
@@ -69,7 +41,7 @@ TEMPLATE_CATALOG: dict[str, dict] = {
     "Your Feature Name": {
         "template_id": "your_template_id",        # Remotion template identifier — must match exactly
         "template_version": "1.0",                # Semver string
-        "selected_image_count": 2,                # OPTIONAL — only if users pick photos as AI inputs
+        "selected_image_count": 2,                # OPTIONAL — number of photos the user picks as AI inputs
         "scene_structure": [                      # Ordered list of every scene the template renders
             {
                 "scene_type": "body",             # Matches storyboard scene_type field exactly
@@ -81,7 +53,7 @@ TEMPLATE_CATALOG: dict[str, dict] = {
                         "element_id": "camera_roll_photo_01",  # Storyboard element_id that maps to this slot
                         "asset_type": "image",    # "image" or "video"
                     },
-                    # ... one entry per generated slot in this scene
+                    # ... one entry per AI-generated slot in this scene
                 ],
                 "note": "Guidance for the creative director on what this scene shows.",
             },
@@ -90,7 +62,7 @@ TEMPLATE_CATALOG: dict[str, dict] = {
                 "label": "Selected photos highlight",
                 "generates": False,               # No new generation — reuses grid images
                 "reuses_from": "body",            # Which scene's assets Remotion re-displays here
-                "note": "Shows selected photos at larger size. Remotion populates selectedImage1/2 internally from the selected_slot_mapping — no new generation.",
+                "note": "Shows selected photos at larger size. Remotion populates its internal selectedImage slots automatically — no new generation.",
             },
             {
                 "scene_type": "loading",
@@ -111,8 +83,8 @@ TEMPLATE_CATALOG: dict[str, dict] = {
                 ],
                 "text_slots": [                   # OPTIONAL — text values the pipeline must pass to Remotion
                     {
-                        "slot_id": "promptText",  # Remotion text slot name
-                        "source": "climax_creative_direction",  # Where the value comes from
+                        "slot_id": "promptText",  # Remotion text slot name — must match exactly
+                        "source": "climax_creative_direction",  # Where the pipeline gets the value
                         "note": "The AI generation prompt text the user typed. Write in market language.",
                     },
                 ],
@@ -122,7 +94,7 @@ TEMPLATE_CATALOG: dict[str, dict] = {
                 "scene_type": "end_card",
                 "label": "Brand end card",
                 "generates": False,
-                "note": "Locked brand assets including endCardVideo (pre-made brand video handled natively by Remotion). Tagline adaptable, CTA and logo locked.",
+                "note": "Locked brand assets. Tagline adaptable, CTA and logo locked.",
             },
         ],
     },
@@ -139,8 +111,8 @@ TEMPLATE_CATALOG: dict[str, dict] = {
 |---|---|---|---|
 | `template_id` | Yes | string | The Remotion template identifier. Must match exactly what Remotion expects. |
 | `template_version` | Yes | string | Semver string (e.g. `"1.0"`). Increment minor when slots change, major when scene_structure changes. |
-| `selected_image_count` | No | int | Number of photos the user selects as AI inputs (e.g. Photo to Video takes 2). Omit entirely if your template has no photo selection mechanic. Selected photos are chosen FROM the generated gridImage slots — no separate generation job. |
-| `scene_structure` | Yes | list | Ordered list of scene entries. The creative director will produce exactly these scene types in this order for the V1 deliverable. |
+| `selected_image_count` | No | int | Number of photos the user selects as AI inputs. Omit entirely if your template has no photo selection mechanic. The pipeline marks this many camera roll photos as selected and records which grid slots they came from in `selected_slot_mapping`. Remotion uses that to populate its internal selection display slots. |
+| `scene_structure` | Yes | list | Ordered list of scene entries. The creative director will produce exactly these scene types in this order — no extras. |
 
 ### Per-scene fields
 
@@ -159,42 +131,16 @@ TEMPLATE_CATALOG: dict[str, dict] = {
 | Field | Required | Type | Description |
 |---|---|---|---|
 | `slot_id` | Yes | string | The Remotion slot name this generated asset lands in. Must match exactly (case-sensitive). |
-| `element_id` | Yes | string | The storyboard `element_id` the creative director must use for this slot. The prompter maps `element_id → slot_id` directly from this table. |
+| `element_id` | Yes | string | The storyboard `element_id` the creative director must use for this slot. The prompter maps `element_id → slot_id` directly from this table — if these don't match the storyboard, the slot won't be filled. |
 | `asset_type` | Yes | string | `"image"` or `"video"`. Determines which generation model is used. |
 
 ### Per-text-slot fields (inside `text_slots`)
 
 | Field | Required | Type | Description |
 |---|---|---|---|
-| `slot_id` | Yes | string | The Remotion text slot name (e.g. `"promptText"`). Must match exactly. |
-| `source` | Yes | string | Where the value comes from. `"climax_creative_direction"` = the AI generation prompt the user typed; `"end_card_tagline"` = the end card tagline copy. |
-| `note` | Yes | string | Guidance for the prompter on how to write this text. |
-
----
-
-## Slot filling mechanisms — what goes in the catalog
-
-The four ways a Remotion slot can be filled, and whether each needs a catalog entry:
-
-### 1. AI-generated slots → `slots` in a `generates: true` scene
-These are images or videos produced by the generation pipeline. Every one of these needs an entry in `slots`. The pipeline creates a generation job for each, assigns the `slot_id`, and passes it to Remotion.
-
-**Examples:** `gridImage1`–`gridImage9`, `generatedVideo`
-
-### 2. Selected photo slots → automatic via `selected_slot_mapping`
-When the user selects photos from the grid, Remotion has dedicated display slots (e.g. `selectedImage1`, `selectedImage2`) that it populates internally. The pipeline records which `gridImage[N]` slots were selected and passes a `selected_slot_mapping` to Remotion. No catalog entry needed — this is handled automatically when `selected_image_count` is set.
-
-**Example:** `selectedImage1`, `selectedImage2` → Remotion reads `selected_slot_mapping: {"gridImage1": "job_002", "gridImage5": "job_006"}` and knows to display those two images.
-
-### 3. Text slots → `text_slots` in the relevant scene
-These are text values the user authored or that come from the creative direction. The pipeline writes them as `text_items` in the manifest and routes them to Remotion via `slot_id`. Add a `text_slots` entry to the scene that contextually owns the text.
-
-**Example:** `promptText` in the climax scene — the AI generation prompt the user typed (e.g. "고양이가 스케이트보드를 타는 모습")
-
-### 4. Locked brand assets → no catalog entry
-Pre-made assets that Remotion loads natively (brand videos, logos, locked background graphics). The pipeline never generates these. Do not add them to the catalog — Remotion handles them entirely.
-
-**Example:** `endCardVideo` — a pre-made brand video baked into the Remotion template.
+| `slot_id` | Yes | string | The Remotion text slot name (e.g. `"promptText"`). Must match exactly (case-sensitive). |
+| `source` | Yes | string | Where the pipeline gets the value. `"climax_creative_direction"` = the AI generation prompt text from the climax scene; `"end_card_tagline"` = the end card tagline copy. |
+| `note` | Yes | string | Guidance for the prompter on how to write this text (language, tone, what to draw from). |
 
 ---
 
@@ -212,35 +158,39 @@ Once your entry is in the catalog, the pipeline automatically:
 
 ---
 
-## Rules to follow when building your Remotion template
+## Rules to follow when filling out the catalog entry
 
 ### 1. Slot IDs must be stable
 
-Once you publish a slot name (e.g. `gridImage1`, `generatedVideo`), do not rename it. A renamed slot in Remotion that isn't updated in the catalog will silently produce an empty slot at render time.
+Once you publish a slot name (e.g. `gridImage1`, `generatedVideo`), do not rename it. A renamed slot that isn't updated in the catalog will silently produce an empty slot at render time.
 
 ### 2. Every AI-generated slot must be in the catalog
 
 If Remotion renders a generated asset, it needs a `slots` entry. If a slot has no catalog entry, the pipeline won't generate an asset for it and it renders empty. Audit your template — every AI-generated slot in Remotion should appear in `slots`.
 
-### 3. `generates: False` scenes must have no new generatable content
+### 3. Do not add Remotion-internal or locked slots to the catalog
 
-Scenes marked `generates: False` produce zero generation jobs. If your template needs a generated asset in what you've marked as a `selection` or `loading` scene, you either need to move it to a `generates: True` scene or mark the scene `generates: True` and add a slot for it.
+Selected photo display slots (e.g. `selectedImage1`, `selectedImage2`) and locked brand assets (e.g. a pre-made brand video) are handled by Remotion. Do not add them to `slots` — the pipeline has no generation job to assign them.
 
-### 4. Asset-reuse scenes must use `reuses_from`
+### 4. `generates: False` scenes must have no new generatable content
 
-If a scene in your template displays an asset generated in a previous scene (e.g. the selected photos shown before the loading screen), declare `reuses_from` pointing to the originating scene. This tells the pipeline not to generate a duplicate job. Without this, you may get orphaned jobs or missing renders.
+Scenes marked `generates: False` produce zero generation jobs. If your template needs a generated asset in what you've marked as a `selection` or `loading` scene, move it to a `generates: True` scene or change the scene to `generates: True` and add a slot for it.
 
-### 5. `end_card` is always `generates: False`
+### 5. Asset-reuse scenes must use `reuses_from`
 
-The end card contains locked brand assets. It never produces image or video generation jobs. Always declare it as `generates: False`. Locked assets like `endCardVideo` are handled natively by Remotion — do not add them to the catalog.
+If a scene in your template displays an asset generated in a previous scene (e.g. selected photos shown before the loading screen), declare `reuses_from` pointing to the originating scene. Without this, you may get orphaned jobs or missing renders.
 
-### 6. Text slots belong to the scene that contextually owns them
+### 6. `end_card` is always `generates: False`
 
-Add `text_slots` to the scene where the text appears or is most directly authored. The AI generation prompt text (`promptText`) belongs to the `climax` scene because that's where the AI generation result is revealed.
+The end card contains locked brand assets. It never produces generation jobs. Always declare it as `generates: False`.
 
-### 7. Scene order matters
+### 7. Add `text_slots` to the scene that contextually owns the text
 
-The creative director produces scenes in the exact order they appear in `scene_structure`. If your template has a specific timing or transition dependency between scenes, the order in the catalog controls it.
+Put `text_slots` on the scene where the text appears or is authored. The AI generation prompt text (`promptText`) belongs to the `climax` scene because that's where the generation result is revealed.
+
+### 8. Scene order matters
+
+The creative director produces scenes in the exact order they appear in `scene_structure`. Match the playback order of your Remotion template exactly.
 
 ---
 
@@ -249,14 +199,12 @@ The creative director produces scenes in the exact order they appear in `scene_s
 When you update a template:
 
 - **Patch** (visual change, no slot changes): increment `template_version` patch digit. No catalog change needed.
-- **Minor** (new slot added, existing slots unchanged): add the new slot to `slots` in the catalog entry, increment minor version.
+- **Minor** (new slot added, existing slots unchanged): add the new slot to the catalog entry, increment minor version.
 - **Major** (scene removed, slot renamed, scene order changed): update `scene_structure` fully, increment major version. Coordinate with the pipeline team — existing runs may break.
 
 ---
 
-## Example: complete catalog entry for `veo_shorts_v1`
-
-This is the full catalog entry for the Photo to Video template, derived from the `veo_shorts_v1` handoff payload:
+## Example: Photo to Video (`veo_shorts_v1`)
 
 ```python
 "Photo to Video": {
@@ -286,7 +234,7 @@ This is the full catalog entry for the Photo to Video template, derived from the
             "label": "Selected photos highlight",
             "generates": False,
             "reuses_from": "body",
-            "note": "Shows only the selected photos at larger size before generation starts. Remotion populates its selectedImage1/selectedImage2 display slots from the selected_slot_mapping — no new generation jobs.",
+            "note": "Shows only the selected photos at larger size before generation starts. No new generation jobs.",
         },
         {
             "scene_type": "loading",
@@ -305,7 +253,7 @@ This is the full catalog entry for the Photo to Video template, derived from the
                 {
                     "slot_id": "promptText",
                     "source": "climax_creative_direction",
-                    "note": "The AI generation prompt text the user typed. Write in the market's primary language. Should feel like a real user's input.",
+                    "note": "The AI generation prompt the user typed. Write in the market's primary language. Should feel like a real user's input, e.g. '고양이가 스케이트보드를 타는 모습'.",
                 },
             ],
             "note": "The AI-generated video payoff. One video job landing in generatedVideo. Also write the promptText text_item — the in-UI prompt the user typed.",
@@ -314,7 +262,7 @@ This is the full catalog entry for the Photo to Video template, derived from the
             "scene_type": "end_card",
             "label": "Brand end card",
             "generates": False,
-            "note": "Locked brand assets including endCardVideo (pre-made brand video, handled natively by Remotion). Tagline adaptable, CTA and logo locked.",
+            "note": "Locked brand assets. Tagline adaptable, CTA and logo locked.",
         },
     ],
 },
@@ -322,7 +270,7 @@ This is the full catalog entry for the Photo to Video template, derived from the
 
 ---
 
-## Example: adding a new template
+## Example: Add Audio (`story_reel_v1`)
 
 Suppose you're building `story_reel_v1` for the **Add Audio** feature. It has three scenes: a montage of clips, a beat-drop highlight, and an end card.
 
@@ -368,10 +316,10 @@ That's it. No prompt edits. The pipeline reads the catalog and handles the rest.
 ## Checklist before submitting a catalog entry
 
 - [ ] `template_id` matches the Remotion template identifier exactly (case-sensitive)
-- [ ] Every AI-generated slot in the Remotion template has a corresponding entry in `slots`
-- [ ] Slots filled by Remotion internally (`selectedImage*`, locked brand assets) are NOT in `slots`
-- [ ] Every `element_id` in `slots` is a value the creative director will actually use in the storyboard
-- [ ] Text values the pipeline must pass to Remotion are in `text_slots` (with correct `source`)
+- [ ] Every AI-generated slot has a corresponding entry in `slots`
+- [ ] Remotion-internal slots (selected photo display) and locked brand assets are NOT in `slots`
+- [ ] Every `element_id` in `slots` is a value the creative director will actually use in the storyboard (check the note field is clear enough to guide it)
+- [ ] Text values the pipeline must pass to Remotion are in `text_slots` with the correct `source`
 - [ ] Scenes with `generates: False` contain no newly-generated content in the Remotion template
 - [ ] Asset-reuse scenes have `reuses_from` set
 - [ ] Scene order in `scene_structure` matches the playback order in Remotion
