@@ -237,6 +237,10 @@ If `template_schema` is not null, parse it and apply these additional rules:
 
 When `template_schema.scene_structure` is present, the V1 (`shorts_featured_video`) storyboard MUST contain exactly those scene types in that order — no more, no less. Do NOT add a hook, resolution, or any other scene type not listed in `scene_structure`. The Remotion template only renders slots defined in its structure; any scene outside `scene_structure` produces a generation job with no slot to land in and is discarded at render time. All creative storytelling must happen within the allowed scenes.
 
+### Selection scene
+
+When `scene_structure` includes a `selection` scene type, include a scene between `body` and `loading` with `scene_type: "selection"`. This scene shows only the `selected_image_count` chosen photos displayed prominently in a larger highlighted view — the moment the user has made their selection and is about to generate. The elements here are `ui_nested_asset` references to the same selected photos from the body scene (use the same `element_id` values, e.g. `camera_roll_photo_01`, `camera_roll_photo_05`). No new assets are generated for this scene — it reuses the gridImage slots from body. Set `shows_product_ui: true` in `ui_context` and leave `nested_assets_to_generate` empty.
+
 ### Selected photos (Photo to Video template)
 
 When `template_schema.selected_image_count` is present, you must designate exactly that many of the 9 camera roll photos as the **selected inputs** for AI video generation. The selection must be creatively motivated: choose the photos whose subjects would produce the most compelling and narratively coherent transformation.

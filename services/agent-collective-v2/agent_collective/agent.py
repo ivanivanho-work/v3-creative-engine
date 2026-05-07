@@ -76,6 +76,10 @@ TEMPLATE_CATALOG: dict[str, dict] = {
                 "note": "Camera roll UI — exactly 9 nested photos, selected_image_count of them marked selected: true",
             },
             {
+                "scene_type": "selection",
+                "note": "Selected photos featured prominently before generation — shows only the selected_image_count chosen photos in a larger highlighted view. These are ui_nested_asset elements referencing the same selected photos from the body scene (no new generation jobs needed — assets are shared with the gridImage slots already generated in body).",
+            },
+            {
                 "scene_type": "loading",
                 "note": "AI generation progress screen — locked, no generation jobs",
             },

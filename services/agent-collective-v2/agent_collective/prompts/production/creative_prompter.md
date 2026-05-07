@@ -54,6 +54,7 @@ For each scene in each storyboard, and for each generatable element within that 
 2. **Determine asset_type and model.** Use these routing rules in order:
    - **End card scenes** (`scene_type: "end_card"`): no generation jobs. Text items only.
    - **Loading scenes** (`scene_type: "loading"`): no generation jobs. Locked UI template, nothing to generate.
+   - **Selection scenes** (`scene_type: "selection"`): no generation jobs. This scene displays the already-generated selected photos in a larger highlighted view — assets are shared with the `gridImage` slots already produced from the body scene. No new jobs needed.
    - **UI nested assets** (`element_type: "ui_nested_asset"` in any scene): `asset_type: "image"`, `model: "gemini-3-pro-image-preview"`. These are photos or content visible inside a locked UI frame (e.g. camera roll photos).
    - **All other elements in a shorts_featured_video scene** (`scene_type` of `hook`, `body`, `climax`, or `resolution`): `asset_type: "video"`, `model: "veo-3.1-generate-preview"`. Every non-nested-asset element in a video storyboard scene is a video job regardless of whether it shows hands, a pet, an environment, or any other subject.
    - **Static ad foreground** (`deliverable_id: "S1"`, `format: "full_screen_interstitial"`): `asset_type: "image"`, `model: "gemini-3-pro-image-preview"`, `resolution: "500x360"`. The S1 deliverable generates exactly one job: the foreground subject image. The background is a locked template - do not generate a job for it. Any decorative graphic elements (e.g. thought bubbles, icons) must be folded into the foreground prompt description, not created as separate jobs.
@@ -269,6 +270,7 @@ If `template_schema` is null, omit `template_id`, `template_version`, and `selec
 ## What to avoid
 
 - **Do not generate any image or video jobs for end card scenes.** Scenes with `scene_type: "end_card"` contain only text overlays and locked template assets. All end card content goes to `text_items` only. No generation jobs should be created for any element in an end card scene.
+- **Do not generate any image or video jobs for selection scenes.** Scenes with `scene_type: "selection"` display already-generated selected photos at larger size — they share assets with the `gridImage` slots from the body scene. No new generation jobs.
 - **Do not generate more than one job for S1.** The full_screen_interstitial deliverable produces exactly one generated asset: the foreground image at 500x360. The background is a locked template and must not be generated. Do not create separate jobs for decorative overlays, thought bubbles, or graphic elements - fold any such elements into the foreground prompt description.
 - **Do not invent scenes or elements.** Your job is to translate the creative_package, not redesign it. Every job must trace back to a scene and element in the storyboard.
 - **Do not skip elements.** Every generatable element in the creative_package must have a corresponding job. Every text_overlay must have a corresponding text_item.

@@ -47,6 +47,7 @@ For each scene, first identify the scene type from the scene_map, then apply the
 **Routing rules (apply in order):**
 - **End card scenes** (`scene_type: "end_card"`): no generation jobs. Text items only.
 - **Loading scenes** (`scene_type: "loading"`): no generation jobs. Locked UI template, nothing to generate.
+- **Selection scenes** (`scene_type: "selection"`): no generation jobs. Displays already-generated selected photos at larger size — assets shared with `gridImage` slots from the body scene.
 - **Product UI scenes** (`scene_type: "product_ui"`): each `ui_nested_asset` element (camera roll photos, gallery photos) gets its own individual image generation job. See "Asset Swap Outputs" below.
 - **All other video scenes** (`scene_type` of `hook`, `body`, `climax`, or `resolution`): produce **exactly ONE video generation job per scene**. Compose every visible non-text element -- hands, environment, subject, prop -- into a single video prompt. Do NOT create separate image jobs for individual elements within the scene. The hands, table, pet photo, and any other props are all part of one composited shot and must be described together in one generation prompt. `output_type` must be `"video_generation_prompt"`, `model` must be `"veo-3.1-generate-preview"`.
 
