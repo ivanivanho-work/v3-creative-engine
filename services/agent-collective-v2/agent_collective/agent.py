@@ -2779,6 +2779,7 @@ def _build_full_campaign_manifest(state: dict) -> dict | None:
                     ref_ids = ref_lookup.get(lookup_key, [])
                     jobs.append({
                         "job_id": job_id,
+                        "slot_id": output.get("slot_id"),
                         "audience_id": aud_id,
                         "audience_name": segment_name,
                         "scene_id": scene_id,
@@ -2802,6 +2803,16 @@ def _build_full_campaign_manifest(state: dict) -> dict | None:
                         "status": "pending",
                     })
 
+    # Collect selected_slot_mapping per audience from variation outputs
+    selected_slot_mapping_by_audience: dict = {}
+    if fc_vo:
+        _, variations_for_ssm = _normalize_variation_output(fc_vo)
+        for aud_id, aud_data in variations_for_ssm.items():
+            if isinstance(aud_data, dict) and aud_data.get("selected_slot_mapping"):
+                selected_slot_mapping_by_audience[aud_id] = aud_data[
+                    "selected_slot_mapping"
+                ]
+
     return {
         "manifest_version": "1.1",
         "run_type": "create_and_adapt",
@@ -2810,6 +2821,9 @@ def _build_full_campaign_manifest(state: dict) -> dict | None:
         "created_at": datetime.now().isoformat(),
         "market": creation_manifest.get("market", ""),
         "market_nationality": creation_manifest.get("market_nationality", ""),
+        "template_id": creation_manifest.get("template_id"),
+        "template_version": creation_manifest.get("template_version"),
+        "selected_slot_mapping_by_audience": selected_slot_mapping_by_audience or None,
         "total_reference_images": len(reference_images),
         "total_jobs": len(jobs),
         "total_text_items": len(text_items),
