@@ -123,3 +123,9 @@ The values below are injected from session state. Use them as your primary input
 
 ### prompt_quality_result
 {prompt_quality_result}
+
+### generation_manifest
+{generation_manifest}
+
+### creative_package
+{creative_package}
