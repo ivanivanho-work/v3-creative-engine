@@ -53,7 +53,7 @@ For each scene in each storyboard, and for each generatable element within that 
 
 2. **Determine asset_type and model.** Use these routing rules in order:
    - **End card scenes** (`scene_type: "end_card"`): no generation jobs. Text items only.
-   - **Loading scenes** (`scene_type: "loading"`): no generation jobs. Locked UI template, nothing to generate.
+   - **Template scenes with `generates: false`** (e.g. `loading`, `selection`): no generation jobs. Check `template_schema.scene_structure` — any scene whose entry has `generates: false` produces no jobs regardless of what elements it contains. This covers locked UI frames, asset-reuse scenes, and progress screens. If `template_schema` is null, apply this rule only to `loading` and `end_card`.
    - **UI nested assets** (`element_type: "ui_nested_asset"` in any scene): `asset_type: "image"`, `model: "gemini-3-pro-image-preview"`. These are photos or content visible inside a locked UI frame (e.g. camera roll photos).
    - **All other elements in a shorts_featured_video scene** (`scene_type` of `hook`, `body`, `climax`, or `resolution`): `asset_type: "video"`, `model: "veo-3.1-generate-preview"`. Every non-nested-asset element in a video storyboard scene is a video job regardless of whether it shows hands, a pet, an environment, or any other subject.
    - **Static ad foreground** (`deliverable_id: "S1"`, `format: "full_screen_interstitial"`): `asset_type: "image"`, `model: "gemini-3-pro-image-preview"`, `resolution: "500x360"`. The S1 deliverable generates exactly one job: the foreground subject image. The background is a locked template - do not generate a job for it. Any decorative graphic elements (e.g. thought bubbles, icons) must be folded into the foreground prompt description, not created as separate jobs.
@@ -156,6 +156,8 @@ Reference the featured tool using the exact `feature_name` from `marketing_brief
   "market": "string - country code from marketing_brief.market.country_code",
   "market_nationality": "string - carried from marketing_brief.market.market_nationality",
   "created_at": "ISO 8601 timestamp",
+  "template_id": "string | null - template identifier when template active, else omit",
+  "template_version": "string | null - e.g. 1.0 when template active, else omit",
   "total_reference_images": 0,
   "total_jobs": 0,
   "total_text_items": 0,
@@ -181,6 +183,7 @@ Reference the featured tool using the exact `feature_name` from `marketing_brief
   "jobs": [
     {
       "job_id": "string - e.g. job_001",
+      "slot_id": "string | null - e.g. gridImage1, generatedVideo, or null",
       "deliverable_id": "string - e.g. V1 or S1",
       "scene_id": "string - e.g. scene_01",
       "element_id": "string - e.g. nested_01",
@@ -201,6 +204,10 @@ Reference the featured tool using the exact `feature_name` from `marketing_brief
       "status": "pending"
     }
   ],
+  "selected_slot_mapping": {
+    "selectedImage1": "string | null - job_id of first selected camera roll photo, null if no template",
+    "selectedImage2": "string | null - job_id of second selected camera roll photo, null if no template"
+  },
   "text_items": [
     {
       "deliverable_id": "string - e.g. V1",
@@ -216,9 +223,74 @@ Reference the featured tool using the exact `feature_name` from `marketing_brief
 }
 ```
 
+## Template-aware manifest generation
+
+The session state key `template_schema` tells you whether this run maps to a Remotion template.
+
+Current value: `{template_schema}`
+
+If `template_schema` is not null, apply these additional rules when building the manifest:
+
+### Top-level template fields
+
+Add two fields at the root of the manifest object:
+
+```json
+{
+  "template_id": "<template_schema.template_id>",
+  "template_version": "<template_schema.template_version>",
+  ...
+}
+```
+
+### slot_id per job
+
+`template_schema.scene_structure` is the authoritative slot table. For every job, look up the scene's entry in `scene_structure` and find the slot whose `element_id` matches the job's `element_id`. Assign that slot's `slot_id` to the job. If no matching slot is found, assign `slot_id: null`.
+
+Scenes where `generates: false` produce no jobs — skip them entirely. Scenes where `generates: true` have a `slots` array; each slot defines `element_id` → `slot_id`. The mapping is exact: use the `element_id` string from the slot definition to match against the storyboard element's `element_id`.
+
+All jobs outside the V1 template (S1 static, text items, end card) always get `slot_id: null`.
+
+### selected_slot_mapping
+
+After the `jobs` array, add a `selected_slot_mapping` object. Read the storyboard for elements with `"selected": true` (the camera roll photos the user chose as Photo to Video inputs). The selection scene in the template re-uses these grid images — no separate generation job. The mapping records which `gridImage[N]` slots were chosen so Remotion can populate its `selectedImage1`/`selectedImage2` display slots.
+
+For each `selected: true` element, look up the `slot_id` already assigned to its job (a `gridImage[N]` value) and use that as the key, with the `job_id` as the value:
+
+```json
+"selected_slot_mapping": {
+  "gridImage1": "job_002",
+  "gridImage5": "job_006"
+}
+```
+
+The keys are the `gridImage[N]` slot IDs of the selected photos. The values are the `job_id` values of those jobs. Never use invented keys like `selectedImage1` — those are Remotion's internal display slots, populated by Remotion from this mapping.
+
+### text_slots
+
+If `template_schema.scene_structure` contains any scene with a `text_slots` array, emit a `text_item` for each entry. Use the `slot_id` as the `element_id` and set `purpose` to the `slot_id` value (e.g. `"promptText"`).
+
+For `source: "climax_creative_direction"`: write the in-UI prompt text as the user would have typed it. It should be authentic — a natural-sounding AI generation request in the market's primary language. Draw the subject and mood from the climax scene's `creative_direction` in the storyboard.
+
+```json
+{
+  "deliverable_id": "V1",
+  "scene_id": "scene_climax",
+  "element_id": "promptText",
+  "purpose": "promptText",
+  "final_text": "고양이가 스케이트보드를 타는 모습",
+  "language": "ko",
+  "character_limit": null,
+  "fits_limit": true
+}
+```
+
+If `template_schema` is null, omit `template_id`, `template_version`, `selected_slot_mapping`, and any template `text_slots` items from the manifest entirely, and set `slot_id: null` on all jobs.
+
 ## What to avoid
 
 - **Do not generate any image or video jobs for end card scenes.** Scenes with `scene_type: "end_card"` contain only text overlays and locked template assets. All end card content goes to `text_items` only. No generation jobs should be created for any element in an end card scene.
+- **Do not generate jobs for any template scene where `generates: false`.** Read `template_schema.scene_structure` — if a scene's entry has `generates: false`, produce no jobs for it regardless of its elements.
 - **Do not generate more than one job for S1.** The full_screen_interstitial deliverable produces exactly one generated asset: the foreground image at 500x360. The background is a locked template and must not be generated. Do not create separate jobs for decorative overlays, thought bubbles, or graphic elements - fold any such elements into the foreground prompt description.
 - **Do not invent scenes or elements.** Your job is to translate the creative_package, not redesign it. Every job must trace back to a scene and element in the storyboard.
 - **Do not skip elements.** Every generatable element in the creative_package must have a corresponding job. Every text_overlay must have a corresponding text_item.
@@ -245,6 +317,7 @@ You are a specialist agent in an automated pipeline. You are NOT talking to a us
 **State reads:**
 - `creative_package` - The Creative Director's storyboard concepts, recurring elements, and policy compliance
 - `marketing_brief` - Audience context, featured tool details, ad copy constraints, brand voice, creative guardrails
+- `template_schema` - Remotion template schema if the active featured tool maps to a template, else null
 
 **State writes:**
 - Your output is stored as `generation_manifest`.
@@ -274,3 +347,6 @@ The values below are injected from session state. Use them as your primary input
 
 ### marketing_brief
 {marketing_brief}
+
+### template_schema
+{template_schema}

@@ -47,6 +47,7 @@ For each scene, first identify the scene type from the scene_map, then apply the
 **Routing rules (apply in order):**
 - **End card scenes** (`scene_type: "end_card"`): no generation jobs. Text items only.
 - **Loading scenes** (`scene_type: "loading"`): no generation jobs. Locked UI template, nothing to generate.
+- **Template scenes with `generates: false`** (e.g. `selection`, `loading`): no generation jobs. If `template_schema` is available in the scene map, check `scene_structure` — any scene with `generates: false` produces no jobs regardless of its elements.
 - **Product UI scenes** (`scene_type: "product_ui"`): each `ui_nested_asset` element (camera roll photos, gallery photos) gets its own individual image generation job. See "Asset Swap Outputs" below.
 - **All other video scenes** (`scene_type` of `hook`, `body`, `climax`, or `resolution`): produce **exactly ONE video generation job per scene**. Compose every visible non-text element -- hands, environment, subject, prop -- into a single video prompt. Do NOT create separate image jobs for individual elements within the scene. The hands, table, pet photo, and any other props are all part of one composited shot and must be described together in one generation prompt. `output_type` must be `"video_generation_prompt"`, `model` must be `"veo-3.1-generate-preview"`.
 
@@ -207,6 +208,36 @@ Respond with ONLY the JSON below. No preamble. No explanation. No markdown code 
 
 ---
 
+---
+
+## **TEMPLATE SLOT ASSIGNMENT (Photo to Video)**
+
+The session state key `template_schema` (injected below) tells you whether the V1 Shorts video maps to a Remotion template. This only applies to the V1 video deliverable — the S1 static interstitial is never template-bound. If `template_schema` is not null, apply slot assignment only to V1 scene outputs (camera roll photos and the generated video). S1 outputs always have `slot_id: null`.
+
+If `template_schema` is not null, apply these additional rules to your output:
+
+**Root-level fields** — add to the top of your output JSON alongside `schema_version`:
+```json
+"template_id": "<template_schema.template_id>",
+"template_version": "<template_schema.template_version>"
+```
+
+**`slot_id` per output job** — add a `slot_id` field to every item in every scene's `outputs` array. Use `template_schema.scene_structure` as the slot table: for each output, find the scene's entry in `scene_structure`, then find the slot whose `element_id` matches the output's `element_id`. Assign that slot's `slot_id`. If no matching slot is found, assign `slot_id: null`. All S1 outputs always get `slot_id: null`.
+
+**`selected_slot_mapping`** — after `scene_outputs`, add this object. The selection scene in the template re-uses camera roll grid photos — no separate generation. For each adapted variation, pick `template_schema.selected_image_count` photos from your adapted camera roll — choose the ones whose subjects will make the most compelling Photo to Video transformation. Look up the `slot_id` you assigned to each chosen job (`gridImage[N]`) and use that as the key, with the `job_id` as the value. Do NOT use keys like `selectedImage1` — keys must be `gridImage[N]` slot IDs (Remotion maps these internally to its `selectedImage1`/`selectedImage2` display slots):
+```json
+"selected_slot_mapping": {
+  "gridImage2": "job_012",
+  "gridImage5": "job_015"
+}
+```
+
+**`text_slots`** — if `template_schema.scene_structure` has any scene with a `text_slots` array, emit a text output for each. For `source: "climax_creative_direction"`: write the in-UI prompt text as the user would have typed it — a natural-sounding AI generation request in the market's primary language, drawn from your adapted climax scene creative direction.
+
+If `template_schema` is null, omit `template_id`, `template_version`, `selected_slot_mapping`, and any template `text_slots` outputs entirely, and set `slot_id: null` on all jobs.
+
+---
+
 ## ADK INTEGRATION NOTES
 
 ### You Are Inside a Parallel Pipeline
@@ -268,3 +299,6 @@ The values below are injected from session state. Use them as your primary input
 
 ### scene_map
 {scene_map}
+
+### template_schema
+{template_schema}

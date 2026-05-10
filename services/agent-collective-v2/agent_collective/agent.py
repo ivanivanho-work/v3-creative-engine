@@ -57,6 +57,112 @@ MARKET_OUTPUT_DIR = OUTPUT_DIR / MARKET
 KB_CACHE_DIR = OUTPUT_DIR / "kb_cache"
 
 
+# =========================================================================
+# Template catalog
+# =========================================================================
+# Maps Shorts Creation Tool feature_name → Remotion template schema.
+# 1:1 for now. Extend to a list per key when multiple templates exist per tool.
+
+TEMPLATE_CATALOG: dict[str, dict] = {
+    # -----------------------------------------------------------------------
+    # Schema contract for each entry:
+    #
+    # template_id       Remotion template identifier (string)
+    # template_version  Semver string (string)
+    # selected_image_count  Number of camera roll photos the user selects as
+    #                   Photo to Video inputs (int, omit if not applicable).
+    #                   These are chosen FROM the generated gridImage slots —
+    #                   no separate generation job. The pipeline records which
+    #                   grid slots were selected in selected_slot_mapping.
+    # scene_structure   Ordered list of scenes the template supports. The
+    #                   creative director MUST produce exactly these scene
+    #                   types in this order for the V1 deliverable — no extras.
+    #
+    #   Each scene entry:
+    #     scene_type    Matches the storyboard scene_type field
+    #     label         Human-readable name (for docs/debugging)
+    #     generates     True if this scene produces new AI generation jobs.
+    #                   False means the prompter skips it entirely (locked
+    #                   UI frames, selection scenes, loading screens, end cards).
+    #     reuses_from   scene_type whose slots this scene re-uses (omit if
+    #                   not applicable). Prompter emits no jobs for this scene.
+    #     slots         List of AI-generated slot definitions (generates: True only).
+    #       slot_id       The Remotion slot name the generated asset lands in
+    #       element_id    The storyboard element_id that maps to this slot.
+    #       asset_type    "image" or "video"
+    #     text_slots    List of text values the pipeline must pass to Remotion
+    #                   (optional — omit if none). These are user-authored or
+    #                   creative-direction-derived strings, not generated assets.
+    #       slot_id       The Remotion text slot name
+    #       source        Where the value comes from:
+    #                       "climax_creative_direction" — the AI generation prompt
+    #                         text from the climax scene's creative direction
+    #                       "end_card_tagline"          — the end card tagline
+    #       note          Guidance for the prompter on how to populate this field
+    #     note          Prose guidance for the creative director / prompter
+    # -----------------------------------------------------------------------
+    "Photo to Video": {
+        "template_id": "veo_shorts_v1",
+        "template_version": "1.0",
+        "selected_image_count": 2,
+        "scene_structure": [
+            {
+                "scene_type": "body",
+                "label": "Camera roll grid",
+                "generates": True,
+                "slots": [
+                    {"slot_id": "gridImage1", "element_id": "camera_roll_photo_01", "asset_type": "image"},
+                    {"slot_id": "gridImage2", "element_id": "camera_roll_photo_02", "asset_type": "image"},
+                    {"slot_id": "gridImage3", "element_id": "camera_roll_photo_03", "asset_type": "image"},
+                    {"slot_id": "gridImage4", "element_id": "camera_roll_photo_04", "asset_type": "image"},
+                    {"slot_id": "gridImage5", "element_id": "camera_roll_photo_05", "asset_type": "image"},
+                    {"slot_id": "gridImage6", "element_id": "camera_roll_photo_06", "asset_type": "image"},
+                    {"slot_id": "gridImage7", "element_id": "camera_roll_photo_07", "asset_type": "image"},
+                    {"slot_id": "gridImage8", "element_id": "camera_roll_photo_08", "asset_type": "image"},
+                    {"slot_id": "gridImage9", "element_id": "camera_roll_photo_09", "asset_type": "image"},
+                ],
+                "note": "Camera roll UI — 9 ui_nested_asset photos in a grid. selected_image_count of them are marked selected: true with a selection_rationale.",
+            },
+            {
+                "scene_type": "selection",
+                "label": "Selected photos highlight",
+                "generates": False,
+                "reuses_from": "body",
+                "note": "Shows only the selected photos at larger size before generation starts. No new jobs — assets are shared with the body scene's gridImage slots.",
+            },
+            {
+                "scene_type": "loading",
+                "label": "AI generation progress",
+                "generates": False,
+                "note": "Locked UI frame — AI generation progress screen. Nothing to generate.",
+            },
+            {
+                "scene_type": "climax",
+                "label": "Generated video reveal",
+                "generates": True,
+                "slots": [
+                    {"slot_id": "generatedVideo", "element_id": "generated_video", "asset_type": "video"},
+                ],
+                "text_slots": [
+                    {
+                        "slot_id": "promptText",
+                        "source": "climax_creative_direction",
+                        "note": "The AI generation prompt text (what the user 'typed' in the tool). Write it in the market's primary language. It should describe the desired video output and feel authentic — like a real user's input.",
+                    },
+                ],
+                "note": "The AI-generated video payoff. One video job landing in the generatedVideo slot. Also write the promptText text_item — the in-UI prompt text the user typed to generate the video.",
+            },
+            {
+                "scene_type": "end_card",
+                "label": "Brand end card",
+                "generates": False,
+                "note": "Locked brand assets. Tagline is adaptable, CTA and logo are locked. Text items only. The endCardVideo slot is a pre-made brand video handled natively by Remotion — no generation job needed.",
+            },
+        ],
+    },
+}
+
+
 def _get_kb_dirs(market: str) -> list[Path]:
     """Return the ordered list of KB folders for a given market.
 
@@ -616,6 +722,35 @@ def _make_timing_before_callback(agent_name: str):
     """Factory: before_agent_callback that records when an agent starts."""
     async def callback(callback_context):
         _record_agent_start(callback_context.session.id, agent_name)
+    return callback
+
+
+def _make_creative_phase_before_callback():
+    """Before-callback for creative_phase.
+
+    Reads marketing_brief from session state, looks up the featured tool in
+    TEMPLATE_CATALOG, and writes the matching template schema (or None) as
+    template_schema to session state. All downstream prompt conditionals gate
+    on this key.
+    """
+    async def callback(callback_context) -> None:
+        brief_raw = callback_context.state.get("marketing_brief")
+        if not brief_raw:
+            callback_context.state["template_schema"] = "null"
+            return
+        brief = _parse_state_value(brief_raw)
+        if not isinstance(brief, dict):
+            callback_context.state["template_schema"] = "null"
+            return
+        feature_name = (
+            brief.get("proposition", {})
+                 .get("featured_tool", {})
+                 .get("feature_name", "")
+        ) or ""
+        template = TEMPLATE_CATALOG.get(feature_name)
+        callback_context.state["template_schema"] = (
+            json.dumps(template) if template else "null"
+        )
     return callback
 
 
@@ -2084,6 +2219,7 @@ creative_presenter = LlmAgent(
 creative_phase = SequentialAgent(
     name="creative_phase",
     sub_agents=[creative_director, creative_presenter],
+    before_agent_callback=_make_creative_phase_before_callback(),
 )
 
 
@@ -2643,6 +2779,7 @@ def _build_full_campaign_manifest(state: dict) -> dict | None:
                     ref_ids = ref_lookup.get(lookup_key, [])
                     jobs.append({
                         "job_id": job_id,
+                        "slot_id": output.get("slot_id"),
                         "audience_id": aud_id,
                         "audience_name": segment_name,
                         "scene_id": scene_id,
@@ -2666,6 +2803,16 @@ def _build_full_campaign_manifest(state: dict) -> dict | None:
                         "status": "pending",
                     })
 
+    # Collect selected_slot_mapping per audience from variation outputs
+    selected_slot_mapping_by_audience: dict = {}
+    if fc_vo:
+        _, variations_for_ssm = _normalize_variation_output(fc_vo)
+        for aud_id, aud_data in variations_for_ssm.items():
+            if isinstance(aud_data, dict) and aud_data.get("selected_slot_mapping"):
+                selected_slot_mapping_by_audience[aud_id] = aud_data[
+                    "selected_slot_mapping"
+                ]
+
     return {
         "manifest_version": "1.1",
         "run_type": "create_and_adapt",
@@ -2674,6 +2821,9 @@ def _build_full_campaign_manifest(state: dict) -> dict | None:
         "created_at": datetime.now().isoformat(),
         "market": creation_manifest.get("market", ""),
         "market_nationality": creation_manifest.get("market_nationality", ""),
+        "template_id": creation_manifest.get("template_id"),
+        "template_version": creation_manifest.get("template_version"),
+        "selected_slot_mapping_by_audience": selected_slot_mapping_by_audience or None,
         "total_reference_images": len(reference_images),
         "total_jobs": len(jobs),
         "total_text_items": len(text_items),
