@@ -155,6 +155,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Sync KB files from GCS on startup so we survive container restarts
+kb_storage.sync_from_gcs()
+
 # Mount ADK app at /adk so its routes don't conflict with ours
 app.mount("/adk", adk_app)
 

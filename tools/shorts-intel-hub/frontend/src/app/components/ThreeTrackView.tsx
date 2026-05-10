@@ -322,8 +322,6 @@ export function ThreeTrackView({ state, hydrated, market, week }: ThreeTrackView
     return new Set(batch.trends.map((t) => t.id));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [market, approvedVersion]);
-  const isFrozen = !!getCurrentBatch(market).sentAt;
-
   const allTrends = useMemo(() => {
     if (!cell) return new Map<string, Trend>();
     const map = new Map<string, Trend>();
@@ -337,7 +335,6 @@ export function ThreeTrackView({ state, hydrated, market, week }: ThreeTrackView
   }, [cell]);
 
   const handleApprove = (id: string) => {
-    if (isFrozen) return;
     const trend = allTrends.get(id);
     if (!trend) return;
     storeApprove(market, trend);
