@@ -15,3 +15,6 @@ export { triggerRemotionRender } from './jobs/triggerRender';
 
 // Export Asset Processing Functions
 export { preprocessAsset } from './jobs/preprocessAsset';
+
+// Export Handoff Functions
+export { receiveHandoff } from './api/receiveHandoff';
