@@ -26,6 +26,7 @@ from creative_generator.tools import (
     generate_video,
     write_execution_report,
     write_updated_manifest,
+    build_and_send_template_handoff,
 )
 
 # ---------------------------------------------------------------------------
@@ -81,13 +82,21 @@ report_writer = LlmAgent(
     output_key="report_result",
 )
 
+handoff_sender = LlmAgent(
+    name="handoff_sender",
+    model=MODEL,
+    instruction=_load_prompt("handoff_sender.md"),
+    tools=[build_and_send_template_handoff],
+    output_key="handoff_result",
+)
+
 # ---------------------------------------------------------------------------
-# Execution Phase — sequential: refs first, then jobs, then report
+# Execution Phase — sequential: refs first, then jobs, then report, then handoff
 # ---------------------------------------------------------------------------
 
 execution_phase = SequentialAgent(
     name="execution_phase",
-    sub_agents=[reference_executor, job_executor, report_writer],
+    sub_agents=[reference_executor, job_executor, report_writer, handoff_sender],
 )
 
 # ---------------------------------------------------------------------------

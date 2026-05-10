@@ -651,6 +651,127 @@ def write_updated_manifest(
 
 
 # ---------------------------------------------------------------------------
+# Tool: build_and_send_template_handoff
+# ---------------------------------------------------------------------------
+
+TEMPLATE_STAMPER_URL = os.environ.get(
+    "TEMPLATE_STAMPER_URL",
+    "https://us-central1-v3-creative-engine.cloudfunctions.net",
+)
+
+
+def build_and_send_template_handoff(
+    gcs_root: str,
+    tool_context,
+) -> dict:
+    """Build a template stamper handoff from the completed manifest and POST
+    it to the template stamper /receiveHandoff endpoint.
+
+    Reads template_id, jobs, selected_slot_mapping, and text_items from the
+    parsed manifest in session state. Maps each completed job's GCS URL to
+    its slot_id. Skips entirely if template_id is absent (non-template run).
+
+    Args:
+        gcs_root: The GCS root path for this run
+    """
+    import httpx
+
+    manifest = tool_context.state.get("parsed_manifest")
+    if not manifest:
+        return {"status": "skipped", "reason": "no parsed manifest"}
+
+    template_id = manifest.get("template_id")
+    if not template_id:
+        return {"status": "skipped", "reason": "non-template run"}
+
+    template_version = manifest.get("template_version", "1.0")
+    run_id = tool_context.state.get("run_id", "unknown")
+    pipeline_path = tool_context.state.get("pipeline_path", "path_1")
+    job_status = tool_context.state.get("job_status", {})
+    selected_mapping = manifest.get("selected_slot_mapping", {})
+
+    asset_slots = []
+    for job in manifest.get("jobs", []):
+        slot_id = job.get("slot_id")
+        if not slot_id:
+            continue
+        status_entry = job_status.get(job["job_id"], {})
+        gcs_uri = status_entry.get("gcs_uri")
+        if not gcs_uri or status_entry.get("status") != "complete":
+            continue
+        asset_type = "video" if job.get("asset_type") == "video" else "image"
+        asset_slots.append({
+            "slot_id": slot_id,
+            "url": gcs_uri,
+            "type": asset_type,
+            "fill_status": "filled",
+        })
+
+    # selected slots point to the same URLs as the grid images they reference
+    for sel_slot_id, source_job_id in selected_mapping.items():
+        source_status = job_status.get(source_job_id, {})
+        source_url = source_status.get("gcs_uri")
+        if source_url and source_status.get("status") == "complete":
+            asset_slots.append({
+                "slot_id": sel_slot_id,
+                "url": source_url,
+                "type": "image",
+                "fill_status": "filled",
+            })
+
+    text_slots = []
+    for item in manifest.get("text_items", []):
+        slot_id = item.get("slot_id")
+        if not slot_id:
+            continue
+        text_slots.append({
+            "slot_id": slot_id,
+            "final_text": item.get("final_text", ""),
+            "language": item.get("language", manifest.get("market", "en")),
+        })
+
+    handoff = {
+        "handoff_version": "1.0",
+        "run_id": run_id,
+        "pipeline_path": pipeline_path,
+        "template_id": template_id,
+        "template_version": template_version,
+        "asset_slots": asset_slots,
+        "text_slots": text_slots,
+    }
+
+    # Upload handoff JSON to GCS
+    gcs_path = f"{gcs_root}template_handoff.json"
+    try:
+        handoff_bytes = json.dumps(handoff, indent=2).encode("utf-8")
+        handoff_url = _upload_to_gcs(handoff_bytes, gcs_path, "application/json")
+        logger.info(f"Template handoff written: {handoff_url}")
+    except Exception as e:
+        logger.error(f"Failed to write template handoff: {e}")
+        return {"status": "failed", "error": f"GCS upload failed: {e}"}
+
+    # POST to template stamper
+    endpoint = f"{TEMPLATE_STAMPER_URL}/receiveHandoff"
+    try:
+        resp = httpx.post(endpoint, json=handoff, timeout=30.0)
+        resp.raise_for_status()
+        ts_result = resp.json()
+        logger.info(f"Template handoff accepted by stamper: {ts_result}")
+        return {
+            "status": "complete",
+            "handoff_gcs_uri": handoff_url,
+            "stamper_response": ts_result,
+        }
+    except Exception as e:
+        logger.warning(f"Template stamper POST failed (handoff still saved to GCS): {e}")
+        return {
+            "status": "partial",
+            "handoff_gcs_uri": handoff_url,
+            "stamper_error": str(e),
+        }
+
+
+# ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
 

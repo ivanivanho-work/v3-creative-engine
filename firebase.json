@@ -53,6 +53,10 @@
         "destination": "/creative-generator/index.html"
       },
       {
+        "source": "/template-stamper/api/receiveHandoff",
+        "function": "receiveHandoff"
+      },
+      {
         "source": "/template-stamper/**",
         "destination": "/template-stamper/index.html"
       },
