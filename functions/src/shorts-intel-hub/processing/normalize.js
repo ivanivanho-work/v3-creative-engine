@@ -32,7 +32,7 @@ function normalizeField(trends, field) {
     if (!t || t.hidden) continue;
     const v = t[field];
     if (typeof v !== 'number' || !Number.isFinite(v)) continue;
-    t[`${field}Normalized`] = span === 0 ? 100 : Math.round(((v - min) / span) * 1000) / 10;
+    t[`${field}Normalized`] = span === 0 ? 50 : Math.round(((v - min) / span) * 1000) / 10;
   }
 }
 
