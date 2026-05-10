@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import type { ApprovedBatch } from '@/services/approvedStore';
 import {
-  getBatches, unapproveTrend, markBatchSent, getCurrentBatch,
+  getBatches, unapproveTrend, markBatchSent, getCurrentBatch, weekIdToLabel,
 } from '@/services/approvedStore';
 import {
   sendBatchToAgentCollective, buildBriefMarkdown, buildBriefFilename,
@@ -81,7 +81,7 @@ export function ApprovedSidebar({ market, version, onChanged }: ApprovedSidebarP
         <div className="flex items-center gap-2 min-w-0">
           <CheckCircle2 className="size-4 text-green-500 flex-shrink-0" />
           <h3 className="text-sm font-medium text-foreground truncate">
-            Approved — {current.weekId}
+            Approved — {weekIdToLabel(current.weekId)}
           </h3>
         </div>
         <button
@@ -233,7 +233,7 @@ function HistoryRow({ batch }: { batch: ApprovedBatch }) {
         onClick={() => setOpen((o) => !o)}
         className="w-full flex items-center justify-between px-2 py-1.5 text-left"
       >
-        <span className="text-foreground">{batch.weekId}</span>
+        <span className="text-foreground">{weekIdToLabel(batch.weekId)}</span>
         <span className="text-muted-foreground">
           {batch.trends.length} · {batch.sentAt ? '✓' : '—'}
         </span>
