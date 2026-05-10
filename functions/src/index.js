@@ -86,6 +86,7 @@ exports.tsPreprocessAsset = templateStamperWrapper.preprocessAsset;
 
 // Template Stamper - Firestore trigger (separate from wrapper)
 exports.tsTriggerRemotionRender = templateStamperWrapper.triggerRemotionRender;
+exports.tsReceiveHandoff = templateStamperWrapper.receiveHandoff;
 
 // Shorts Brain - Memory system for weekly snapshots
 const shortsBrainMemory = require('./shorts-brain/memory');

@@ -107,3 +107,14 @@ exports.preprocessAsset = functions.https.onRequest(async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
+
+// Handoff - Receive handoff from Creative Generator
+exports.receiveHandoff = functions.https.onRequest(async (req, res) => {
+  try {
+    const { receiveHandoff } = await import('./template-stamper/index.js');
+    return receiveHandoff(req, res);
+  } catch (error) {
+    console.error('Error loading Template Stamper receiveHandoff:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});

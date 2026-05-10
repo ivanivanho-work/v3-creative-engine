@@ -54,7 +54,7 @@
       },
       {
         "source": "/template-stamper/api/receiveHandoff",
-        "function": "receiveHandoff"
+        "function": "tsReceiveHandoff"
       },
       {
         "source": "/template-stamper/**",
