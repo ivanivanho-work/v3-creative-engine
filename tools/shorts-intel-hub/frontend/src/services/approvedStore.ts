@@ -2,7 +2,8 @@
  * Approved-topics store — weekly batches of trends flagged for Agent Collective.
  *
  * Keyed per (market, ISO-week) in localStorage under `shorts-intel-approved-v1`.
- * Once a batch is sent, it is frozen (read-only) but remains visible as history.
+ * Batches can be modified after sending — adding or removing a trend clears
+ * sentAt so the user can re-send an updated set.
  */
 
 import type { Trend } from '@/types';
@@ -120,16 +121,14 @@ function mutateCurrent(market: string, fn: (b: ApprovedBatch) => ApprovedBatch |
 
 export function approveTrend(market: string, trend: Trend): ApprovedBatch {
   return mutateCurrent(market, (b) => {
-    if (b.sentAt) return b; // frozen
     if (b.trends.some((t) => t.id === trend.id)) return b;
-    return { ...b, trends: [...b.trends, trend] };
+    return { ...b, trends: [...b.trends, trend], sentAt: null, sentKbFilename: null, sentKbScope: null };
   });
 }
 
 export function unapproveTrend(market: string, trendId: string): ApprovedBatch {
   return mutateCurrent(market, (b) => {
-    if (b.sentAt) return b;
-    return { ...b, trends: b.trends.filter((t) => t.id !== trendId) };
+    return { ...b, trends: b.trends.filter((t) => t.id !== trendId), sentAt: null, sentKbFilename: null, sentKbScope: null };
   });
 }
 

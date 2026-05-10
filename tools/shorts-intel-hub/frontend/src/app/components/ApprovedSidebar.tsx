@@ -131,17 +131,15 @@ export function ApprovedSidebar({ market, version, onChanged }: ApprovedSidebarP
                       {t.source}{t.targetDemo ? ` · ${t.targetDemo}` : ''}
                     </div>
                   </div>
-                  {!frozen && (
-                    <button
-                      type="button"
-                      onClick={() => handleUnapprove(t.id)}
-                      className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-accent text-muted-foreground flex-shrink-0"
-                      aria-label={`Remove ${t.topicName}`}
-                      title="Remove"
-                    >
-                      <X className="size-3" />
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => handleUnapprove(t.id)}
+                    className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-accent text-muted-foreground flex-shrink-0"
+                    aria-label={`Remove ${t.topicName}`}
+                    title="Remove"
+                  >
+                    <X className="size-3" />
+                  </button>
                 </li>
               ))}
             </ul>
