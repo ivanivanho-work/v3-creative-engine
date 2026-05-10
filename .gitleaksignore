@@ -1,5 +1,6 @@
 tools/shorts-intel-hub/frontend/src/services/approvedStore.ts:generic-api-key:10
 public/shorts-intel-hub/assets/index-BFemmaVW.js:gcp-api-key:2236
+public/shorts-intel-hub/assets/index-BxbAyC34.js:gcp-api-key:3250
 
 # Firebase web API key — public per Firebase docs; access controlled by Auth + Rules.
 # https://firebase.google.com/docs/projects/api-keys

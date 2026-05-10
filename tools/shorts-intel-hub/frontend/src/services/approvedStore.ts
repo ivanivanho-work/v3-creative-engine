@@ -31,6 +31,19 @@ export function getWeekId(d: Date = new Date()): string {
   return `${date.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
 }
 
+/** Convert a `YYYY-Www` week ID to "Week of D MMMM YYYY" (Monday date). */
+export function weekIdToLabel(weekId: string): string {
+  const m = weekId.match(/^(\d{4})-W(\d{2})$/);
+  if (!m) return weekId;
+  const year = parseInt(m[1], 10);
+  const week = parseInt(m[2], 10);
+  const jan4 = new Date(Date.UTC(year, 0, 4));
+  const monday = new Date(jan4.getTime());
+  monday.setUTCDate(jan4.getUTCDate() - ((jan4.getUTCDay() + 6) % 7) + (week - 1) * 7);
+  const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  return `Week of ${monday.getUTCDate()} ${months[monday.getUTCMonth()]} ${monday.getUTCFullYear()}`;
+}
+
 function batchId(market: string, weekId: string) {
   return `${market}-${weekId}`;
 }
