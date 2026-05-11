@@ -22,10 +22,11 @@ jobs:
         env:
           HUSKY: 0
 
-      # Ensure platform-correct lightningcss binary for Tailwind v4
-      - name: Fix lightningcss platform binary
+      # shorts-intel-hub uses Tailwind v4 with platform-specific native binaries
+      # (lightningcss, @tailwindcss/oxide). Reinstall to get linux binaries.
+      - name: Fix platform binaries for shorts-intel-hub
         working-directory: tools/shorts-intel-hub/frontend
-        run: npm install lightningcss-linux-x64-gnu --no-save 2>/dev/null || true
+        run: npm install --no-save
 
       # Build each frontend app
       - name: Build template-stamper
