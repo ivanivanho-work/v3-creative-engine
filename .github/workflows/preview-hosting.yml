@@ -14,17 +14,23 @@ jobs:
         with:
           node-version: 22
 
-      - name: Install & build template-stamper
+      # Install all workspace dependencies from root
+      - name: Install dependencies
+        run: npm ci
+        env:
+          HUSKY: 0
+
+      - name: Build template-stamper
         working-directory: tools/template-stamper
-        run: npm ci && npm run build
+        run: npm run build
 
-      - name: Install & build shorts-brain
+      - name: Build shorts-brain
         working-directory: tools/shorts-brain
-        run: npm ci && npm run build
+        run: npm run build
 
-      - name: Install & build shorts-intel-hub
+      - name: Build shorts-intel-hub
         working-directory: tools/shorts-intel-hub/frontend
-        run: npm ci && npm run build
+        run: npm run build
 
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:

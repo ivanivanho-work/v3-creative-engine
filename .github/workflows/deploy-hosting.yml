@@ -16,28 +16,20 @@ jobs:
         with:
           node-version: 22
 
-      # Build template-stamper
-      - name: Install template-stamper dependencies
-        working-directory: tools/template-stamper
+      # Install all workspace dependencies from root
+      - name: Install dependencies
         run: npm ci
+        env:
+          HUSKY: 0
 
+      # Build each frontend app
       - name: Build template-stamper
         working-directory: tools/template-stamper
         run: npm run build
 
-      # Build shorts-brain
-      - name: Install shorts-brain dependencies
-        working-directory: tools/shorts-brain
-        run: npm ci
-
       - name: Build shorts-brain
         working-directory: tools/shorts-brain
         run: npm run build
-
-      # Build shorts-intel-hub
-      - name: Install shorts-intel-hub dependencies
-        working-directory: tools/shorts-intel-hub/frontend
-        run: npm ci
 
       - name: Build shorts-intel-hub
         working-directory: tools/shorts-intel-hub/frontend
