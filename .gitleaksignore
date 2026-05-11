@@ -21,6 +21,15 @@ public/shorts-brain/assets/index-BZwnJsom.js:gcp-api-key:2693
 public/shorts-brain/assets/index-A9iGgVul.js:gcp-api-key:2718
 public/shorts-brain/assets/index-A9iGgVul.js:generic-api-key:2718
 public/template-stamper/assets/index-p-ZuMqN1.js:gcp-api-key:2587
+public/shorts-brain/assets/index-DBWKq3VI.js:gcp-api-key:2718
+public/shorts-brain/assets/index-DBWKq3VI.js:generic-api-key:3738
+public/shorts-brain/assets/index-CRn4Imwv.js:gcp-api-key:2718
+public/shorts-brain/assets/index-CRn4Imwv.js:generic-api-key:2718
+public/creative-generator-v2/assets/index-BWZ5ATYy.js:gcp-api-key:2055
+MCP_BRIDGE_RECEIVER_SPEC.md:gcp-api-key:62
+
+# deploy.sh — key removed in Phase 0.1, this fingerprint is historical only.
+services/creative-generator-v2/deploy.sh:gcp-api-key:35
 
 # Google Drive folder resource-key — public URL parameter, not a credential.
 # Granted to anyone with the share link by design.

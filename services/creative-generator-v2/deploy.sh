@@ -32,7 +32,8 @@ gcloud run deploy "${SERVICE_NAME}" \
   --timeout 600 \
   --max-instances 3 \
   --min-instances 0 \
-  --set-env-vars "GCS_BUCKET=v3-creative-engine.firebasestorage.app,GCP_PROJECT_ID=${PROJECT_ID},VERTEX_AI_LOCATION=${REGION},GOOGLE_API_KEY=AIzaSyCMZ8JowGvVB3ywxAv7esCsHdFRkBD8jeg" \
+  --set-env-vars "GCS_BUCKET=v3-creative-engine.firebasestorage.app,GCP_PROJECT_ID=${PROJECT_ID},VERTEX_AI_LOCATION=${REGION}" \
+  --set-secrets "GOOGLE_API_KEY=GOOGLE_API_KEY:latest" \
   --allow-unauthenticated
 
 echo ""

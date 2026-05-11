@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Check formatting
+        run: npm run format:check
+
+      - name: Lint
+        run: npm run lint -- --max-warnings 0
+
+      - name: TypeScript check (template-stamper)
+        working-directory: tools/template-stamper
+        run: npx tsc --noEmit
+
+      - name: TypeScript check (shorts-intel-hub)
+        working-directory: tools/shorts-intel-hub/frontend
+        run: npx tsc --noEmit

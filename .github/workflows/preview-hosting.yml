@@ -1,0 +1,33 @@
+name: Preview Hosting (PR)
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-preview:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install & build template-stamper
+        working-directory: tools/template-stamper
+        run: npm ci && npm run build
+
+      - name: Install & build shorts-brain
+        working-directory: tools/shorts-brain
+        run: npm ci && npm run build
+
+      - name: Install & build shorts-intel-hub
+        working-directory: tools/shorts-intel-hub/frontend
+        run: npm ci && npm run build
+
+      - uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_V3_CREATIVE_ENGINE }}
+          projectId: v3-creative-engine

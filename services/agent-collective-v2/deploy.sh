@@ -27,7 +27,8 @@ gcloud run deploy "${SERVICE_NAME}" \
   --timeout 600 \
   --min-instances 0 \
   --max-instances 3 \
-  --set-env-vars "MARKET=kr,GOOGLE_API_KEY=${GOOGLE_API_KEY:?Set GOOGLE_API_KEY env var}"
+  --set-env-vars "MARKET=kr" \
+  --set-secrets "GOOGLE_API_KEY=GOOGLE_API_KEY:latest"
 
 echo "==> Getting service URL..."
 URL=$(gcloud run services describe "${SERVICE_NAME}" \

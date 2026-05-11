@@ -1,0 +1,12 @@
+node_modules
+dist
+build
+.firebase
+public/*/assets
+public/agent-collective
+public/creative-generator
+public/agent-collective-v2
+*.min.js
+*.min.css
+package-lock.json
+functions/package-lock.json
