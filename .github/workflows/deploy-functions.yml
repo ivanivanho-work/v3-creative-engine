@@ -18,7 +18,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: functions
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Deploy Cloud Functions
         uses: w9jds/firebase-action@master
