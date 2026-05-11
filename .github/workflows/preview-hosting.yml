@@ -20,6 +20,11 @@ jobs:
         env:
           HUSKY: 0
 
+      # Ensure platform-correct lightningcss binary for Tailwind v4
+      - name: Fix lightningcss platform binary
+        working-directory: tools/shorts-intel-hub/frontend
+        run: npm install lightningcss-linux-x64-gnu --no-save 2>/dev/null || true
+
       - name: Build template-stamper
         working-directory: tools/template-stamper
         run: npm run build
