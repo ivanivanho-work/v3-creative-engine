@@ -22,11 +22,10 @@ jobs:
         env:
           HUSKY: 0
 
-      # shorts-intel-hub uses Tailwind v4 with platform-specific native binaries
-      # (lightningcss, @tailwindcss/oxide). Clean reinstall to get linux binaries.
-      - name: Fix platform binaries for shorts-intel-hub
+      # shorts-intel-hub is not in workspaces (Tailwind v4 needs platform-specific binaries)
+      - name: Install shorts-intel-hub dependencies
         working-directory: tools/shorts-intel-hub/frontend
-        run: rm -rf node_modules package-lock.json && npm install
+        run: npm ci
 
       # Build each frontend app
       - name: Build template-stamper

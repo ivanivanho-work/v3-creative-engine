@@ -6,7 +6,6 @@
     "tools/shorts-brain",
     "tools/creative-generator-v2",
     "tools/template-stamper",
-    "tools/shorts-intel-hub/frontend",
     "functions",
     "packages/*"
   ],
