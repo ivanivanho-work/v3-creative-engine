@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Shorts Toolbox Admin</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg: #111111;
+      --surface: #1c1c1c;
+      --surface-2: #242424;
+      --border: #2e2e2e;
+      --text: #f0f0f0;
+      --text-muted: #888;
+      --blue: #4285F4;
+      --green: #34A853;
+      --red: #EA4335;
+      --yellow: #FBBC04;
+      --purple: #9c5cf6;
+      --teal: #24C1A0;
+    }
+    * { box-sizing: border-box; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      margin: 0;
+      min-height: 100vh;
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+    }
+    .card-2 {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+    }
+    .pill {
+      border-radius: 999px;
+      padding: 5px 14px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-muted);
+      transition: all 0.15s;
+    }
+    .pill:hover { border-color: #555; color: var(--text); }
+    .pill.active {
+      background: var(--blue);
+      border-color: var(--blue);
+      color: #fff;
+    }
+    .kpi-label { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); }
+    .kpi-value { font-size: 32px; font-weight: 700; line-height: 1.1; margin: 6px 0 4px; }
+    .kpi-delta { font-size: 12px; }
+    .delta-up { color: var(--green); }
+    .delta-neutral { color: var(--text-muted); }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 4px;
+    }
+    .badge-green { background: rgba(52,168,83,0.15); color: var(--green); }
+    .badge-blue { background: rgba(66,133,244,0.15); color: var(--blue); }
+    .badge-yellow { background: rgba(251,188,4,0.15); color: var(--yellow); }
+    .badge-red { background: rgba(234,67,53,0.15); color: var(--red); }
+    .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+    .dot-green { background: var(--green); }
+    .dot-blue { background: var(--blue); }
+    .dot-yellow { background: var(--yellow); }
+    .dot-red { background: var(--red); }
+    .divider { height: 1px; background: var(--border); }
+    .stat-bar-bg { height: 6px; background: var(--border); border-radius: 3px; }
+    .stat-bar { height: 6px; border-radius: 3px; }
+    .run-row { padding: 10px 0; border-bottom: 1px solid var(--border); }
+    .run-row:last-child { border-bottom: none; }
+    select.filter-select {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 6px 10px;
+      font-size: 13px;
+      outline: none;
+    }
+    .section-title {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 14px;
+    }
+    @media (max-width: 768px) {
+      .grid-kpi { grid-template-columns: repeat(2, 1fr) !important; }
+      .grid-main { grid-template-columns: 1fr !important; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div style="border-bottom:1px solid var(--border); padding: 0 32px;">
+  <div style="max-width:1400px; margin:0 auto; display:flex; align-items:center; justify-content:space-between; height:60px;">
+    <div style="display:flex; align-items:center; gap:12px;">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#4285F4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="m8 21 4-4 4 4"/><path d="M8 21h8"/></svg>
+      <span style="font-weight:700; font-size:16px;">Shorts Toolbox</span>
+      <span style="color:var(--border); font-size:20px; line-height:1;">/</span>
+      <span style="color:var(--text-muted); font-size:14px;">Admin Dashboard</span>
+    </div>
+    <div style="display:flex; align-items:center; gap:10px;">
+      <span style="font-size:12px; color:var(--text-muted);">APAC | May 2026</span>
+      <span class="badge badge-green"><span class="dot dot-green"></span>Live</span>
+    </div>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div style="max-width:1400px; margin:0 auto; padding:28px 32px;">
+
+  <!-- FILTER BAR -->
+  <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:28px;">
+    <div>
+      <div style="font-size:20px; font-weight:700; margin-bottom:3px;">AI Tool Utilization</div>
+      <div style="font-size:13px; color:var(--text-muted);">Across Agent Collective, Creative Generator, Template Stamper, Intel Hub, Shorts Brain</div>
+    </div>
+    <div style="display:flex; gap:6px;">
+      <button class="pill" onclick="setRange(this,'7d')">7 Days</button>
+      <button class="pill active" onclick="setRange(this,'30d')">30 Days</button>
+      <button class="pill" onclick="setRange(this,'90d')">90 Days</button>
+    </div>
+  </div>
+
+  <!-- KPI TILES -->
+  <div class="grid-kpi" style="display:grid; grid-template-columns:repeat(5,1fr); gap:14px; margin-bottom:20px;">
+
+    <div class="card" style="padding:20px;">
+      <div class="kpi-label">Campaigns Run</div>
+      <div class="kpi-value" id="kpi-campaigns">24</div>
+      <div class="kpi-delta delta-up">+8 vs prev period</div>
+      <div style="margin-top:12px; font-size:11px; color:var(--text-muted);">Agent Collective</div>
+    </div>
+
+    <div class="card" style="padding:20px;">
+      <div class="kpi-label">Generation Jobs</div>
+      <div class="kpi-value" id="kpi-jobs">387</div>
+      <div class="kpi-delta delta-up">+112 vs prev period</div>
+      <div style="margin-top:12px; font-size:11px; color:var(--text-muted);">Creative Generator</div>
+    </div>
+
+    <div class="card" style="padding:20px;">
+      <div class="kpi-label">Renders Completed</div>
+      <div class="kpi-value" id="kpi-renders">142</div>
+      <div class="kpi-delta delta-up">+34 vs prev period</div>
+      <div style="margin-top:12px; font-size:11px; color:var(--text-muted);">Template Stamper</div>
+    </div>
+
+    <div class="card" style="padding:20px;">
+      <div class="kpi-label">Intel Uploads</div>
+      <div class="kpi-value" id="kpi-intel">18</div>
+      <div class="kpi-delta delta-up">+5 vs prev period</div>
+      <div style="margin-top:12px; font-size:11px; color:var(--text-muted);">Shorts Intel Hub</div>
+    </div>
+
+    <div class="card" style="padding:20px;">
+      <div class="kpi-label">Avg Pipeline Time</div>
+      <div class="kpi-value" id="kpi-time">7.2<span style="font-size:16px; font-weight:400; color:var(--text-muted);"> min</span></div>
+      <div class="kpi-delta delta-neutral">-1.1 min vs prev period</div>
+      <div style="margin-top:12px; font-size:11px; color:var(--text-muted);">Agent Collective</div>
+    </div>
+
+  </div>
+
+  <!-- MAIN CHARTS ROW -->
+  <div class="grid-main" style="display:grid; grid-template-columns:2fr 1fr; gap:14px; margin-bottom:20px;">
+
+    <!-- Campaign trend chart -->
+    <div class="card" style="padding:22px;">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:18px;">
+        <div>
+          <div style="font-weight:600; font-size:15px;">Campaign Runs by Week</div>
+          <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">Broken down by pipeline path</div>
+        </div>
+        <div style="display:flex; gap:14px; font-size:12px; color:var(--text-muted);">
+          <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#4285F4;margin-right:5px;vertical-align:middle;"></span>Create (Path 1)</span>
+          <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#9c5cf6;margin-right:5px;vertical-align:middle;"></span>Full Campaign (Path 2)</span>
+          <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#24C1A0;margin-right:5px;vertical-align:middle;"></span>Adapt (Path 3)</span>
+        </div>
+      </div>
+      <canvas id="campaignChart" height="130"></canvas>
+    </div>
+
+    <!-- Pipeline mix donut -->
+    <div class="card" style="padding:22px;">
+      <div style="font-weight:600; font-size:15px; margin-bottom:4px;">Pipeline Mix</div>
+      <div style="font-size:12px; color:var(--text-muted); margin-bottom:16px;">Runs by type this period</div>
+      <div style="position:relative; max-width:180px; margin:0 auto;">
+        <canvas id="mixChart" height="180"></canvas>
+        <div style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); text-align:center; pointer-events:none;">
+          <div style="font-size:24px; font-weight:700;" id="donut-total">24</div>
+          <div style="font-size:11px; color:var(--text-muted);">total</div>
+        </div>
+      </div>
+      <div style="margin-top:14px; display:flex; flex-direction:column; gap:8px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; font-size:13px;">
+          <span style="display:flex; align-items:center; gap:6px;"><span style="width:10px;height:10px;border-radius:2px;background:#4285F4;display:inline-block;"></span>Create</span>
+          <span style="font-weight:600;">14 <span style="color:var(--text-muted); font-weight:400;">58%</span></span>
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:center; font-size:13px;">
+          <span style="display:flex; align-items:center; gap:6px;"><span style="width:10px;height:10px;border-radius:2px;background:#9c5cf6;display:inline-block;"></span>Full Campaign</span>
+          <span style="font-weight:600;">7 <span style="color:var(--text-muted); font-weight:400;">29%</span></span>
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:center; font-size:13px;">
+          <span style="display:flex; align-items:center; gap:6px;"><span style="width:10px;height:10px;border-radius:2px;background:#24C1A0;display:inline-block;"></span>Adapt</span>
+          <span style="font-weight:600;">3 <span style="color:var(--text-muted); font-weight:400;">13%</span></span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- QUALITY METRICS ROW -->
+  <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-bottom:20px;">
+
+    <div class="card" style="padding:20px;">
+      <div class="section-title">Brief Quality</div>
+      <div style="display:flex; align-items:flex-end; justify-content:space-between; margin-bottom:10px;">
+        <div>
+          <div style="font-size:28px; font-weight:700; color:var(--green);">94%</div>
+          <div style="font-size:12px; color:var(--text-muted);">First-attempt pass rate</div>
+        </div>
+        <span class="badge badge-green">Healthy</span>
+      </div>
+      <div class="stat-bar-bg"><div class="stat-bar" style="width:94%; background:var(--green);"></div></div>
+      <div style="margin-top:12px; font-size:12px; color:var(--text-muted);">22 of 24 runs passed on first check</div>
+    </div>
+
+    <div class="card" style="padding:20px;">
+      <div class="section-title">Prompt Quality</div>
+      <div style="display:flex; align-items:flex-end; justify-content:space-between; margin-bottom:10px;">
+        <div>
+          <div style="font-size:28px; font-weight:700; color:var(--yellow);">89%</div>
+          <div style="font-size:12px; color:var(--text-muted);">First-attempt pass rate</div>
+        </div>
+        <span class="badge badge-yellow">Watch</span>
+      </div>
+      <div class="stat-bar-bg"><div class="stat-bar" style="width:89%; background:var(--yellow);"></div></div>
+      <div style="margin-top:12px; font-size:12px; color:var(--text-muted);">21 of 24 runs passed on first check</div>
+    </div>
+
+    <div class="card" style="padding:20px;">
+      <div class="section-title">Avg Quality Loops</div>
+      <div style="display:flex; align-items:flex-end; justify-content:space-between; margin-bottom:10px;">
+        <div>
+          <div style="font-size:28px; font-weight:700;">1.3</div>
+          <div style="font-size:12px; color:var(--text-muted);">loops per campaign</div>
+        </div>
+        <span class="badge badge-blue">Normal</span>
+      </div>
+      <div style="display:flex; gap:4px; margin-top:4px;">
+        <div style="flex:1; font-size:11px; color:var(--text-muted); text-align:center;">
+          <div style="font-weight:700; font-size:16px; color:var(--text);">1.1</div>
+          <div>Brief</div>
+        </div>
+        <div style="width:1px; background:var(--border);"></div>
+        <div style="flex:1; font-size:11px; color:var(--text-muted); text-align:center;">
+          <div style="font-weight:700; font-size:16px; color:var(--text);">1.4</div>
+          <div>Prompt</div>
+        </div>
+        <div style="width:1px; background:var(--border);"></div>
+        <div style="flex:1; font-size:11px; color:var(--text-muted); text-align:center;">
+          <div style="font-weight:700; font-size:16px; color:var(--text);">2.1</div>
+          <div>FC Variation</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- BOTTOM ROW: TOOL TABLE + RECENT RUNS -->
+  <div style="display:grid; grid-template-columns:3fr 2fr; gap:14px;">
+
+    <!-- Tool activity table -->
+    <div class="card" style="padding:22px;">
+      <div class="section-title">Tool Activity</div>
+      <table style="width:100%; border-collapse:collapse; font-size:13px;">
+        <thead>
+          <tr style="color:var(--text-muted); text-align:left;">
+            <th style="padding:0 0 12px; font-weight:600; font-size:11px; letter-spacing:0.06em; text-transform:uppercase;">Tool</th>
+            <th style="padding:0 0 12px; font-weight:600; font-size:11px; letter-spacing:0.06em; text-transform:uppercase;">Sessions / Runs</th>
+            <th style="padding:0 0 12px; font-weight:600; font-size:11px; letter-spacing:0.06em; text-transform:uppercase;">Output Units</th>
+            <th style="padding:0 0 12px; font-weight:600; font-size:11px; letter-spacing:0.06em; text-transform:uppercase;">Last Active</th>
+            <th style="padding:0 0 12px; font-weight:600; font-size:11px; letter-spacing:0.06em; text-transform:uppercase;">Status</th>
+          </tr>
+        </thead>
+        <tbody id="tool-table">
+          <tr style="border-top:1px solid var(--border);">
+            <td style="padding:13px 0;">
+              <div style="font-weight:600;">Agent Collective</div>
+              <div style="font-size:11px; color:var(--text-muted); margin-top:1px;">Multi-agent campaign pipeline</div>
+            </td>
+            <td style="padding:13px 0;">24 runs</td>
+            <td style="padding:13px 0;"><span class="badge badge-blue">387 jobs</span></td>
+            <td style="padding:13px 0; color:var(--text-muted);">Today, 09:52</td>
+            <td style="padding:13px 0;"><span class="badge badge-green"><span class="dot dot-green"></span>Active</span></td>
+          </tr>
+          <tr style="border-top:1px solid var(--border);">
+            <td style="padding:13px 0;">
+              <div style="font-weight:600;">Creative Generator</div>
+              <div style="font-size:11px; color:var(--text-muted); margin-top:1px;">Asset generation (image + video)</div>
+            </td>
+            <td style="padding:13px 0;">38 sessions</td>
+            <td style="padding:13px 0;"><span class="badge badge-blue">312 assets</span></td>
+            <td style="padding:13px 0; color:var(--text-muted);">Today, 14:23</td>
+            <td style="padding:13px 0;"><span class="badge badge-green"><span class="dot dot-green"></span>Active</span></td>
+          </tr>
+          <tr style="border-top:1px solid var(--border);">
+            <td style="padding:13px 0;">
+              <div style="font-weight:600;">Template Stamper</div>
+              <div style="font-size:11px; color:var(--text-muted); margin-top:1px;">Remotion template rendering</div>
+            </td>
+            <td style="padding:13px 0;">142 jobs</td>
+            <td style="padding:13px 0;"><span class="badge badge-blue">142 renders</span></td>
+            <td style="padding:13px 0; color:var(--text-muted);">Today, 11:05</td>
+            <td style="padding:13px 0;"><span class="badge badge-green"><span class="dot dot-green"></span>Active</span></td>
+          </tr>
+          <tr style="border-top:1px solid var(--border);">
+            <td style="padding:13px 0;">
+              <div style="font-weight:600;">Shorts Intel Hub</div>
+              <div style="font-size:11px; color:var(--text-muted); margin-top:1px;">Intelligence briefs and data uploads</div>
+            </td>
+            <td style="padding:13px 0;">18 uploads</td>
+            <td style="padding:13px 0;"><span class="badge badge-blue">4 markets</span></td>
+            <td style="padding:13px 0; color:var(--text-muted);">Yesterday, 16:40</td>
+            <td style="padding:13px 0;"><span class="badge badge-green"><span class="dot dot-green"></span>Active</span></td>
+          </tr>
+          <tr style="border-top:1px solid var(--border);">
+            <td style="padding:13px 0;">
+              <div style="font-weight:600;">Shorts Brain</div>
+              <div style="font-size:11px; color:var(--text-muted); margin-top:1px;">APAC performance intelligence</div>
+            </td>
+            <td style="padding:13px 0;">67 sessions</td>
+            <td style="padding:13px 0;"><span class="badge badge-blue">67 snapshots</span></td>
+            <td style="padding:13px 0; color:var(--text-muted);">Today, 10:12</td>
+            <td style="padding:13px 0;"><span class="badge badge-green"><span class="dot dot-green"></span>Active</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Recent campaign runs -->
+    <div class="card" style="padding:22px;">
+      <div class="section-title">Recent Campaign Runs</div>
+      <div id="recent-runs">
+
+        <div class="run-row">
+          <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:8px;">
+            <div style="flex:1; min-width:0;">
+              <div style="font-weight:600; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Korea Summer 2026: My Aesthetic, Animated</div>
+              <div style="display:flex; gap:6px; margin-top:5px; flex-wrap:wrap;">
+                <span class="badge badge-blue">KR</span>
+                <span class="badge badge-purple" style="background:rgba(156,92,246,0.15);color:#9c5cf6;">Full Campaign</span>
+                <span style="font-size:11px; color:var(--text-muted);">26 jobs</span>
+              </div>
+            </div>
+            <span class="badge badge-green" style="flex-shrink:0; margin-top:2px;">Passed</span>
+          </div>
+          <div style="display:flex; gap:14px; margin-top:7px; font-size:11px; color:var(--text-muted);">
+            <span>9.5 min</span>
+            <span>2 quality loops</span>
+            <span>May 7, 09:40</span>
+          </div>
+        </div>
+
+        <div class="run-row">
+          <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:8px;">
+            <div style="flex:1; min-width:0;">
+              <div style="font-weight:600; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Korea Summer 2026 v2</div>
+              <div style="display:flex; gap:6px; margin-top:5px; flex-wrap:wrap;">
+                <span class="badge badge-blue">KR</span>
+                <span class="badge badge-blue">Create</span>
+                <span style="font-size:11px; color:var(--text-muted);">6 jobs</span>
+              </div>
+            </div>
+            <span class="badge badge-green" style="flex-shrink:0; margin-top:2px;">Passed</span>
+          </div>
+          <div style="display:flex; gap:14px; margin-top:7px; font-size:11px; color:var(--text-muted);">
+            <span>2.7 min</span>
+            <span>1 quality loop</span>
+            <span>May 7, 09:52</span>
+          </div>
+        </div>
+
+        <div class="run-row">
+          <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:8px;">
+            <div style="flex:1; min-width:0;">
+              <div style="font-weight:600; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Japan Q2 GenAI Push</div>
+              <div style="display:flex; gap:6px; margin-top:5px; flex-wrap:wrap;">
+                <span class="badge badge-blue">JP</span>
+                <span class="badge badge-blue">Create</span>
+                <span style="font-size:11px; color:var(--text-muted);">8 jobs</span>
+              </div>
+            </div>
+            <span class="badge badge-green" style="flex-shrink:0; margin-top:2px;">Passed</span>
+          </div>
+          <div style="display:flex; gap:14px; margin-top:7px; font-size:11px; color:var(--text-muted);">
+            <span>4.1 min</span>
+            <span>1 quality loop</span>
+            <span>May 6, 14:17</span>
+          </div>
+        </div>
+
+        <div class="run-row">
+          <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:8px;">
+            <div style="flex:1; min-width:0;">
+              <div style="font-weight:600; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">India Monsoon Moments</div>
+              <div style="display:flex; gap:6px; margin-top:5px; flex-wrap:wrap;">
+                <span class="badge badge-blue">IN</span>
+                <span class="badge" style="background:rgba(36,193,160,0.15);color:#24C1A0;">Adapt</span>
+                <span style="font-size:11px; color:var(--text-muted);">20 jobs</span>
+              </div>
+            </div>
+            <span class="badge badge-green" style="flex-shrink:0; margin-top:2px;">Passed</span>
+          </div>
+          <div style="display:flex; gap:14px; margin-top:7px; font-size:11px; color:var(--text-muted);">
+            <span>11.3 min</span>
+            <span>3 quality loops</span>
+            <span>May 5, 11:02</span>
+          </div>
+        </div>
+
+        <div class="run-row">
+          <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:8px;">
+            <div style="flex:1; min-width:0;">
+              <div style="font-weight:600; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Indonesia Creator Drive</div>
+              <div style="display:flex; gap:6px; margin-top:5px; flex-wrap:wrap;">
+                <span class="badge badge-blue">ID</span>
+                <span class="badge badge-blue">Create</span>
+                <span style="font-size:11px; color:var(--text-muted);">6 jobs</span>
+              </div>
+            </div>
+            <span class="badge badge-yellow" style="flex-shrink:0; margin-top:2px;">Incomplete</span>
+          </div>
+          <div style="display:flex; gap:14px; margin-top:7px; font-size:11px; color:var(--text-muted);">
+            <span>1.8 min</span>
+            <span>Stopped at brief</span>
+            <span>May 4, 09:30</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+  <!-- FOOTER -->
+  <div style="margin-top:32px; padding-top:20px; border-top:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; font-size:11px; color:var(--text-muted);">
+    <span>Shorts Toolbox Admin Dashboard &mdash; Sample with mock data</span>
+    <span>v3-creative-engine &middot; APAC</span>
+  </div>
+
+</div>
+
+<!-- CHARTS SCRIPT -->
+<script>
+  // ---- MOCK DATA ----
+  const DATA = {
+    '7d': {
+      labels: ['Apr 28','Apr 29','Apr 30','May 1','May 2','May 3','May 4'],
+      create: [1, 0, 2, 1, 0, 1, 1],
+      full:   [0, 1, 0, 0, 1, 0, 0],
+      adapt:  [0, 0, 1, 0, 0, 0, 1],
+      kpi: { campaigns:'6', jobs:'89', renders:'31', intel:'4', time:'6.8' }
+    },
+    '30d': {
+      labels: ['Apr 8','Apr 13','Apr 18','Apr 23','Apr 28','May 3','May 8'],
+      create: [1, 2, 3, 2, 2, 2, 2],
+      full:   [0, 1, 1, 0, 2, 1, 2],
+      adapt:  [1, 0, 0, 1, 0, 1, 0],
+      kpi: { campaigns:'24', jobs:'387', renders:'142', intel:'18', time:'7.2' }
+    },
+    '90d': {
+      labels: ['Feb','Mar Wk1','Mar Wk2','Mar Wk3','Apr Wk1','Apr Wk2','May Wk1'],
+      create: [3, 4, 5, 4, 6, 5, 6],
+      full:   [1, 2, 1, 3, 2, 3, 2],
+      adapt:  [1, 1, 2, 1, 1, 2, 1],
+      kpi: { campaigns:'71', jobs:'1140', renders:'423', intel:'52', time:'7.5' }
+    }
+  };
+
+  let currentRange = '30d';
+  let campaignChart, mixChart;
+
+  function setRange(btn, range) {
+    document.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    currentRange = range;
+    updateDashboard(range);
+  }
+
+  function updateDashboard(range) {
+    const d = DATA[range];
+    // KPIs
+    document.getElementById('kpi-campaigns').textContent = d.kpi.campaigns;
+    document.getElementById('kpi-jobs').textContent = d.kpi.jobs;
+    document.getElementById('kpi-renders').textContent = d.kpi.renders;
+    document.getElementById('kpi-intel').textContent = d.kpi.intel;
+    document.getElementById('kpi-time').innerHTML = d.kpi.time + '<span style="font-size:16px;font-weight:400;color:var(--text-muted);"> min</span>';
+    // Charts
+    campaignChart.data.labels = d.labels;
+    campaignChart.data.datasets[0].data = d.create;
+    campaignChart.data.datasets[1].data = d.full;
+    campaignChart.data.datasets[2].data = d.adapt;
+    campaignChart.update();
+  }
+
+  const chartDefaults = {
+    responsive: true,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: {
+        stacked: true,
+        grid: { color: '#2a2a2a' },
+        ticks: { color: '#888', font: { size: 11 } }
+      },
+      y: {
+        stacked: true,
+        grid: { color: '#2a2a2a' },
+        ticks: { color: '#888', font: { size: 11 }, stepSize: 1 },
+        beginAtZero: true
+      }
+    }
+  };
+
+  window.addEventListener('DOMContentLoaded', () => {
+    const d = DATA['30d'];
+
+    // Campaign trend chart
+    campaignChart = new Chart(document.getElementById('campaignChart'), {
+      type: 'bar',
+      data: {
+        labels: d.labels,
+        datasets: [
+          { label: 'Create', data: d.create, backgroundColor: '#4285F4', borderRadius: 3, borderSkipped: false },
+          { label: 'Full Campaign', data: d.full, backgroundColor: '#9c5cf6', borderRadius: 0, borderSkipped: false },
+          { label: 'Adapt', data: d.adapt, backgroundColor: '#24C1A0', borderRadius: 3, borderSkipped: 'bottom' }
+        ]
+      },
+      options: {
+        ...chartDefaults,
+        animation: { duration: 300 }
+      }
+    });
+
+    // Pipeline mix donut
+    mixChart = new Chart(document.getElementById('mixChart'), {
+      type: 'doughnut',
+      data: {
+        labels: ['Create', 'Full Campaign', 'Adapt'],
+        datasets: [{
+          data: [14, 7, 3],
+          backgroundColor: ['#4285F4', '#9c5cf6', '#24C1A0'],
+          borderColor: '#1c1c1c',
+          borderWidth: 3,
+          hoverOffset: 4
+        }]
+      },
+      options: {
+        responsive: true,
+        cutout: '72%',
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => ` ${ctx.label}: ${ctx.parsed} runs`
+            }
+          }
+        }
+      }
+    });
+  });
+</script>
+</body>
+</html>
