@@ -80,7 +80,15 @@ file_format         (string)
 topics_processed    (number)
 ```
 
-**Shorts Brain** -- `event_type: snapshot_saved`
+**Shorts Brain** -- two event types:
+
+`event_type: tab_viewed` (primary query signal)
+```
+tab_id              (string: OKR | GlobalHub | MarketHub)
+sub_view            (string: AlwaysOn | ScaledCreation | Trends | CultMo | ArtMo | GenAI Hub -- MarketHub only)
+```
+
+`event_type: snapshot_saved`
 ```
 week_id             (string)
 snapshot_size_kb    (number)
@@ -125,20 +133,25 @@ Add `google-cloud-firestore`.
 The Intel Hub has two backends: a local Express dev server (`tools/shorts-intel-hub/backend/functions/src/api/routes.js`) and a production Cloud Function (`functions/shorts-intel-hub/`). Both need the same logging call. Plan: write a small shared helper inside `functions/shorts-intel-hub/` that wraps `admin.firestore().collection('usage_events').add(...)`, and call it from both the production handler and the local dev route after a successful `/upload` or `/match-and-rank`.
 
 ### 5. Shorts Brain instrumentation
+`/home/danilpalma/v3-creative-engine/tools/shorts-brain/src/App.jsx`
+
+Add a `logQuery(tabId, subView)` helper that writes a `tab_viewed` event to `usage_events`. Call it from the nav item click handler (line 1911 area) whenever a user navigates to OKR, Global Holdback, or any Campaign Holdback sub-view. Excludes the Data Ingestion tab since that is an admin action, not a trend review.
+
 `/home/danilpalma/v3-creative-engine/tools/shorts-brain/src/firebase.js`
 
-`saveSnapshot` already writes to Firestore. Extend it to also write a parallel `usage_events` document with `event_type: snapshot_saved`. Reuse the existing Firestore client; one extra `addDoc` call.
+Also extend `saveSnapshot` to write a `snapshot_saved` event. Reuse the existing Firestore client; one extra `addDoc` call.
 
 ### 6. Dashboard wiring
 `/home/danilpalma/v3-creative-engine/public/admin.html`
 
 - Add three script tags in `<head>`: `firebase-app-compat.js`, `firebase-auth-compat.js`, `firebase-firestore-compat.js`, then `/_auth-gate-compat.js` (matches the pattern in `public/agent-collective-v2/index.html` lines 11-13 and `public/agent-collective-v2/script.js` lines 24-40).
 - Replace the inline `DATA` mock object with three async functions:
-  - `loadKPIs(rangeDays, market)` -- queries `usage_events` filtered by `timestamp >= cutoff` and optional `market ==` filter; aggregates client-side.
+  - `loadKPIs(rangeDays, market)` -- queries `usage_events` filtered by `timestamp >= cutoff` and optional `market ==` filter; aggregates client-side. KPIs: campaigns run, generation jobs, renders completed, Intel Hub queries, Shorts Brain queries. Avg pipeline time shown as a sub-stat on the campaigns tile.
   - `loadCampaignTrend(rangeDays, market)` -- groups campaigns by week and pipeline_path.
   - `loadRecentRuns(market)` -- fetches the last 10 `agent_collective` runs.
 - Add a market filter (dropdown: All / KR / JP / IN / ID / AUNZ) next to the existing date range pills.
 - For Template Stamper "renders completed" KPI, query the `jobs` collection with `status == completed` instead of `usage_events`.
+- For Shorts Brain queries KPI, count `tab_viewed` events in `usage_events`.
 
 ---
 
@@ -196,7 +209,7 @@ The Intel Hub has two backends: a local Express dev server (`tools/shorts-intel-
 - Cost / token tracking (requires Vertex AI billing integration)
 - Per-user attribution (Agent Collective runs in Cloud Shell; market is the chosen scope)
 - Drill-downs into individual runs (read-only Phase 1)
-- Shorts Brain session tracking beyond snapshot saves (the app has no auth-linked user session state)
+- Per-user attribution within Shorts Brain (the app has no auth-linked session identity beyond the Google sign-in gate)
 
 ---
 
