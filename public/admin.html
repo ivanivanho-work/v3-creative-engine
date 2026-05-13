@@ -166,9 +166,9 @@
     </div>
 
     <div class="card" style="padding:20px;">
-      <div class="kpi-label">Intel Uploads</div>
-      <div class="kpi-value" id="kpi-intel">18</div>
-      <div class="kpi-delta delta-up">+5 vs prev period</div>
+      <div class="kpi-label">Intel Hub Queries</div>
+      <div class="kpi-value" id="kpi-intel">47</div>
+      <div class="kpi-delta delta-up">+19 vs prev period</div>
       <div style="margin-top:12px; font-size:11px; color:var(--text-muted);">Shorts Intel Hub</div>
     </div>
 
@@ -337,10 +337,15 @@
           <tr style="border-top:1px solid var(--border);">
             <td style="padding:13px 0;">
               <div style="font-weight:600;">Shorts Intel Hub</div>
-              <div style="font-size:11px; color:var(--text-muted); margin-top:1px;">Intelligence briefs and data uploads</div>
+              <div style="font-size:11px; color:var(--text-muted); margin-top:1px;">Market intelligence queries</div>
             </td>
-            <td style="padding:13px 0;">18 uploads</td>
-            <td style="padding:13px 0;"><span class="badge badge-blue">4 markets</span></td>
+            <td style="padding:13px 0;">47 queries</td>
+            <td style="padding:13px 0;">
+              <div style="display:flex; flex-direction:column; gap:3px;">
+                <span class="badge badge-blue" style="width:fit-content;">31 top-10</span>
+                <span style="font-size:11px; color:var(--text-muted);">10 browse &middot; 6 match-rank</span>
+              </div>
+            </td>
             <td style="padding:13px 0; color:var(--text-muted);">Yesterday, 16:40</td>
             <td style="padding:13px 0;"><span class="badge badge-green"><span class="dot dot-green"></span>Active</span></td>
           </tr>
@@ -480,21 +485,21 @@
       create: [1, 0, 2, 1, 0, 1, 1],
       full:   [0, 1, 0, 0, 1, 0, 0],
       adapt:  [0, 0, 1, 0, 0, 0, 1],
-      kpi: { campaigns:'6', jobs:'89', renders:'31', intel:'4', time:'6.8' }
+      kpi: { campaigns:'6', jobs:'89', renders:'31', intel:'12', time:'6.8' }
     },
     '30d': {
       labels: ['Apr 8','Apr 13','Apr 18','Apr 23','Apr 28','May 3','May 8'],
       create: [1, 2, 3, 2, 2, 2, 2],
       full:   [0, 1, 1, 0, 2, 1, 2],
       adapt:  [1, 0, 0, 1, 0, 1, 0],
-      kpi: { campaigns:'24', jobs:'387', renders:'142', intel:'18', time:'7.2' }
+      kpi: { campaigns:'24', jobs:'387', renders:'142', intel:'47', time:'7.2' }
     },
     '90d': {
       labels: ['Feb','Mar Wk1','Mar Wk2','Mar Wk3','Apr Wk1','Apr Wk2','May Wk1'],
       create: [3, 4, 5, 4, 6, 5, 6],
       full:   [1, 2, 1, 3, 2, 3, 2],
       adapt:  [1, 1, 2, 1, 1, 2, 1],
-      kpi: { campaigns:'71', jobs:'1140', renders:'423', intel:'52', time:'7.5' }
+      kpi: { campaigns:'71', jobs:'1140', renders:'423', intel:'138', time:'7.5' }
     }
   };
 
