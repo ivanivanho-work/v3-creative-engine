@@ -27,7 +27,7 @@ This document outlines the plan to consolidate all 6 Shorts Automation tools int
 | 2. **YTM Agent Collective** | v3-creative-engine | https://v3-creative-engine.web.app/agent-collective.html | ✅ Active |
 | 3. **YTM Creative Generator** | v3-creative-engine | https://v3-creative-engine.web.app/index.html | ✅ Active |
 | 4. **YTM Template Stamper** | template-stamper-d7045 | https://template-stamper-d7045.web.app/ | ✅ Active |
-| 5. **APAC Shorts Brain '26** | apac-shorts-brain-v2 | https://apac-shorts-brain-v2.web.app/ | ✅ Active |
+| 5. **APAC Shorts Brain '26** | v3-creative-engine | https://v3-creative-engine.web.app/shorts-brain/ | ✅ Active |
 | 6. **Campaign Learnings Agent** | (not built yet) | N/A | ⏳ Future |
 
 ---
