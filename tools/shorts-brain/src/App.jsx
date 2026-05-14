@@ -256,7 +256,8 @@ const parseCSVData = (text, existingAcc = {}, metaMap = {}, searchPriority = ['C
       const compositeKey = `${marketNameResolved}_${campaignName}`;
 
       let gender = null;
-      const gIdx = findHeader(headers, ['Gender', 'Sex']);
+      // 'declared_gender' is the attribution (Impressions/CTR) CSV's column name.
+      const gIdx = findHeader(headers, ['Gender', 'Sex', 'declared_gender']);
       if (gIdx !== -1) {
         const rawG = (columns[gIdx] || '').toLowerCase().trim();
         if (rawG === 'female' || rawG === 'f') gender = 'female';
@@ -268,7 +269,8 @@ const parseCSVData = (text, existingAcc = {}, metaMap = {}, searchPriority = ['C
       if (!gender) return;
 
       let age = 'total';
-      const aIdx = findHeader(headers, ['Age', 'Age Group']);
+      // 'declared_age_bucket' is the attribution (Impressions/CTR) CSV's column name.
+      const aIdx = findHeader(headers, ['Age', 'Age Group', 'declared_age_bucket']);
       if (aIdx !== -1) {
         const rawA = (columns[aIdx] || '').toLowerCase().trim();
         if (rawA.includes('18-24')) age = '18-24';
