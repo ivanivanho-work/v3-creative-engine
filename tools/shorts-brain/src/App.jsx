@@ -19,7 +19,7 @@ import { saveSnapshot, loadSnapshotIndex, loadSnapshotFiles, deleteSnapshot, get
 
 // --- 1. CONFIGURATION & CONSTANTS ---
 const DRIVE_RESOURCE_LINK = "https://drive.google.com/corp/drive/folders/18GCtCrz-Bs1YdXKtQs-tjugb6xudULaX?resourcekey=0-gMJCegK7SZkhgJeT_YTjSw";
-const DATA_INGESTION_ADMINS = ['ivanho.wz@gmail.com', 'kanishak@google.com'];
+const DATA_INGESTION_ADMINS = ['ivanho.wz@gmail.com', 'ivho@google.com', 'kanishak@google.com'];
 
 const M_TYPES = ['DAU-SCT', 'DAC-SCT', 'GenAI DAU-SCT', 'Impressions', 'CTR'];
 const MARKET_SEGMENTS = ['India', 'Indonesia', 'Japan', 'South Korea', 'AUNZ'];
@@ -1166,7 +1166,9 @@ const LandingPage = ({ uploadedFiles, handleFileUpload, startAnalysis, isAnalyzi
 };
 
 const App = ({ userEmail }) => {
-  const isDataIngestionAdmin = DATA_INGESTION_ADMINS.includes(userEmail?.toLowerCase());
+  const normalizedEmail = userEmail?.trim().toLowerCase() || '';
+  const isDataIngestionAdmin = DATA_INGESTION_ADMINS.includes(normalizedEmail);
+  const [accessRequestShown, setAccessRequestShown] = useState(false);
   const [isAnalyzed, setIsAnalyzed] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
@@ -1908,10 +1910,24 @@ const App = ({ userEmail }) => {
         </div>
         <nav className="flex-1 px-4 space-y-1 overflow-y-auto">
           {NAV_ITEMS.map(item => {
-            const locked = item.id === 'Upload' && !isDataIngestionAdmin;
+            const restricted = item.id === 'Upload' && !isDataIngestionAdmin;
+            const handleClick = () => {
+              if (item.id === 'Upload') {
+                if (restricted) {
+                  setAccessRequestShown(true);
+                } else {
+                  setAccessRequestShown(false);
+                  setIsAnalyzed(false);
+                }
+              } else {
+                setAccessRequestShown(false);
+                setActiveTab(item.id);
+              }
+            };
+            const isActive = item.id === 'Upload' ? accessRequestShown : (activeTab === item.id && !accessRequestShown);
             return (
-              <button key={item.id} onClick={() => { if (locked) return; if (item.id === 'Upload') setIsAnalyzed(false); else setActiveTab(item.id); }} className={`w-full flex items-center gap-3 p-3 rounded-lg transition-all group relative ${locked ? 'cursor-not-allowed opacity-40' : 'cursor-pointer'} ${activeTab === item.id ? 'bg-[#FF0000]/10 text-[#FF0000] border border-[#FF0000]/20' : 'text-[#808080] hover:bg-white/5 hover:text-white border border-transparent'}`} title={locked ? 'Restricted — admin access only' : item.label}>
-                <item.icon className="w-5 h-5 shrink-0" />{isSidebarOpen && <span className="text-[11px] font-bold uppercase tracking-wider">{item.label}{locked ? ' 🔒' : ''}</span>}
+              <button key={item.id} onClick={handleClick} className={`w-full flex items-center gap-3 p-3 rounded-lg transition-all group relative cursor-pointer ${isActive ? 'bg-[#FF0000]/10 text-[#FF0000] border border-[#FF0000]/20' : 'text-[#808080] hover:bg-white/5 hover:text-white border border-transparent'}`} title={restricted ? 'Admin access required — click for details' : item.label}>
+                <item.icon className="w-5 h-5 shrink-0" />{isSidebarOpen && <span className="text-[11px] font-bold uppercase tracking-wider">{item.label}{restricted ? ' 🔒' : ''}</span>}
               </button>
             );
           })}
@@ -1967,6 +1983,14 @@ const App = ({ userEmail }) => {
             </div>
           )}
         </nav>
+        {/* Signed-in identity strip — helps diagnose access issues at a glance */}
+        {isSidebarOpen && (
+          <div className="px-6 py-3 border-t border-[#3a3a3a] text-[#808080]">
+            <div className="text-[8px] font-bold uppercase tracking-widest text-[#555] mb-1">Signed in</div>
+            <div className="text-[10px] truncate" title={normalizedEmail}>{normalizedEmail || '—'}</div>
+            <div className="text-[8px] mt-1 uppercase tracking-wider">{isDataIngestionAdmin ? <span className="text-emerald-400">Ingestion admin</span> : <span className="text-[#555]">Read-only</span>}</div>
+          </div>
+        )}
         {/* Sidebar collapse toggle — at the bottom so it's always reachable */}
         <button
           type="button"
@@ -1981,14 +2005,41 @@ const App = ({ userEmail }) => {
       <div className="flex-1 flex flex-col overflow-hidden relative">
         <header className="px-8 py-5 border-b border-[#3a3a3a] flex items-center justify-between bg-[#1a1a1a]">
           <div className="flex items-center gap-4">
-            <h4 className="text-sm font-bold text-white uppercase">{activeTab}</h4>
+            <h4 className="text-sm font-bold text-white uppercase">{accessRequestShown ? 'Data Ingestion' : activeTab}</h4>
           </div>
           <button className="bg-white text-black px-6 py-2.5 rounded-lg text-[10px] font-bold uppercase hover:bg-[#e0e0e0] transition-all"><Download className="w-4 h-4 mr-2 inline" /> Export Hub</button>
         </header>
 
         <main className="flex-1 overflow-auto p-10 relative">
-          {activeTab === 'OKR' && <OKRAndRecsView globalData={globalData} regionalData={regionalData} latestDate={latestGlobalDate} quarterStart={quarterStart} />}
-          {(activeTab === 'Global Hub' || activeTab === 'Market Hub') && (
+          {accessRequestShown && (
+            <div className="max-w-2xl mx-auto mt-12 bg-[#1a1a1a] border border-[#3a3a3a] rounded-xl p-10">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="bg-[#FF0000]/10 p-2 rounded-lg"><UploadCloud className="w-5 h-5 text-[#FF0000]" /></div>
+                <h2 className="text-lg font-bold text-white">Data Ingestion — Access Required</h2>
+              </div>
+              <p className="text-[13px] text-[#a0a0a0] leading-relaxed mb-6">
+                Data Ingestion is restricted to a small admin allowlist because it overwrites the saved snapshot for everyone on EXECUTE.
+              </p>
+              <div className="space-y-4 mb-6">
+                <div>
+                  <div className="text-[9px] font-bold uppercase tracking-widest text-[#808080] mb-1">You are signed in as</div>
+                  <div className="text-[14px] text-white font-mono">{normalizedEmail || '(no email reported)'}</div>
+                </div>
+                <div>
+                  <div className="text-[9px] font-bold uppercase tracking-widest text-[#808080] mb-1">Allowlisted admins</div>
+                  <ul className="text-[12px] text-[#e0e0e0] font-mono space-y-1">
+                    {DATA_INGESTION_ADMINS.map(addr => <li key={addr}>{addr}</li>)}
+                  </ul>
+                </div>
+              </div>
+              <div className="text-[12px] text-[#808080] border-t border-[#3a3a3a] pt-5">
+                To request access, contact one of the admins above. If you believe you should already be on this list, your sign-in email above may not match exactly — check casing or alias.
+              </div>
+              <button onClick={() => setAccessRequestShown(false)} className="mt-6 text-[10px] font-bold uppercase tracking-widest text-[#808080] hover:text-white transition-colors">← Back to {activeTab}</button>
+            </div>
+          )}
+          {!accessRequestShown && activeTab === 'OKR' && <OKRAndRecsView globalData={globalData} regionalData={regionalData} latestDate={latestGlobalDate} quarterStart={quarterStart} />}
+          {!accessRequestShown && (activeTab === 'Global Hub' || activeTab === 'Market Hub') && (
             <div className="space-y-8 animate-in fade-in">
               <MetricControlHub
                 activeMetrics={activeMetrics.filter(m => allowedMetrics.includes(m))}
@@ -2024,7 +2075,7 @@ const App = ({ userEmail }) => {
             </div>
           )}
 
-          {(CAMPAIGN_CHILDREN.some(c => c.id === activeTab) || campaignHubData[activeTab]) && activeTab !== 'OKR' && (
+          {!accessRequestShown && (CAMPAIGN_CHILDREN.some(c => c.id === activeTab) || campaignHubData[activeTab]) && activeTab !== 'OKR' && (
             <div className="space-y-8 animate-in fade-in">
               <MetricControlHub
                 activeMetrics={activeMetrics.filter(m => allowedMetrics.includes(m))}
