@@ -124,6 +124,17 @@ service cloud.firestore {
     }
 
     // ========================================================================
+    // ADMIN DASHBOARD — usage events
+    // ========================================================================
+
+    match /usage_events/{eventId} {
+      allow read: if authed();
+      allow create: if authed();
+      // immutable — backend writes only, no updates or deletes from clients
+      allow update, delete: if false;
+    }
+
+    // ========================================================================
     // DEFAULT — deny everything else
     // ========================================================================
 

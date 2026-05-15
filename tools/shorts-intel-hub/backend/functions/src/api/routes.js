@@ -9,6 +9,7 @@ import { body, param, query, validationResult } from 'express-validator';
 import rateLimit from 'express-rate-limit';
 import { processUpload, processBatch } from '../ingestion/upload.js';
 import { DEFAULT_SCORING_CONFIG } from '../ranking/calculate.js';
+import { logUsageEvent } from '../lib/usage-events.js';
 
 // In-memory scoring config store. Replace with Firestore persistence in
 // production; holds the latest full ERS config globally.
@@ -98,6 +99,11 @@ export function setupRoutes(app) {
     ],
     async (req, res, next) => {
       try {
+        logUsageEvent({
+          event_type: 'query_completed',
+          market: req.query.market,
+          payload: { query_type: 'browse' },
+        });
         // TODO: Implement topic fetching logic
         res.json({
           topics: [],
@@ -128,6 +134,14 @@ export function setupRoutes(app) {
     ],
     async (req, res, next) => {
       try {
+        logUsageEvent({
+          event_type: 'query_completed',
+          market: req.query.market,
+          payload: {
+            query_type: 'top10',
+            demographic: `${req.query.gender} ${req.query.age}`,
+          },
+        });
         // TODO: Implement top 10 fetching logic
         res.json({
           market: req.query.market,
@@ -216,7 +230,7 @@ export function setupRoutes(app) {
     ],
     async (req, res, next) => {
       try {
-        const { content, filename } = req.body;
+        const { content, filename, market } = req.body;
         let csvText;
         try {
           csvText = Buffer.from(content, 'base64').toString('utf8');
@@ -225,6 +239,15 @@ export function setupRoutes(app) {
         }
 
         const result = processUpload(csvText, currentScoringConfig);
+        logUsageEvent({
+          event_type: 'upload_completed',
+          market,
+          payload: {
+            filename: filename || null,
+            file_format: result.format || null,
+            topics_processed: result.stats?.totalTopics || result.trends?.length || 0,
+          },
+        });
         res.json({
           success: true,
           filename,
@@ -263,6 +286,10 @@ export function setupRoutes(app) {
           nyanCatCsv: decode(nyanCatContent),
           vaynerCsv: decode(vaynerContent),
           config: currentScoringConfig,
+        });
+        logUsageEvent({
+          event_type: 'query_completed',
+          payload: { query_type: 'match_rank' },
         });
         res.json({ success: true, ...result });
       } catch (error) {

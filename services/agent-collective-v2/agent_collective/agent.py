@@ -823,6 +823,109 @@ def _write_run_timing(session_id: str, run_dir: Path):
     with open(run_dir / "run_timing.json", "w", encoding="utf-8") as f:
         json.dump(timing, f, indent=2, ensure_ascii=False)
 
+    _log_run_to_firestore(session_id, run_dir, timing)
+
+
+def _log_run_to_firestore(session_id: str, run_dir: Path, timing: dict) -> None:
+    """Best-effort write of a usage_events doc for the admin dashboard (#27).
+
+    Reads session_state.json from the run folder to extract pipeline path,
+    template mode, brief/prompt quality results, and job counts. Failures are
+    swallowed so telemetry never breaks a real run.
+    """
+    try:
+        from google.cloud import firestore  # type: ignore
+    except ImportError:
+        return
+
+    state_path = run_dir / "session_state.json"
+    if not state_path.exists():
+        return
+
+    try:
+        with open(state_path, "r", encoding="utf-8") as f:
+            state = json.load(f)
+    except Exception:
+        return
+
+    def _parse_loops(quality_key: str) -> tuple[bool, int]:
+        raw = state.get(quality_key)
+        if not raw:
+            return False, 0
+        try:
+            data = json.loads(raw) if isinstance(raw, str) else raw
+        except Exception:
+            return False, 0
+        return (
+            str(data.get("status", "")).lower() == "pass",
+            int(data.get("loops", 0) or 0),
+        )
+
+    gen_manifest = state.get("generation_manifest") or {}
+    fc_manifest = state.get("full_campaign_manifest") or {}
+    if isinstance(gen_manifest, str):
+        try:
+            gen_manifest = json.loads(gen_manifest)
+        except Exception:
+            gen_manifest = {}
+    if isinstance(fc_manifest, str):
+        try:
+            fc_manifest = json.loads(fc_manifest)
+        except Exception:
+            fc_manifest = {}
+
+    pipeline_path = (
+        "create_and_adapt" if fc_manifest else
+        "adapt" if state.get("source_run_id") else
+        "create"
+    )
+    template_mode = bool(state.get("template_schema") and state.get("template_schema") != "null")
+
+    brief_pass, brief_loops = _parse_loops("brief_quality_result")
+    prompt_pass, prompt_loops = _parse_loops("prompt_quality_result")
+
+    gen_jobs = len(gen_manifest.get("jobs", []) if isinstance(gen_manifest, dict) else [])
+    fc_jobs = len(fc_manifest.get("jobs", []) if isinstance(fc_manifest, dict) else [])
+
+    kb_insights_raw = state.get("kb_insights") or "{}"
+    try:
+        kb_insights = json.loads(kb_insights_raw) if isinstance(kb_insights_raw, str) else kb_insights_raw
+    except Exception:
+        kb_insights = {}
+    market = (kb_insights.get("market") or os.environ.get("MARKET") or "UNKNOWN").upper()
+
+    payload = {
+        "run_id": run_dir.name,
+        "session_id": session_id,
+        "pipeline_path": pipeline_path,
+        "template_mode": template_mode,
+        "brief_id": state.get("brief_id"),
+        "brief_name": state.get("brief_name") or (state.get("marketing_brief", {}) or {}).get("campaign_name") if isinstance(state.get("marketing_brief"), dict) else None,
+        "run_start": timing.get("run_start"),
+        "run_end": timing.get("run_end"),
+        "total_duration_min": timing.get("total_processing_minutes"),
+        "brief_quality_pass": brief_pass,
+        "brief_quality_loops": brief_loops,
+        "prompt_quality_pass": prompt_pass,
+        "prompt_quality_loops": prompt_loops,
+        "total_gen_pop_jobs": gen_jobs,
+        "total_fc_jobs": fc_jobs,
+        "audiences_covered": 5 if fc_manifest else 1,
+        "status": "completed",
+    }
+
+    try:
+        client = firestore.Client()
+        client.collection("usage_events").add({
+            "tool": "agent_collective",
+            "event_type": "pipeline_run_completed",
+            "timestamp": firestore.SERVER_TIMESTAMP,
+            "market": market,
+            "payload": payload,
+        })
+    except Exception as err:
+        print(f"[usage_events] agent_collective write failed: {err}")
+
 
 # =========================================================================
 # Auto-save callbacks

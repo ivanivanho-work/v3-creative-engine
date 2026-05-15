@@ -11,7 +11,7 @@ import {
   Calendar, ChevronLeft, ChevronRight,
   Menu, X, Filter, BarChart3, ListTree
 } from 'lucide-react';
-import { saveSnapshot, loadSnapshotIndex, loadSnapshotFiles, deleteSnapshot, getWeekId } from './firebase.js';
+import { saveSnapshot, loadSnapshotIndex, loadSnapshotFiles, deleteSnapshot, getWeekId, logUsageEvent } from './firebase.js';
 
 /**
  * SHORTS BRAIN 2.0 - APAC Marketing Incrementality Hub
@@ -1925,6 +1925,7 @@ const App = ({ userEmail }) => {
               } else {
                 setAccessRequestShown(false);
                 setActiveTab(item.id);
+                logUsageEvent('tab_viewed', { tab_id: item.id });
               }
             };
             const isActive = item.id === 'Upload' ? accessRequestShown : (activeTab === item.id && !accessRequestShown);
@@ -1941,7 +1942,7 @@ const App = ({ userEmail }) => {
           {isCampaignTypeExpanded && isSidebarOpen && (
             <div className="pl-4 space-y-1 animate-in slide-in-from-top-2 duration-300">
               {CAMPAIGN_CHILDREN.map(child => (
-                <button key={child.id} onClick={() => setActiveTab(child.id)} className={`w-full flex items-center gap-3 p-3 rounded-lg transition-all cursor-pointer ${activeTab === child.id ? 'bg-[#FF0000]/10 text-[#FF0000]' : 'text-[#555] hover:bg-white/5 hover:text-white'}`}>
+                <button key={child.id} onClick={() => { setActiveTab(child.id); logUsageEvent('tab_viewed', { tab_id: 'Market Hub', sub_view: child.id }); }} className={`w-full flex items-center gap-3 p-3 rounded-lg transition-all cursor-pointer ${activeTab === child.id ? 'bg-[#FF0000]/10 text-[#FF0000]' : 'text-[#555] hover:bg-white/5 hover:text-white'}`}>
                   <child.icon className="w-4 h-4 shrink-0" /><span className="text-[10px] font-bold uppercase">{child.label}</span>
                 </button>
               ))}
