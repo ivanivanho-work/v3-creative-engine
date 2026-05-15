@@ -20,13 +20,13 @@ import {
 
 // \--- FIREBASE CONFIGURATION \---  
 const firebaseConfig \= {  
-  apiKey: "AIzaSyDZziTFGXohy9KzbINBa0R2GCqB3P0g5bA",  
-  authDomain: "apac-shorts-sandbox-109110.firebaseapp.com",  
-  projectId: "apac-shorts-sandbox-109110",  
-  storageBucket: "apac-shorts-sandbox-109110.firebasestorage.app",  
-  messagingSenderId: "99062594868",  
-  appId: "1:99062594868:web:48cdb647a9ee9f43b3b961",  
-  measurementId: "G-DGPHXMP79W"  
+  apiKey: "REDACTED",  
+  authDomain: "REDACTED",  
+  projectId: "REDACTED",  
+  storageBucket: "REDACTED",  
+  messagingSenderId: "REDACTED",  
+  appId: "REDACTED",  
+  measurementId: "REDACTED"  
 };
 
 const app \= \!getApps().length ? initializeApp(firebaseConfig) : getApp();  
@@ -34,7 +34,7 @@ const db \= getFirestore(app);
 const auth \= getAuth(app);
 
 // \--- 1\. CONFIGURATION & CONSTANTS \---  
-const DRIVE\_RESOURCE\_LINK \= "https://drive.google.com/corp/drive/folders/18GCtCrz-Bs1YdXKtQs-tjugb6xudULaX?resourcekey=0-gMJCegK7SZkhgJeT\_YTjSw";
+const DRIVE\_RESOURCE\_LINK \= "REDACTED";
 
 const M\_TYPES \= \['DAU-SCT', 'DAC-SCT', 'GenAI DAU-SCT', 'Impressions', 'CTR'\];  
 const MARKET\_SEGMENTS \= \['India', 'Indonesia', 'Japan', 'South Korea', 'AUNZ'\];  
