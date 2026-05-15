@@ -4,3 +4,4 @@ uvicorn
 httpx
 python-multipart
 google-cloud-storage
+google-cloud-firestore

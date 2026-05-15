@@ -4,6 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Shorts Toolbox Admin</title>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+  <script src="/_auth-gate-compat.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <style>
@@ -134,7 +138,16 @@
       <div style="font-size:20px; font-weight:700; margin-bottom:3px;">AI Tool Utilization</div>
       <div style="font-size:13px; color:var(--text-muted);">Across Agent Collective, Creative Generator, Template Stamper, Intel Hub, Shorts Brain</div>
     </div>
-    <div style="display:flex; gap:6px;">
+    <div style="display:flex; gap:6px; align-items:center;">
+      <select id="market-filter" onchange="setMarket(this.value)" style="background:transparent;border:1px solid var(--border);border-radius:999px;color:var(--text-muted);padding:5px 14px;font-size:13px;font-weight:500;cursor:pointer;">
+        <option value="">All markets</option>
+        <option value="GLOBAL">Global</option>
+        <option value="KR">KR</option>
+        <option value="JP">JP</option>
+        <option value="IN">IN</option>
+        <option value="ID">ID</option>
+        <option value="AUNZ">AUNZ</option>
+      </select>
       <button class="pill" onclick="setRange(this,'7d')">7 Days</button>
       <button class="pill active" onclick="setRange(this,'30d')">30 Days</button>
       <button class="pill" onclick="setRange(this,'90d')">90 Days</button>
@@ -239,7 +252,7 @@
       <div class="section-title">Brief Quality</div>
       <div style="display:flex; align-items:flex-end; justify-content:space-between; margin-bottom:10px;">
         <div>
-          <div style="font-size:28px; font-weight:700; color:var(--green);">94%</div>
+          <div id="quality-brief-pct" style="font-size:28px; font-weight:700; color:var(--green);">—</div>
           <div style="font-size:12px; color:var(--text-muted);">First-attempt pass rate</div>
         </div>
         <span class="badge badge-green">Healthy</span>
@@ -252,7 +265,7 @@
       <div class="section-title">Prompt Quality</div>
       <div style="display:flex; align-items:flex-end; justify-content:space-between; margin-bottom:10px;">
         <div>
-          <div style="font-size:28px; font-weight:700; color:var(--yellow);">89%</div>
+          <div id="quality-prompt-pct" style="font-size:28px; font-weight:700; color:var(--yellow);">—</div>
           <div style="font-size:12px; color:var(--text-muted);">First-attempt pass rate</div>
         </div>
         <span class="badge badge-yellow">Watch</span>
@@ -265,7 +278,7 @@
       <div class="section-title">Avg Quality Loops</div>
       <div style="display:flex; align-items:flex-end; justify-content:space-between; margin-bottom:10px;">
         <div>
-          <div style="font-size:28px; font-weight:700;">1.3</div>
+          <div id="quality-avg-loops" style="font-size:28px; font-weight:700;">—</div>
           <div style="font-size:12px; color:var(--text-muted);">loops per campaign</div>
         </div>
         <span class="badge badge-blue">Normal</span>
@@ -478,111 +491,258 @@
 
   <!-- FOOTER -->
   <div style="margin-top:32px; padding-top:20px; border-top:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; font-size:11px; color:var(--text-muted);">
-    <span>Shorts Toolbox Admin Dashboard &mdash; Sample with mock data</span>
+    <span>Shorts Toolbox Admin Dashboard</span>
     <span>v3-creative-engine &middot; APAC</span>
   </div>
 
 </div>
 
-<!-- CHARTS SCRIPT -->
+<!-- DASHBOARD SCRIPT -->
 <script>
-  // ---- MOCK DATA ----
-  const DATA = {
-    '7d': {
-      labels: ['Apr 28','Apr 29','Apr 30','May 1','May 2','May 3','May 4'],
-      create: [1, 0, 2, 1, 0, 1, 1],
-      full:   [0, 1, 0, 0, 1, 0, 0],
-      adapt:  [0, 0, 1, 0, 0, 0, 1],
-      kpi: { campaigns:'6', jobs:'89', renders:'31', intel:'12', brain:'48', timeSub:'6.8 min avg' }
-    },
-    '30d': {
-      labels: ['Apr 8','Apr 13','Apr 18','Apr 23','Apr 28','May 3','May 8'],
-      create: [1, 2, 3, 2, 2, 2, 2],
-      full:   [0, 1, 1, 0, 2, 1, 2],
-      adapt:  [1, 0, 0, 1, 0, 1, 0],
-      kpi: { campaigns:'24', jobs:'387', renders:'142', intel:'47', brain:'203', timeSub:'7.2 min avg' }
-    },
-    '90d': {
-      labels: ['Feb','Mar Wk1','Mar Wk2','Mar Wk3','Apr Wk1','Apr Wk2','May Wk1'],
-      create: [3, 4, 5, 4, 6, 5, 6],
-      full:   [1, 2, 1, 3, 2, 3, 2],
-      adapt:  [1, 1, 2, 1, 1, 2, 1],
-      kpi: { campaigns:'71', jobs:'1140', renders:'423', intel:'138', brain:'580', timeSub:'7.5 min avg' }
-    }
-  };
+  // Firestore is initialized by /_auth-gate-compat.js (Firebase app + auth).
+  const db = firebase.firestore();
 
+  // ----- State -----
+  const RANGE_DAYS = { '7d': 7, '30d': 30, '90d': 90 };
   let currentRange = '30d';
+  let currentMarket = '';
   let campaignChart, mixChart;
 
+  // ----- UI handlers -----
   function setRange(btn, range) {
     document.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
     btn.classList.add('active');
     currentRange = range;
-    updateDashboard(range);
+    refreshDashboard();
   }
 
-  function updateDashboard(range) {
-    const d = DATA[range];
-    // KPIs
-    document.getElementById('kpi-campaigns').textContent = d.kpi.campaigns;
-    document.getElementById('kpi-jobs').textContent = d.kpi.jobs;
-    document.getElementById('kpi-renders').textContent = d.kpi.renders;
-    document.getElementById('kpi-intel').textContent = d.kpi.intel;
-    document.getElementById('kpi-brain').textContent = d.kpi.brain;
-    document.getElementById('kpi-time-sub').textContent = d.kpi.timeSub;
-    // Charts
-    campaignChart.data.labels = d.labels;
-    campaignChart.data.datasets[0].data = d.create;
-    campaignChart.data.datasets[1].data = d.full;
-    campaignChart.data.datasets[2].data = d.adapt;
-    campaignChart.update();
+  function setMarket(market) {
+    currentMarket = market;
+    refreshDashboard();
+  }
+
+  // ----- Query helpers -----
+  function rangeCutoff() {
+    return new Date(Date.now() - RANGE_DAYS[currentRange] * 24 * 3600 * 1000);
+  }
+
+  async function fetchEvents(tool, eventType) {
+    let q = db.collection('usage_events')
+      .where('tool', '==', tool)
+      .where('timestamp', '>=', rangeCutoff());
+    if (eventType) q = q.where('event_type', '==', eventType);
+    if (currentMarket) q = q.where('market', '==', currentMarket);
+    const snap = await q.get();
+    return snap.docs.map(d => d.data());
+  }
+
+  async function fetchJobs() {
+    let q = db.collection('jobs')
+      .where('createdAt', '>=', rangeCutoff());
+    const snap = await q.get();
+    return snap.docs.map(d => d.data());
+  }
+
+  // ----- Aggregations -----
+  function weekKey(date) {
+    const d = new Date(date);
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7));
+    const week1 = new Date(d.getFullYear(), 0, 4);
+    const weekNum = 1 + Math.round(((d - week1) / 86400000 - 3 + ((week1.getDay() + 6) % 7)) / 7);
+    return `${d.getFullYear()}-W${String(weekNum).padStart(2, '0')}`;
+  }
+
+  function buildCampaignTrend(runs) {
+    const byWeek = {};
+    runs.forEach(r => {
+      const ts = r.timestamp?.toDate ? r.timestamp.toDate() : new Date(r.timestamp);
+      const w = weekKey(ts);
+      byWeek[w] = byWeek[w] || { create: 0, full: 0, adapt: 0 };
+      const path = r.payload?.pipeline_path || 'create';
+      if (path === 'create_and_adapt') byWeek[w].full++;
+      else if (path === 'adapt') byWeek[w].adapt++;
+      else byWeek[w].create++;
+    });
+    const labels = Object.keys(byWeek).sort();
+    return {
+      labels,
+      create: labels.map(w => byWeek[w].create),
+      full: labels.map(w => byWeek[w].full),
+      adapt: labels.map(w => byWeek[w].adapt),
+    };
+  }
+
+  function fmtTime(ts) {
+    if (!ts) return '—';
+    const d = ts?.toDate ? ts.toDate() : new Date(ts);
+    const today = new Date(); today.setHours(0,0,0,0);
+    const dayDiff = Math.floor((today - new Date(d.getFullYear(),d.getMonth(),d.getDate())) / (24*3600*1000));
+    const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    if (dayDiff === 0) return `Today, ${time}`;
+    if (dayDiff === 1) return `Yesterday, ${time}`;
+    return `${d.toLocaleDateString([], { month: 'short', day: 'numeric' })}, ${time}`;
+  }
+
+  // ----- Renderers -----
+  async function refreshDashboard() {
+    try {
+      const [agentRuns, generatorSessions, intelEvents, brainEvents, jobs] = await Promise.all([
+        fetchEvents('agent_collective', 'pipeline_run_completed'),
+        fetchEvents('creative_generator', 'generation_session_completed'),
+        fetchEvents('shorts_intel_hub'),
+        fetchEvents('shorts_brain'),
+        fetchJobs(),
+      ]);
+
+      // KPIs
+      const totalJobs = generatorSessions.reduce((s, r) => s + (r.payload?.total_jobs || 0), 0);
+      const completedJobs = jobs.filter(j => j.status === 'completed').length;
+      const intelQueries = intelEvents.filter(e => e.event_type === 'query_completed' || e.event_type === 'upload_completed').length;
+      const brainQueries = brainEvents.filter(e => e.event_type === 'tab_viewed').length;
+      const avgPipelineMin = agentRuns.length
+        ? (agentRuns.reduce((s, r) => s + (r.payload?.total_duration_min || 0), 0) / agentRuns.length).toFixed(1)
+        : '—';
+
+      document.getElementById('kpi-campaigns').textContent = agentRuns.length;
+      document.getElementById('kpi-jobs').textContent = totalJobs;
+      document.getElementById('kpi-renders').textContent = completedJobs;
+      document.getElementById('kpi-intel').textContent = intelQueries;
+      document.getElementById('kpi-brain').textContent = brainQueries;
+      document.getElementById('kpi-time-sub').textContent = `${avgPipelineMin} min avg`;
+
+      // Charts
+      const trend = buildCampaignTrend(agentRuns);
+      campaignChart.data.labels = trend.labels;
+      campaignChart.data.datasets[0].data = trend.create;
+      campaignChart.data.datasets[1].data = trend.full;
+      campaignChart.data.datasets[2].data = trend.adapt;
+      campaignChart.update();
+
+      const mixCreate = trend.create.reduce((a, b) => a + b, 0);
+      const mixFull = trend.full.reduce((a, b) => a + b, 0);
+      const mixAdapt = trend.adapt.reduce((a, b) => a + b, 0);
+      mixChart.data.datasets[0].data = [mixCreate, mixFull, mixAdapt];
+      mixChart.update();
+      document.getElementById('donut-total').textContent = mixCreate + mixFull + mixAdapt;
+
+      // Quality tiles
+      const briefPass = agentRuns.filter(r => r.payload?.brief_quality_pass).length;
+      const promptPass = agentRuns.filter(r => r.payload?.prompt_quality_pass).length;
+      const briefPct = agentRuns.length ? Math.round((briefPass / agentRuns.length) * 100) : 0;
+      const promptPct = agentRuns.length ? Math.round((promptPass / agentRuns.length) * 100) : 0;
+      const avgLoops = agentRuns.length
+        ? (agentRuns.reduce((s, r) => s + ((r.payload?.brief_quality_loops || 0) + (r.payload?.prompt_quality_loops || 0)), 0) / agentRuns.length).toFixed(1)
+        : '0.0';
+      const qEl = document.getElementById('quality-brief-pct');
+      if (qEl) qEl.textContent = `${briefPct}%`;
+      const pEl = document.getElementById('quality-prompt-pct');
+      if (pEl) pEl.textContent = `${promptPct}%`;
+      const aEl = document.getElementById('quality-avg-loops');
+      if (aEl) aEl.textContent = avgLoops;
+
+      // Recent runs feed
+      const recent = agentRuns
+        .slice()
+        .sort((a, b) => {
+          const ta = a.timestamp?.toDate ? a.timestamp.toDate() : new Date(a.timestamp);
+          const tb = b.timestamp?.toDate ? b.timestamp.toDate() : new Date(b.timestamp);
+          return tb - ta;
+        })
+        .slice(0, 5);
+      const recentEl = document.getElementById('recent-runs');
+      if (recentEl) {
+        recentEl.innerHTML = recent.length === 0
+          ? '<div style="font-size:12px; color:var(--text-muted); padding:20px 0;">No runs in this period.</div>'
+          : recent.map(r => {
+              const p = r.payload || {};
+              const path = p.pipeline_path === 'create_and_adapt' ? 'Full Campaign' : (p.pipeline_path === 'adapt' ? 'Adapt' : 'Create');
+              const pathColor = p.pipeline_path === 'create_and_adapt' ? '#9c5cf6' : (p.pipeline_path === 'adapt' ? '#24C1A0' : '#4285F4');
+              const ts = r.timestamp?.toDate ? r.timestamp.toDate() : new Date(r.timestamp);
+              const dateStr = ts.toLocaleDateString([], { month: 'short', day: 'numeric' });
+              const timeStr = ts.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+              return `
+                <div class="run-row" style="padding:12px 0; border-top:1px solid var(--border);">
+                  <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:8px;">
+                    <div style="flex:1; min-width:0;">
+                      <div style="font-weight:600; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${p.brief_name || p.brief_id || p.run_id || 'Run'}</div>
+                      <div style="display:flex; gap:6px; margin-top:5px; flex-wrap:wrap;">
+                        <span class="badge badge-blue">${r.market || 'UNKNOWN'}</span>
+                        <span class="badge" style="background:${pathColor}22;color:${pathColor};">${path}</span>
+                        <span style="font-size:11px; color:var(--text-muted);">${(p.total_gen_pop_jobs || 0) + (p.total_fc_jobs || 0)} jobs</span>
+                      </div>
+                    </div>
+                    <span class="badge ${p.status === 'completed' ? 'badge-green' : 'badge-yellow'}" style="flex-shrink:0; margin-top:2px;">${p.status === 'completed' ? 'Passed' : 'Incomplete'}</span>
+                  </div>
+                  <div style="display:flex; gap:14px; margin-top:7px; font-size:11px; color:var(--text-muted);">
+                    <span>${p.total_duration_min ? p.total_duration_min + ' min' : '—'}</span>
+                    <span>${(p.brief_quality_loops || 0) + (p.prompt_quality_loops || 0)} quality loops</span>
+                    <span>${dateStr}, ${timeStr}</span>
+                  </div>
+                </div>`;
+            }).join('');
+      }
+
+      // Tool activity table — last-active timestamps
+      const lastSeen = {
+        agent: agentRuns[0]?.timestamp,
+        cg: generatorSessions[0]?.timestamp,
+        ts: jobs[0]?.createdAt,
+        ih: intelEvents[0]?.timestamp,
+        sb: brainEvents[0]?.timestamp,
+      };
+      const ta = document.getElementById('tool-table');
+      if (ta) {
+        const rows = ta.querySelectorAll('tr');
+        if (rows.length >= 5) {
+          rows[0].cells[1].textContent = `${agentRuns.length} runs`;
+          rows[0].cells[2].innerHTML = `<span class="badge badge-blue">${totalJobs} jobs</span>`;
+          rows[0].cells[3].textContent = fmtTime(lastSeen.agent);
+          rows[1].cells[1].textContent = `${generatorSessions.length} sessions`;
+          rows[1].cells[3].textContent = fmtTime(lastSeen.cg);
+          rows[2].cells[1].textContent = `${jobs.length} jobs`;
+          rows[2].cells[2].innerHTML = `<span class="badge badge-blue">${completedJobs} renders</span>`;
+          rows[2].cells[3].textContent = fmtTime(lastSeen.ts);
+          rows[3].cells[1].textContent = `${intelQueries} queries`;
+          rows[3].cells[3].textContent = fmtTime(lastSeen.ih);
+          rows[4].cells[1].textContent = `${brainQueries} queries`;
+          rows[4].cells[3].textContent = fmtTime(lastSeen.sb);
+        }
+      }
+    } catch (err) {
+      console.error('[admin-dashboard] refresh failed:', err);
+    }
   }
 
   const chartDefaults = {
     responsive: true,
     plugins: { legend: { display: false } },
     scales: {
-      x: {
-        stacked: true,
-        grid: { color: '#2a2a2a' },
-        ticks: { color: '#888', font: { size: 11 } }
-      },
-      y: {
-        stacked: true,
-        grid: { color: '#2a2a2a' },
-        ticks: { color: '#888', font: { size: 11 }, stepSize: 1 },
-        beginAtZero: true
-      }
+      x: { stacked: true, grid: { color: '#2a2a2a' }, ticks: { color: '#888', font: { size: 11 } } },
+      y: { stacked: true, grid: { color: '#2a2a2a' }, ticks: { color: '#888', font: { size: 11 }, stepSize: 1 }, beginAtZero: true }
     }
   };
 
   window.addEventListener('DOMContentLoaded', () => {
-    const d = DATA['30d'];
-
-    // Campaign trend chart
     campaignChart = new Chart(document.getElementById('campaignChart'), {
       type: 'bar',
       data: {
-        labels: d.labels,
+        labels: [],
         datasets: [
-          { label: 'Create', data: d.create, backgroundColor: '#4285F4', borderRadius: 3, borderSkipped: false },
-          { label: 'Full Campaign', data: d.full, backgroundColor: '#9c5cf6', borderRadius: 0, borderSkipped: false },
-          { label: 'Adapt', data: d.adapt, backgroundColor: '#24C1A0', borderRadius: 3, borderSkipped: 'bottom' }
+          { label: 'Create', data: [], backgroundColor: '#4285F4', borderRadius: 3, borderSkipped: false },
+          { label: 'Full Campaign', data: [], backgroundColor: '#9c5cf6', borderRadius: 0, borderSkipped: false },
+          { label: 'Adapt', data: [], backgroundColor: '#24C1A0', borderRadius: 3, borderSkipped: 'bottom' }
         ]
       },
-      options: {
-        ...chartDefaults,
-        animation: { duration: 300 }
-      }
+      options: { ...chartDefaults, animation: { duration: 300 } }
     });
 
-    // Pipeline mix donut
     mixChart = new Chart(document.getElementById('mixChart'), {
       type: 'doughnut',
       data: {
         labels: ['Create', 'Full Campaign', 'Adapt'],
         datasets: [{
-          data: [14, 7, 3],
+          data: [0, 0, 0],
           backgroundColor: ['#4285F4', '#9c5cf6', '#24C1A0'],
           borderColor: '#1c1c1c',
           borderWidth: 3,
@@ -594,14 +754,17 @@
         cutout: '72%',
         plugins: {
           legend: { display: false },
-          tooltip: {
-            callbacks: {
-              label: (ctx) => ` ${ctx.label}: ${ctx.parsed} runs`
-            }
-          }
+          tooltip: { callbacks: { label: (ctx) => ` ${ctx.label}: ${ctx.parsed} runs` } }
         }
       }
     });
+
+    // Wait for auth gate, then load
+    const waitForAuth = () => {
+      if (window.__authGatePassed) refreshDashboard();
+      else setTimeout(waitForAuth, 200);
+    };
+    waitForAuth();
   });
 </script>
 </body>

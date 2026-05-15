@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getStorage, ref, uploadBytes, getBytes, listAll, deleteObject } from 'firebase/storage';
-import { getFirestore, doc, setDoc, getDocs, collection, query, orderBy, where, limit, deleteDoc, serverTimestamp } from 'firebase/firestore';
+import { getFirestore, doc, setDoc, addDoc, getDocs, collection, query, orderBy, where, limit, deleteDoc, serverTimestamp } from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: "AIzaSyBjw05ng3dqmRrs7SKA57MAjSnUdeuJLj8",
@@ -16,6 +16,21 @@ const storage = getStorage(app);
 const db = getFirestore(app);
 
 const COLLECTION = 'shorts_brain_snapshots';
+const USAGE_EVENTS = 'usage_events';
+
+/**
+ * Fire-and-forget admin-dashboard telemetry. Failures are swallowed so a
+ * Firestore hiccup never breaks the user's actual action.
+ */
+export function logUsageEvent(eventType, payload = {}, market = 'UNKNOWN') {
+  addDoc(collection(db, USAGE_EVENTS), {
+    tool: 'shorts_brain',
+    event_type: eventType,
+    timestamp: serverTimestamp(),
+    market,
+    payload,
+  }).catch(err => console.warn('[usage_events] write failed:', err.message));
+}
 
 /**
  * Get ISO week ID from a date string
@@ -65,6 +80,11 @@ export async function saveSnapshot({ weekId, reportingDate, rawFiles }) {
   };
 
   await setDoc(doc(db, COLLECTION, weekId), metadata, { merge: true });
+
+  logUsageEvent('snapshot_saved', {
+    week_id: weekId,
+    file_count: savedKeys.length,
+  });
 
   return { weekId, savedAt: new Date().toISOString(), fileCount: savedKeys.length };
 }

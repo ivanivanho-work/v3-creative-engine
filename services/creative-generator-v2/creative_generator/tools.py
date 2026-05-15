@@ -613,10 +613,66 @@ def write_execution_report(
         report_bytes = json.dumps(report, indent=2).encode("utf-8")
         public_url = _upload_to_gcs(report_bytes, gcs_path, "application/json")
         logger.info(f"Execution report written: {public_url}")
+        _log_session_to_firestore(run_id, pipeline_path, started_at, report)
         return {"status": "complete", "gcs_uri": public_url}
     except Exception as e:
         logger.error(f"Failed to write execution report: {e}")
         return {"status": "failed", "gcs_uri": None, "error": str(e)}
+
+
+def _log_session_to_firestore(run_id: str, pipeline_path: str, started_at: str, report: dict) -> None:
+    """Best-effort usage_events write for the admin dashboard (#27).
+
+    Records one event per generation session. Failures never block the
+    actual report write.
+    """
+    try:
+        from google.cloud import firestore  # type: ignore
+    except ImportError:
+        return
+
+    jobs = report.get("jobs", {}) or {}
+    total = int(jobs.get("total", 0) or 0)
+    completed = int(jobs.get("complete", 0) or 0)
+    failed = int(jobs.get("failed", 0) or 0)
+
+    asset_types = set()
+    for failure in report.get("failures", []) or []:
+        if isinstance(failure, dict) and failure.get("asset_type"):
+            asset_types.add(failure["asset_type"])
+    # `report.jobs` only carries counts, so asset_types here is best-effort
+    # from failure metadata. The Agent Collective record carries the full
+    # manifest if a richer breakdown is needed later.
+
+    try:
+        completed_at = datetime.now(timezone.utc).isoformat()
+        duration_min = None
+        if started_at:
+            try:
+                start_dt = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+                duration_min = round((datetime.now(timezone.utc) - start_dt).total_seconds() / 60, 2)
+            except Exception:
+                duration_min = None
+
+        firestore.Client().collection("usage_events").add({
+            "tool": "creative_generator",
+            "event_type": "generation_session_completed",
+            "timestamp": firestore.SERVER_TIMESTAMP,
+            "market": os.environ.get("MARKET", "UNKNOWN").upper(),
+            "payload": {
+                "session_id": run_id,
+                "pipeline_path": pipeline_path,
+                "total_jobs": total,
+                "jobs_completed": completed,
+                "jobs_failed": failed,
+                "asset_types": sorted(asset_types) or None,
+                "started_at": started_at,
+                "completed_at": completed_at,
+                "duration_min": duration_min,
+            },
+        })
+    except Exception as err:
+        logger.warning(f"[usage_events] creative_generator write failed: {err}")
 
 
 # ---------------------------------------------------------------------------
