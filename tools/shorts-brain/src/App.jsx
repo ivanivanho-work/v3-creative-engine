@@ -1177,6 +1177,9 @@ const App = ({ userEmail }) => {
   const [activeMetrics, setActiveMetrics] = useState(['DAU-SCT']);
   const [isCampaignTypeExpanded, setIsCampaignTypeExpanded] = useState(false);
   const [activeMarketSubTab, setActiveMarketSubTab] = useState('India');
+  // Campaign Holdback (Market Hub) — Campaign Type filter. Empty string = ALL.
+  // Maps onto each row's meta.tab (the same axis as the CAMPAIGN_CHILDREN nav).
+  const [campaignTypeFilter, setCampaignTypeFilter] = useState('');
   const [latestGlobalDate, setLatestGlobalDate] = useState(null);
 
   const [tabMarketFilter, setTabMarketFilter] = useState({ 'ScaledCreation': 'India', 'Trends': 'India', 'CultMo': 'India', 'ArtMo': 'India', 'GenAI Hub': 'India', 'AlwaysOn': 'India' });
@@ -2048,20 +2051,32 @@ const App = ({ userEmail }) => {
                 handleAllToggle={() => setActiveMetrics(p => p.length === allowedMetrics.length ? ['DAU-SCT'] : [...allowedMetrics])}
               />
               {activeTab === 'Market Hub' && (
-                <div className="flex items-center gap-4 p-4 bg-[#1a1a1a] rounded-lg border border-[#3a3a3a] w-fit">
-                  <MapPin className="w-6 h-6 text-red-600" />
-                  <select value={activeMarketSubTab} onChange={e => setActiveMarketSubTab(e.target.value)} className="bg-transparent text-white font-bold uppercase outline-none cursor-pointer pr-4">
-                    {MARKET_SEGMENTS.map(m => <option key={m} value={m} className="bg-neutral-900">{m}</option>)}
-                  </select>
+                <div className="flex flex-wrap gap-4">
+                  <div className="flex items-center gap-4 p-4 bg-[#1a1a1a] rounded-lg border border-[#3a3a3a] w-fit">
+                    <MapPin className="w-6 h-6 text-red-600" />
+                    <select value={activeMarketSubTab} onChange={e => setActiveMarketSubTab(e.target.value)} className="bg-transparent text-white font-bold uppercase outline-none cursor-pointer pr-4">
+                      {MARKET_SEGMENTS.map(m => <option key={m} value={m} className="bg-neutral-900">{m}</option>)}
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-4 p-4 bg-[#1a1a1a] rounded-lg border border-[#3a3a3a] w-fit">
+                    <Filter className="w-6 h-6 text-amber-500" />
+                    <select value={campaignTypeFilter} onChange={e => setCampaignTypeFilter(e.target.value)} className="bg-transparent text-white font-bold uppercase outline-none cursor-pointer pr-4">
+                      <option value="" className="bg-neutral-900">ALL CAMPAIGN TYPES</option>
+                      {CAMPAIGN_CHILDREN.map(c => <option key={c.id} value={c.id} className="bg-neutral-900">{c.label}</option>)}
+                    </select>
+                  </div>
                 </div>
               )}
               <MasterTableView
                 data={activeTab === 'Global Hub' ? globalData : (() => {
                   // Anchor-row injection: prepend the global anchor for the selected
                   // market so users can see Market Hub campaigns alongside their reference.
-                  const campaigns = (regionalData[activeMarketSubTab] || []).filter(c =>
+                  let campaigns = (regionalData[activeMarketSubTab] || []).filter(c =>
                     c.country && c.country.toUpperCase() !== 'UNKNOWN'
                   );
+                  if (campaignTypeFilter) {
+                    campaigns = campaigns.filter(c => eq(c.meta?.tab, campaignTypeFilter));
+                  }
                   const globalRef = globalData.find(d =>
                     eq(d.country, activeMarketSubTab) || eq(d.country, MARKET_KEYS[activeMarketSubTab])
                   );
