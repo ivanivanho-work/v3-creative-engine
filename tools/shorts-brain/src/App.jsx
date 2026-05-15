@@ -1200,14 +1200,11 @@ const App = ({ userEmail }) => {
   const [isLoadingMemory, setIsLoadingMemory] = useState(false);
   const [historicalSnapshots, setHistoricalSnapshots] = useState([]);
 
-  // Global Hub and the synthesised AlwaysOn aggregate hide Impressions/CTR — those
-  // metrics only ship via the Attribution stream (campaign-level granularity).
-  const allowedMetrics = useMemo(() => {
-    if (activeTab === 'Global Hub' || activeTab === 'AlwaysOn') {
-      return M_TYPES.filter(m => m !== 'Impressions' && m !== 'CTR');
-    }
-    return M_TYPES;
-  }, [activeTab]);
+  // All pages expose the same toggleable metric set so cross-page comparison is
+  // predictable. Impressions/CTR ship via the Attribution stream and may render
+  // as NA on pages where attribution wasn't uploaded — that's a data-state
+  // signal rather than a reason to hide the toggle.
+  const allowedMetrics = useMemo(() => M_TYPES, []);
 
   // Dropdown-driven subtab filters with implicit "ALL" (empty-string sentinel)
   // — replaces the pill-row UX so users can flatten across all sub-sub buckets.
