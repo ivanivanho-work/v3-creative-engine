@@ -28,7 +28,7 @@ gcloud run deploy "${SERVICE_NAME}" \
   --min-instances 0 \
   --max-instances 3 \
   --set-env-vars "MARKET=kr" \
-  --set-secrets "GOOGLE_API_KEY=GOOGLE_API_KEY:latest"
+  --set-secrets "GOOGLE_API_KEY=GEMINI_API_KEY:latest"
 
 echo "==> Getting service URL..."
 URL=$(gcloud run services describe "${SERVICE_NAME}" \
