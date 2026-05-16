@@ -19,7 +19,7 @@ import { saveSnapshot, loadSnapshotIndex, loadSnapshotFiles, deleteSnapshot, get
 
 // --- 1. CONFIGURATION & CONSTANTS ---
 const DRIVE_RESOURCE_LINK = "https://drive.google.com/corp/drive/folders/18GCtCrz-Bs1YdXKtQs-tjugb6xudULaX?resourcekey=0-gMJCegK7SZkhgJeT_YTjSw";
-const DATA_INGESTION_ADMINS = ['ivanho.wz@gmail.com', 'ivho@google.com', 'kanishak@google.com'];
+const DATA_INGESTION_ADMINS = ['ivanho.wz@gmail.com', 'ivho@google.com', 'kanishak@google.com', 'danilpalma@google.com'];
 
 const M_TYPES = ['DAU-SCT', 'DAC-SCT', 'GenAI DAU-SCT', 'Impressions', 'CTR'];
 const MARKET_SEGMENTS = ['India', 'Indonesia', 'Japan', 'South Korea', 'AUNZ'];
