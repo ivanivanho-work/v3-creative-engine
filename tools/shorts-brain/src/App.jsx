@@ -43,6 +43,15 @@ const MARKET_KEYS_REV = { 'IN': 'India', 'ID': 'Indonesia', 'JP': 'Japan', 'KR':
 
 const AO_CATEGORIES = ['SSC', 'Shelf', 'UTS', 'MVR', 'UTS SFV', 'JP Proactive Container'];
 
+const DATA_INGESTION_ADMINS = ['kanishak@google.com', 'danilpalma@google.com', 'ivanho.wz@gmail.com', 'ivho@google.com'];
+
+const OKR_TARGETS = {
+  'APAC': 0.4, 'INDIA': 0.16, 'INDONESIA': 0.29, 'JAPAN': 1.2, 'SOUTH KOREA': 1.08, 'AUNZ': 1.56,
+  'IN': 0.16, 'ID': 0.29, 'JP': 1.2, 'KR': 1.08
+};
+
+const CAMPAIGN_TYPES = ['Effects', 'GenAI', 'Topical Moments', 'BAU', 'Others'];
+
 const GENDERS_KEYS = ['female', 'male', 'total'];  
 const GENDERS_DISPLAY_MAP = { 'female': 'FEMALE', 'male': 'MALE', 'total': 'GenPop' };  
 const AGE_BUCKETS = ['18-24', '25-34', '18-34', '35+', 'total'];
@@ -89,10 +98,19 @@ const superClean = (s) => {
 
 const eq = (a, b) => superClean(a) === superClean(b);
 
-const normalizeCampaignKey = (s) => {  
-  return superClean(s)  
-    .replace(/INDIA$|INDONESIA$|JAPAN$|SOUTHKOREA$|AUNZ$|IN$|ID$|JP$|KR$/g, '')  
-    .trim();  
+const normalizeCampaignKey = (s) => {
+  return superClean(s)
+    .replace(/INDIA$|INDONESIA$|JAPAN$|SOUTHKOREA$|AUNZ$|IN$|ID$|JP$|KR$/g, '')
+    .trim();
+};
+
+const getCampaignType = (campaign) => {
+  const n = ((campaign.country || '') + ' ' + (campaign.meta?.tab || '') + ' ' + (campaign.meta?.subTab || '')).toLowerCase();
+  if (n.includes('effect')) return 'Effects';
+  if (n.includes('genai') || n.includes('gen ai')) return 'GenAI';
+  if (n.includes('topical') || n.includes('cultmo') || n.includes('artmo')) return 'Topical Moments';
+  if (n.includes('bau') || n.includes('alwayson') || n.includes('always-on') || n.includes('shelf') || n.includes('ssc') || n.includes('uts') || n.includes('mvr') || n.includes('scaled')) return 'BAU';
+  return 'Others';
 };
 
 const formatCompactNumber = (val) => {  
@@ -662,16 +680,16 @@ const OKRAndRecsView = ({ globalData, regionalData, latestDate, quarterStart }) 
     return diffTime > 0 ? diffTime : 0;  
   }, [latestDate]);
 
-  const okrStats = useMemo(() => {  
-    const targetValue = getOkrTarget(quarterStart);  
-    return ['APAC', 'India', 'Indonesia', 'Japan', 'South Korea', 'AUNZ'].map(mName => {  
-      const record = globalData.find(d => eq(d.country, mName) || eq(d.country, MARKET_KEYS[mName]));  
-      const actual = record?.metrics?.['DAU-SCT']?.total?.total?.v;  
-      const safeActual = (actual === 'NA' || isNaN(actual) || actual === undefined) ? 0 : actual;  
-      const pi = targetValue > 0 ? (safeActual / targetValue) * 100 : 0;  
-      return { market: mName.toUpperCase(), actual: safeActual, target: targetValue, perfIndex: pi, isOffline: !record || actual === 'NA' };  
-    });  
-  }, [globalData, quarterStart]);
+  const okrStats = useMemo(() => {
+    return ['APAC', 'India', 'Indonesia', 'Japan', 'South Korea', 'AUNZ'].map(mName => {
+      const record = globalData.find(d => eq(d.country, mName) || eq(d.country, MARKET_KEYS[mName]));
+      const actual = record?.metrics?.['DAU-SCT']?.total?.total?.v;
+      const safeActual = (actual === 'NA' || isNaN(actual) || actual === undefined) ? 0 : actual;
+      const target = OKR_TARGETS[mName.toUpperCase()] || 0.4;
+      const pi = target > 0 ? (safeActual / target) * 100 : 0;
+      return { market: mName.toUpperCase(), actual: safeActual, target, perfIndex: pi, isOffline: !record || actual === 'NA' };
+    });
+  }, [globalData]);
 
   const recommendationRows = useMemo(() => {  
     const tableData = [];  
@@ -785,9 +803,9 @@ const OKRAndRecsView = ({ globalData, regionalData, latestDate, quarterStart }) 
           return (  
             <div key={idx} className={`relative ${cfg.cardBg} rounded-lg p-6 border border-[#3a3a3a] transition-all hover:border-[#555] shadow-sm`}>  
               <div className="flex justify-between items-start mb-6"><h3 className="text-xl font-bold text-white uppercase">{stat.market}</h3>{!stat.isOffline && <BarChart3 className={`w-5 h-5 ${cfg.color}`} />}</div>  
-              <div className="flex items-baseline gap-2 mb-4">  
-                <span className="text-3xl font-bold text-white">{stat.actual > 0 ? "+" : ""}{stat.actual.toFixed(2)}%</span>  
-                <span className="text-[9px] font-bold text-[#808080] uppercase tracking-tighter">INDEX</span>  
+              <div className="flex items-baseline gap-2 mb-4">
+                <span className="text-3xl font-bold text-white">{stat.perfIndex.toFixed(1)}%</span>
+                <span className="text-[9px] font-bold text-[#808080] uppercase tracking-tighter">INDEX</span>
               </div>  
               <div className="relative h-1.5 w-full bg-black rounded-full overflow-hidden mb-4"><div className={`h-full ${cfg.accent} transition-all duration-1000`} style={{ width: `${Math.min(stat.perfIndex, 100)}%` }} /></div>  
               <div className="flex justify-between pt-4 border-t border-[#3a3a3a] font-mono text-[10px]">  
@@ -1049,6 +1067,10 @@ const App = () => {
   const [latestGlobalDate, setLatestGlobalDate] = useState(null);  
   const [quarterStart, setQuarterStart] = useState("2026-02-01");  
   const [user, setUser] = useState(null);
+  const [campaignTypeFilter, setCampaignTypeFilter] = useState('');
+  const [accessDenied, setAccessDenied] = useState(false);
+
+  const isDataIngestionAdmin = DATA_INGESTION_ADMINS.includes((user?.email || '').toLowerCase());
 
   const initialLoadDone = useRef(false);
 
@@ -1625,17 +1647,21 @@ const App = () => {
           {NAV_ITEMS.map(item => {  
             const Icon = item.icon;  
             return (  
-              <button key={item.id} type="button"  
-                onClick={() => {  
-                  if (item.id === 'Upload') {  
-                    initialLoadDone.current = true;  
-                    setIsAnalyzed(false);  
-                  } else {  
-                    setActiveTab(item.id);  
-                  }  
-                }}  
-                className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all cursor-pointer ${activeTab === item.id ? 'bg-[#FF0000]/10 text-[#FF0000]' : 'text-[#808080] hover:text-white'}`}>  
-                <Icon className="w-5 h-5 shrink-0" />{isSidebarOpen && <span className="text-[11px] font-bold uppercase tracking-wider">{item.label}</span>}  
+              <button key={item.id} type="button"
+                onClick={() => {
+                  if (item.id === 'Upload') {
+                    if (!isDataIngestionAdmin) { setAccessDenied(true); return; }
+                    setAccessDenied(false);
+                    initialLoadDone.current = true;
+                    setIsAnalyzed(false);
+                  } else {
+                    setAccessDenied(false);
+                    setActiveTab(item.id);
+                  }
+                }}
+                className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all cursor-pointer ${activeTab === item.id ? 'bg-[#FF0000]/10 text-[#FF0000]' : item.id === 'Upload' && !isDataIngestionAdmin ? 'text-[#444] cursor-not-allowed' : 'text-[#808080] hover:text-white'}`}>
+                <Icon className="w-5 h-5 shrink-0" />{isSidebarOpen && <span className="text-[11px] font-bold uppercase tracking-wider">{item.label}</span>}
+                {isSidebarOpen && item.id === 'Upload' && !isDataIngestionAdmin && <span className="ml-auto text-[7px] font-bold text-[#444] uppercase">Read-only</span>}
               </button>  
             );  
           })}  
@@ -1703,6 +1729,15 @@ const App = () => {
             </div>  
           )}  
         </nav>  
+        {isSidebarOpen && user?.email && (
+          <div className="px-4 py-3 border-t border-[#2a2a2a]">
+            <div className="text-[8px] font-mono text-[#555] truncate">{user.email}</div>
+            <div className="text-[8px] mt-0.5 uppercase tracking-wider font-bold">{isDataIngestionAdmin ? <span className="text-emerald-400">Ingestion Admin</span> : <span className="text-[#555]">Read-only</span>}</div>
+          </div>
+        )}
+        {accessDenied && isSidebarOpen && (
+          <div className="mx-4 mb-2 px-3 py-2 rounded-lg bg-red-900/30 border border-red-500/30 text-[8px] text-red-400 font-bold uppercase tracking-wider">Access restricted</div>
+        )}
         <button type="button" onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-6 border-t border-[#2a2a2a] text-[#555] hover:text-white flex items-center justify-center">{isSidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}</button>  
       </aside>  
       <div className="flex-1 flex flex-col overflow-hidden relative">  
@@ -1712,29 +1747,33 @@ const App = () => {
         </header>  
         <main className="flex-1 overflow-auto p-10 relative no-scrollbar">  
           {activeTab === 'OKR' && <OKRAndRecsView globalData={globalData} regionalData={regionalData} latestDate={latestGlobalDate} quarterStart={quarterStart} />}  
-          {(activeTab === 'Global Hub' || activeTab === 'Market Hub') && (  
-            <div className="space-y-8 animate-in fade-in duration-500">  
-              <MetricControlHub activeMetrics={activeMetrics} allowedMetrics={allowed} toggleMetric={m => setActiveMetrics(p => p.includes(m) ? (p.length > 1 ? p.filter(x => x !== m) : p) : [...p, m])} handleAllToggle={() => setActiveMetrics(p => p.length === allowed.length ? ['DAU-SCT'] : [...allowed])} />  
-              {activeTab === 'Market Hub' && (  
-                <div className="flex items-center gap-4 p-4 bg-[#111] rounded-xl border border-[#2a2a2a] w-fit shadow-lg"><MapPin className="w-6 h-6 text-red-600" /><select value={activeMarketSubTab} onChange={e => setActiveMarketSubTab(e.target.value)} className="bg-transparent text-white font-bold uppercase outline-none cursor-pointer pr-8">{MARKET_SEGMENTS.map(m => <option key={m} value={m} className="bg-neutral-900">{m}</option>)}</select></div>  
-              )}  
-              <MasterTableView   
-                data={activeTab === 'Global Hub' ? globalData : (() => {   
-                  const rawCampaigns = regionalData[activeMarketSubTab] || [];   
-                  const campaigns = rawCampaigns.filter(c =>   
-                    c.country &&   
-                    c.country.toUpperCase() !== 'UNKNOWN' &&   
-                    (eq(c.market, activeMarketSubTab) || eq(c.market, MARKET_KEYS[activeMarketSubTab]))  
-                  );  
-                  const globalRef = globalData.find(d => eq(d.country, activeMarketSubTab) || eq(d.country, MARKET_KEYS[activeMarketSubTab]));   
-                  return globalRef ? [{ ...globalRef, isAnchor: true }, ...campaigns] : campaigns;   
-                })()}   
-                activeMetrics={activeMetrics}   
-                latestGlobalDate={latestGlobalDate}   
-                isCampaignView={activeTab === 'Market Hub'}   
-                hideDates={activeTab === 'Global Hub'}   
-              />  
-            </div>  
+          {(activeTab === 'Global Hub' || activeTab === 'Market Hub') && (
+            <div className="space-y-8 animate-in fade-in duration-500">
+              <MetricControlHub activeMetrics={activeMetrics} allowedMetrics={allowed} toggleMetric={m => setActiveMetrics(p => p.includes(m) ? (p.length > 1 ? p.filter(x => x !== m) : p) : [...p, m])} handleAllToggle={() => setActiveMetrics(p => p.length === allowed.length ? ['DAU-SCT'] : [...allowed])} />
+              {activeTab === 'Market Hub' && (
+                <div className="flex flex-wrap items-center gap-4">
+                  <div className="flex items-center gap-4 p-4 bg-[#111] rounded-xl border border-[#2a2a2a] w-fit shadow-lg"><MapPin className="w-6 h-6 text-red-600" /><select value={activeMarketSubTab} onChange={e => setActiveMarketSubTab(e.target.value)} className="bg-transparent text-white font-bold uppercase outline-none cursor-pointer pr-8">{MARKET_SEGMENTS.map(m => <option key={m} value={m} className="bg-neutral-900">{m}</option>)}</select></div>
+                  <div className="flex items-center gap-4 p-4 bg-[#111] rounded-xl border border-[#2a2a2a] w-fit shadow-lg"><Filter className="w-6 h-6 text-amber-500" /><select value={campaignTypeFilter} onChange={e => setCampaignTypeFilter(e.target.value)} className="bg-transparent text-white font-bold uppercase outline-none cursor-pointer pr-8"><option value="" className="bg-neutral-900">ALL TYPES</option>{CAMPAIGN_TYPES.map(t => <option key={t} value={t} className="bg-neutral-900">{t}</option>)}</select></div>
+                </div>
+              )}
+              <MasterTableView
+                data={activeTab === 'Global Hub' ? globalData : (() => {
+                  const rawCampaigns = regionalData[activeMarketSubTab] || [];
+                  const campaigns = rawCampaigns.filter(c =>
+                    c.country &&
+                    c.country.toUpperCase() !== 'UNKNOWN' &&
+                    (eq(c.market, activeMarketSubTab) || eq(c.market, MARKET_KEYS[activeMarketSubTab])) &&
+                    (!campaignTypeFilter || getCampaignType(c) === campaignTypeFilter)
+                  );
+                  const globalRef = globalData.find(d => eq(d.country, activeMarketSubTab) || eq(d.country, MARKET_KEYS[activeMarketSubTab]));
+                  return globalRef ? [{ ...globalRef, isAnchor: true }, ...campaigns] : campaigns;
+                })()}
+                activeMetrics={activeMetrics}
+                latestGlobalDate={latestGlobalDate}
+                isCampaignView={activeTab === 'Market Hub'}
+                hideDates={activeTab === 'Global Hub'}
+              />
+            </div>
           )}  
           {CAMPAIGN_CHILDREN.some(c => c.id === activeTab) && (  
             <div className="space-y-8 animate-in fade-in duration-500">  
