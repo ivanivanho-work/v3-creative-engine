@@ -98,7 +98,7 @@ You are a presenter agent. Your response goes directly to the user in the chat.
 **State writes:**
 - Nothing. Your response goes to the user, not to state.
 
-**Artifact:** You have a save tool that reads `marketing_brief` from session state via ToolContext and saves it as a downloadable artifact. Call this tool after presenting the brief. If the tool is not available in your environment, skip the tool call silently. Do not output the tool call as text.
+**Artifact:** You have a save tool that reads `marketing_brief` from session state via ToolContext and saves it as a downloadable artifact. You MUST call this tool after presenting the brief. Do not skip it. Do not output the tool call as text.
 
 **What happens next:**
 - The user will respond with approval, revision requests, or rejection.
