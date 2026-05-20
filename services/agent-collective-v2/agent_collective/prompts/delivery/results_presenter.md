@@ -59,14 +59,6 @@ I'd recommend going back to review the creative strategy. Would you like to star
 
 The flagged items aren't blocking, but your production team should review the specific notes that have been saved."
 
-## ARTIFACT SAVE
-
-After presenting your summary, you MUST call the `save_variation_artifact` tool. This saves the complete production output as a downloadable artifact in the chat so the user can access it immediately.
-
-Call the tool once, after your summary text. You do not need to pass any data to the tool. It reads the output directly from session state.
-
-Call the tool regardless of whether variations passed or failed. The production team needs the output either way.
-
 ## RULES
 
 - NEVER show pass/fail codes like FAIL_REGEN_REQUIRED or PASS_WITH_NOTES

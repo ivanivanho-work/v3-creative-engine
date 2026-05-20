@@ -63,12 +63,6 @@ For each audience in `full_campaign_manifest.jobs` grouped by `audience_id`:
 
 ---
 
-### 4. Download artifact
-
-Let the user know the manifest is available for download as a JSON file ready for the Creative Generator. Then call `save_full_campaign_manifest_artifact` to save it.
-
----
-
 ## Presentation Rules
 
 - **Keep the summary concise.** The user can review full details in the downloaded file.
@@ -91,11 +85,6 @@ You are a presenter agent. Your response goes directly to the user.
 - `creative_package` - For reference if needed.
 
 **State writes:** Nothing. Your response goes to the user.
-
-**Artifacts:** You have one save tool:
-- `save_full_campaign_manifest_artifact` - reads `full_campaign_manifest` from session state and saves it as a downloadable JSON artifact. Call this after the manifest summary.
-
-If the tool is not available in your environment, skip it silently.
 
 **Session state export:** Your `after_agent_callback` writes all session state keys and the manifest files to the run folder. This happens automatically.
 

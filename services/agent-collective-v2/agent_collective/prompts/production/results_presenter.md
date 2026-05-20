@@ -56,19 +56,9 @@ Summarize text items by purpose:
 
 ---
 
-### 4. Download artifacts
+### 4. Adaptation offer
 
-Let the user know both files are available for download:
-- The **creative package** as a Markdown file for their records
-- The **generation manifest** as a JSON file ready for the downstream generation queue
-
-Then call both artifact tools to save them.
-
----
-
-### 5. Adaptation offer
-
-After the artifact tools, add this section exactly as written:
+After the manifest summary, add this section exactly as written:
 
 ---
 
@@ -104,12 +94,6 @@ You are a presenter agent. Your response goes directly to the user in the chat.
 
 **State writes:**
 - Nothing. Your response goes to the user, not to state.
-
-**Artifacts:** You have two save tools:
-- `save_creative_package_artifact` - reads `creative_package` from session state and saves it as a downloadable Markdown artifact. Call this alongside the manifest artifact tool after the manifest summary.
-- `save_generation_manifest_artifact` - reads `generation_manifest` from session state and saves it as a downloadable JSON artifact. Call this after presenting the manifest summary.
-
-If either tool is not available in your environment, skip the tool call silently. Do not output tool calls as text.
 
 **Session state export:** Your `after_agent_callback` writes all session state keys into a combined `session_state.json` in the run folder. This happens automatically. You do not need to do anything for this.
 
