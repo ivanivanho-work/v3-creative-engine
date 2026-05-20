@@ -83,28 +83,6 @@ const PHASE_AFTER_PRESENTER = {
   "fc_results_presenter": 5,
 };
 
-// Download buttons to show for each presenter agent, keyed by author name.
-// Buttons are added to pendingDownloads when the author is first seen in the
-// SSE stream and rendered after the stream completes (once callbacks have run).
-// This replaces the old approach of detecting functionCall events, which was
-// fragile because ADK streaming drops function_call parts before executing them.
-const PRESENTER_DOWNLOADS = {
-  "brief_presenter": [
-    { href: "/api/brief", filename: "marketing_brief.md", label: "Download marketing brief" },
-  ],
-  "results_presenter": [
-    { href: "/api/creative-package", filename: "creative_package.md", label: "Download creative package" },
-    { href: "/api/manifest", filename: "generation_manifest.json", label: "Download generation manifest" },
-  ],
-  "adapt_results_presenter": [
-    { href: "/api/creative-package", filename: "creative_package.md", label: "Download creative package" },
-    { href: "/api/manifest", filename: "generation_manifest.json", label: "Download generation manifest" },
-  ],
-  "fc_results_presenter": [
-    { href: "/api/full-campaign-manifest", filename: "full_campaign_manifest.json", label: "Download full campaign manifest" },
-  ],
-};
-
 // Phase indicator labels shown while agents are working
 const PHASE_LABELS = {
   1: "Analyzing...",
@@ -415,10 +393,10 @@ async function sendWithStream(text, phaseIndicatorEl) {
   let buffer = "";
   let hasRendered = false;
 
-  // Download buttons are queued when a presenter author is first seen and
-  // rendered after the stream completes (once after_agent_callbacks have run).
+  // Collect artifact tool calls so we can add download buttons AFTER
+  // the stream completes (the "latest" files are written by
+  // after_agent_callback, which runs after the presenter finishes).
   const pendingDownloads = [];
-  const downloadedAuthors = new Set();
 
   while (true) {
     const { done, value } = await reader.read();
@@ -463,15 +441,6 @@ async function sendWithStream(text, phaseIndicatorEl) {
       // Track which presenters have produced output
       completedPresenters.add(author);
 
-      // Queue download buttons for this presenter the first time we see it.
-      // Buttons are rendered after the stream completes, once callbacks have run.
-      console.log("[download debug] presenter event:", author, "has downloads:", !!PRESENTER_DOWNLOADS[author]);
-      if (PRESENTER_DOWNLOADS[author] && !downloadedAuthors.has(author)) {
-        pendingDownloads.push(...PRESENTER_DOWNLOADS[author]);
-        downloadedAuthors.add(author);
-        console.log("[download debug] queued", pendingDownloads.length, "buttons for", author);
-      }
-
       const parts = event.content?.parts || [];
 
       // Render text parts
@@ -492,12 +461,58 @@ async function sendWithStream(text, phaseIndicatorEl) {
 
         await appendPipelineMessage(t);
       }
+
+      // Queue artifact tool calls (rendered after stream completes)
+      for (const part of parts) {
+        if (!part.functionCall) continue;
+        const fnName = part.functionCall.name || "";
+
+        if (fnName === "save_marketing_brief_artifact") {
+          pendingDownloads.push({
+            href: "/api/brief",
+            filename: "marketing_brief.md",
+            label: "Download marketing brief",
+          });
+        }
+        if (fnName === "save_creative_package_artifact") {
+          pendingDownloads.push({
+            href: "/api/creative-package",
+            filename: "creative_package.md",
+            label: "Download creative package",
+          });
+        }
+        if (fnName === "save_generation_manifest_artifact") {
+          pendingDownloads.push({
+            href: "/api/manifest",
+            filename: "generation_manifest.json",
+            label: "Download generation manifest",
+          });
+        }
+        if (fnName === "save_variation_artifact") {
+          pendingDownloads.push({
+            href: "/api/creative-package",
+            filename: "creative_package.md",
+            label: "Download creative package",
+          });
+          pendingDownloads.push({
+            href: "/api/manifest",
+            filename: "generation_manifest.json",
+            label: "Download generation manifest",
+          });
+        }
+        if (fnName === "save_full_campaign_manifest_artifact") {
+          pendingDownloads.push({
+            href: "/api/full-campaign-manifest",
+            filename: "full_campaign_manifest.json",
+            label: "Download full campaign manifest",
+          });
+        }
+      }
     }
   }
 
   // Stream is done -- after_agent_callbacks have run, files exist.
   // Now render the download buttons.
-  console.log("[download debug] stream done, pendingDownloads:", pendingDownloads.length, pendingDownloads.map(d => d.label));
   appendDownloadButtons(pendingDownloads);
 
   // If nothing renderable came through, show stalled warning
@@ -542,7 +557,6 @@ async function sendWithUpload(file, text, phaseIndicatorEl) {
   let buffer = "";
   let hasRendered = false;
   const pendingDownloads = [];
-  const downloadedAuthors = new Set();
 
   while (true) {
     const { done, value } = await reader.read();
@@ -575,11 +589,6 @@ async function sendWithUpload(file, text, phaseIndicatorEl) {
       if (!RENDER_AUTHORS.has(author)) continue;
       completedPresenters.add(author);
 
-      if (PRESENTER_DOWNLOADS[author] && !downloadedAuthors.has(author)) {
-        pendingDownloads.push(...PRESENTER_DOWNLOADS[author]);
-        downloadedAuthors.add(author);
-      }
-
       const parts = event.content?.parts || [];
 
       for (const part of parts) {
@@ -592,6 +601,27 @@ async function sendWithUpload(file, text, phaseIndicatorEl) {
           hasRendered = true;
         }
         await appendPipelineMessage(t);
+      }
+
+      for (const part of parts) {
+        if (!part.functionCall) continue;
+        const fnName = part.functionCall.name || "";
+        if (fnName === "save_marketing_brief_artifact") {
+          pendingDownloads.push({ href: "/api/brief", filename: "marketing_brief.md", label: "Download marketing brief" });
+        }
+        if (fnName === "save_creative_package_artifact") {
+          pendingDownloads.push({ href: "/api/creative-package", filename: "creative_package.md", label: "Download creative package" });
+        }
+        if (fnName === "save_generation_manifest_artifact") {
+          pendingDownloads.push({ href: "/api/manifest", filename: "generation_manifest.json", label: "Download generation manifest" });
+        }
+        if (fnName === "save_variation_artifact") {
+          pendingDownloads.push({ href: "/api/creative-package", filename: "creative_package.md", label: "Download creative package" });
+          pendingDownloads.push({ href: "/api/manifest", filename: "generation_manifest.json", label: "Download generation manifest" });
+        }
+        if (fnName === "save_full_campaign_manifest_artifact") {
+          pendingDownloads.push({ href: "/api/full-campaign-manifest", filename: "full_campaign_manifest.json", label: "Download full campaign manifest" });
+        }
       }
     }
   }
@@ -620,7 +650,6 @@ async function processEventsBlocking(events) {
   }
 
   const pendingDownloads = [];
-  const downloadedAuthors = new Set();
 
   for (const event of events) {
     const author = event.author || "";
@@ -629,11 +658,6 @@ async function processEventsBlocking(events) {
     // Track which presenters have produced output
     completedPresenters.add(author);
 
-    if (PRESENTER_DOWNLOADS[author] && !downloadedAuthors.has(author)) {
-      pendingDownloads.push(...PRESENTER_DOWNLOADS[author]);
-      downloadedAuthors.add(author);
-    }
-
     const parts = event.content?.parts || [];
 
     for (const part of parts) {
@@ -641,6 +665,50 @@ async function processEventsBlocking(events) {
         const text = part.text.trim();
         if (!text || isArtifactNoise(text)) continue;
         await appendPipelineMessage(text);
+      }
+
+      if (part.functionCall) {
+        const fnName = part.functionCall.name || "";
+        if (fnName === "save_marketing_brief_artifact") {
+          pendingDownloads.push({
+            href: "/api/brief",
+            filename: "marketing_brief.md",
+            label: "Download marketing brief",
+          });
+        }
+        if (fnName === "save_creative_package_artifact") {
+          pendingDownloads.push({
+            href: "/api/creative-package",
+            filename: "creative_package.md",
+            label: "Download creative package",
+          });
+        }
+        if (fnName === "save_generation_manifest_artifact") {
+          pendingDownloads.push({
+            href: "/api/manifest",
+            filename: "generation_manifest.json",
+            label: "Download generation manifest",
+          });
+        }
+        if (fnName === "save_variation_artifact") {
+          pendingDownloads.push({
+            href: "/api/creative-package",
+            filename: "creative_package.md",
+            label: "Download creative package",
+          });
+          pendingDownloads.push({
+            href: "/api/manifest",
+            filename: "generation_manifest.json",
+            label: "Download generation manifest",
+          });
+        }
+        if (fnName === "save_full_campaign_manifest_artifact") {
+          pendingDownloads.push({
+            href: "/api/full-campaign-manifest",
+            filename: "full_campaign_manifest.json",
+            label: "Download full campaign manifest",
+          });
+        }
       }
     }
   }

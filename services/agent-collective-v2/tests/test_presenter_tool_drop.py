@@ -1,10 +1,13 @@
 """
-Tests for the presenter-tool-drop fix.
+Tests for the presenter tool-ordering fix.
 
-Verifies that presenter agents have no artifact-saving tools (they caused ADK
-streaming to drop the function_call before executing it, producing no visible
-output in the frontend), and that the prompt files contain no tool call
-instructions that would confuse the LLM.
+Verifies that:
+1. Presenter agents have the correct artifact-saving tools assigned.
+2. Each presenter prompt contains an explicit tool call ordering instruction
+   that tells the LLM to generate ALL text first, THEN call the tool --
+   preventing Gemini from calling the tool before generating any text (which
+   caused ADK streaming to produce no visible output).
+3. The frontend uses functionCall-based download button detection.
 """
 
 import re
@@ -26,13 +29,12 @@ PRESENTER_AGENTS = [
     "fc_results_presenter",
 ]
 
-ARTIFACT_TOOLS = [
-    "save_marketing_brief_artifact",
-    "save_creative_package_artifact",
-    "save_generation_manifest_artifact",
-    "save_variation_artifact",
-    "save_full_campaign_manifest_artifact",
-]
+PRESENTER_TOOLS = {
+    "brief_presenter":        ["save_marketing_brief_artifact"],
+    "results_presenter":      ["save_creative_package_artifact", "save_generation_manifest_artifact"],
+    "adapt_results_presenter": ["save_variation_artifact"],
+    "fc_results_presenter":   ["save_full_campaign_manifest_artifact"],
+}
 
 PRESENTER_PROMPTS = {
     "brief_presenter":        PROMPTS_DIR / "brief" / "brief_presenter.md",
@@ -41,153 +43,140 @@ PRESENTER_PROMPTS = {
     "fc_results_presenter":   PROMPTS_DIR / "full_campaign" / "results_presenter.md",
 }
 
+APP_JS = Path(__file__).parent.parent / "demo_ui" / "static" / "app.js"
+
+
+def _agent_block(agent_name: str) -> str:
+    """Extract the LlmAgent(...) block for the named agent from agent.py."""
+    source = AGENT_PY.read_text()
+    pattern = rf'{re.escape(agent_name)}\s*=\s*LlmAgent\('
+    match = re.search(pattern, source)
+    assert match, f"Could not find definition for {agent_name} in agent.py"
+    return source[match.start():match.start() + 600]
+
+
 # ---------------------------------------------------------------------------
-# agent.py checks
+# agent.py checks -- presenters must have their artifact tools
 # ---------------------------------------------------------------------------
 
-class TestPresenterAgentsHaveNoTools:
-    """Presenter agents must not use artifact-saving tools."""
+class TestPresenterAgentsHaveTools:
+    """Each presenter agent must have its artifact-saving tool assigned."""
 
-    def _agent_block(self, agent_name: str) -> str:
-        """Extract the LlmAgent(...) block for the named agent from agent.py."""
-        source = AGENT_PY.read_text()
-        # Find the start of the agent definition
-        pattern = rf'{re.escape(agent_name)}\s*=\s*LlmAgent\('
-        match = re.search(pattern, source)
-        assert match, f"Could not find definition for {agent_name} in agent.py"
-        start = match.start()
-        # Grab enough text to cover the full constructor call (up to closing paren on its own line)
-        snippet = source[start:start + 600]
-        return snippet
-
-    @pytest.mark.parametrize("agent_name", PRESENTER_AGENTS)
-    def test_presenter_has_no_tools_kwarg(self, agent_name):
-        block = self._agent_block(agent_name)
-        assert "tools=" not in block, (
-            f"{agent_name} still has a tools= parameter. "
-            "Artifact tools must be removed from presenter agents to prevent "
-            "ADK streaming from dropping function_call parts and silencing output."
+    @pytest.mark.parametrize("agent_name,tools", PRESENTER_TOOLS.items())
+    def test_presenter_has_tools_kwarg(self, agent_name, tools):
+        block = _agent_block(agent_name)
+        assert "tools=" in block, (
+            f"{agent_name} is missing a tools= parameter. "
+            "Artifact tools must be assigned so the frontend can detect the "
+            "function_call event and show download buttons."
         )
 
-    @pytest.mark.parametrize("tool_name", ARTIFACT_TOOLS)
-    def test_artifact_tool_not_assigned_to_any_presenter(self, tool_name):
-        """Each artifact tool should not appear inside any presenter agent block."""
-        source = AGENT_PY.read_text()
-        for agent_name in PRESENTER_AGENTS:
-            pattern = rf'{re.escape(agent_name)}\s*=\s*LlmAgent\('
-            match = re.search(pattern, source)
-            if not match:
-                continue
-            block = source[match.start():match.start() + 600]
-            assert tool_name not in block, (
-                f"{tool_name} found inside {agent_name} definition. "
-                "Artifact tools must not be used by presenter agents."
+    @pytest.mark.parametrize("agent_name,tools", PRESENTER_TOOLS.items())
+    def test_presenter_has_correct_tools(self, agent_name, tools):
+        block = _agent_block(agent_name)
+        for tool in tools:
+            assert tool in block, (
+                f"{tool} not found in {agent_name} definition. "
+                "Each presenter must have its designated artifact-saving tool."
             )
 
     def test_root_agent_tools_intact(self):
-        """Root agent routing tools must not have been accidentally removed."""
         source = AGENT_PY.read_text()
         assert "write_selected_concept" in source
         assert "write_campaign_constraints" in source
-        # Confirm they're still wired into root_agent
         assert "tools=[write_selected_concept, write_campaign_constraints]" in source
 
 
 # ---------------------------------------------------------------------------
-# Prompt file checks
+# Prompt file checks -- each must have a tool call ordering instruction
 # ---------------------------------------------------------------------------
 
-class TestPresenterPromptsHaveNoToolInstructions:
-    """Prompt files must not instruct the LLM to call any artifact tool."""
+class TestPresenterPromptsHaveOrderingInstruction:
+    """Prompt files must instruct the LLM to generate text BEFORE calling the tool."""
+
+    # Phrases that indicate the ordering instruction is present
+    ORDERING_PHRASES = [
+        "write your complete",
+        "only after you have finished",
+        "never call the tool before",
+        "never call either tool before",
+        "tool call ordering",
+    ]
 
     @pytest.mark.parametrize("agent_name,prompt_path", PRESENTER_PROMPTS.items())
-    def test_prompt_contains_no_tool_function_names(self, agent_name, prompt_path):
-        content = prompt_path.read_text()
-        for tool_name in ARTIFACT_TOOLS:
-            assert tool_name not in content, (
-                f"{prompt_path.name} still references `{tool_name}`. "
-                "Remove all tool call instructions from presenter prompts."
-            )
-
-    @pytest.mark.parametrize("agent_name,prompt_path", PRESENTER_PROMPTS.items())
-    def test_prompt_contains_no_call_tool_instruction(self, agent_name, prompt_path):
+    def test_prompt_has_ordering_instruction(self, agent_name, prompt_path):
         content = prompt_path.read_text().lower()
-        forbidden_phrases = [
-            "call the tool",
-            "call both artifact",
-            "call this tool",
-            "you must call",
-            "artifact tool",
-        ]
-        for phrase in forbidden_phrases:
-            assert phrase not in content, (
-                f"{prompt_path.name} still contains tool call instruction: '{phrase}'. "
-                "Presenter prompts must not instruct the LLM to call any tool."
-            )
+        found = any(phrase in content for phrase in self.ORDERING_PHRASES)
+        assert found, (
+            f"{prompt_path.name} is missing a tool call ordering instruction. "
+            "Add an explicit instruction to generate ALL text first, then call "
+            "the artifact tool. This prevents Gemini from calling the tool "
+            "before generating any text (which silences the streaming output)."
+        )
+
+    @pytest.mark.parametrize("agent_name,prompt_path", PRESENTER_PROMPTS.items())
+    def test_prompt_has_never_call_before_text_instruction(self, agent_name, prompt_path):
+        content = prompt_path.read_text().lower()
+        # At minimum the prompt must say something about calling the tool AFTER text
+        has_after = "after" in content and "text" in content
+        has_never_before = "never call" in content
+        assert has_after or has_never_before, (
+            f"{prompt_path.name} does not clearly instruct the LLM to call "
+            "the tool after generating text. The ordering instruction must "
+            "explicitly state that the tool call comes after the response."
+        )
 
 
 # ---------------------------------------------------------------------------
-# Frontend PRESENTER_DOWNLOADS consistency checks
+# Frontend functionCall detection checks
 # ---------------------------------------------------------------------------
 
-APP_JS = Path(__file__).parent.parent / "demo_ui" / "static" / "app.js"
+class TestFrontendFunctionCallDetection:
+    """The frontend must use functionCall-based download button detection."""
 
-class TestFrontendPresenterDownloads:
-    """The PRESENTER_DOWNLOADS map in app.js must cover all presenter agents."""
-
-    def _extract_presenter_downloads_keys(self) -> set:
+    def test_function_call_detection_present(self):
         content = APP_JS.read_text()
-        match = re.search(
-            r'const PRESENTER_DOWNLOADS\s*=\s*\{(.+?)\};',
-            content,
-            re.DOTALL,
-        )
-        assert match, "PRESENTER_DOWNLOADS constant not found in app.js"
-        block = match.group(1)
-        # Extract quoted keys
-        return set(re.findall(r'"([^"]+)":\s*\[', block))
-
-    def test_presenter_downloads_exists(self):
-        content = APP_JS.read_text()
-        assert "PRESENTER_DOWNLOADS" in content, (
-            "PRESENTER_DOWNLOADS map is missing from app.js"
+        assert "part.functionCall" in content, (
+            "functionCall-based download detection is missing from app.js. "
+            "The frontend needs part.functionCall checks to detect when the "
+            "artifact tool was called and show download buttons."
         )
 
-    def test_brief_presenter_has_download_entry(self):
-        keys = self._extract_presenter_downloads_keys()
-        assert "brief_presenter" in keys, (
-            "brief_presenter missing from PRESENTER_DOWNLOADS in app.js"
+    def test_save_marketing_brief_artifact_detected(self):
+        content = APP_JS.read_text()
+        assert "save_marketing_brief_artifact" in content, (
+            "save_marketing_brief_artifact not detected in app.js. "
+            "The frontend must detect this function call to show the brief download button."
         )
 
-    def test_results_presenter_has_download_entry(self):
-        keys = self._extract_presenter_downloads_keys()
-        assert "results_presenter" in keys
-
-    def test_adapt_results_presenter_has_download_entry(self):
-        keys = self._extract_presenter_downloads_keys()
-        assert "adapt_results_presenter" in keys
-
-    def test_fc_results_presenter_has_download_entry(self):
-        keys = self._extract_presenter_downloads_keys()
-        assert "fc_results_presenter" in keys
-
-    def test_no_old_function_call_detection_in_streaming_paths(self):
-        """The old functionCall-based download detection must be fully removed."""
+    def test_save_creative_package_artifact_detected(self):
         content = APP_JS.read_text()
-        # These specific patterns were the old detection mechanism
-        assert "part.functionCall" not in content, (
-            "Old functionCall detection still present in app.js. "
-            "Should be replaced by PRESENTER_DOWNLOADS author-based detection."
-        )
-        assert "fnName === \"save_marketing_brief_artifact\"" not in content
-        assert "fnName === \"save_variation_artifact\"" not in content
+        assert "save_creative_package_artifact" in content
 
-    def test_downloaded_authors_set_present_in_all_streaming_paths(self):
-        """downloadedAuthors must appear in all three streaming paths."""
+    def test_save_generation_manifest_artifact_detected(self):
         content = APP_JS.read_text()
-        occurrences = content.count("downloadedAuthors")
-        # Expect at least 6: 2 per path (declaration + usage) across 3 paths
+        assert "save_generation_manifest_artifact" in content
+
+    def test_save_variation_artifact_detected(self):
+        content = APP_JS.read_text()
+        assert "save_variation_artifact" in content
+
+    def test_save_full_campaign_manifest_artifact_detected(self):
+        content = APP_JS.read_text()
+        assert "save_full_campaign_manifest_artifact" in content
+
+    def test_pending_downloads_present_in_streaming_path(self):
+        content = APP_JS.read_text()
+        occurrences = content.count("pendingDownloads")
         assert occurrences >= 6, (
-            f"downloadedAuthors only appears {occurrences} times in app.js. "
-            "Expected at least 6 (declaration + usage in each of 3 streaming paths)."
+            f"pendingDownloads only appears {occurrences} times in app.js. "
+            "Expected at least 6 (declaration + usages across 3 streaming paths)."
+        )
+
+    def test_no_presenter_downloads_map(self):
+        """PRESENTER_DOWNLOADS was the architecture-change approach; it should not be present."""
+        content = APP_JS.read_text()
+        assert "PRESENTER_DOWNLOADS" not in content, (
+            "PRESENTER_DOWNLOADS map found in app.js. This was the author-based "
+            "detection approach. The current approach uses functionCall detection."
         )

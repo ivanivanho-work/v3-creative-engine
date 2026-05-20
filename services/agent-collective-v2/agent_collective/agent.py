@@ -2294,6 +2294,7 @@ brief_presenter = LlmAgent(
     instruction=_load_prompt("brief/brief_presenter.md"),
     generate_content_config=TEXT_MODE_NO_THINK_CONFIG,
     include_contents="none",
+    tools=[save_marketing_brief_artifact],
     before_agent_callback=_make_timing_before_callback("brief_presenter"),
     after_agent_callback=_make_latest_brief_markdown_callback(),
 )
@@ -2392,6 +2393,7 @@ results_presenter = LlmAgent(
     instruction=_load_prompt("production/results_presenter.md"),
     generate_content_config=TEXT_MODE_NO_THINK_CONFIG,
     include_contents="none",
+    tools=[save_creative_package_artifact, save_generation_manifest_artifact],
     before_agent_callback=_make_timing_before_callback("results_presenter"),
     after_agent_callback=_session_state_export_callback,
 )
@@ -2659,6 +2661,7 @@ adapt_results_presenter = LlmAgent(
     instruction=_load_prompt("delivery/results_presenter.md"),
     generate_content_config=TEXT_MODE_NO_THINK_CONFIG,
     include_contents="none",
+    tools=[save_variation_artifact],
     before_agent_callback=_make_timing_before_callback("adapt_results_presenter"),
     after_agent_callback=_adaptation_session_state_export_callback,
 )
@@ -3327,6 +3330,7 @@ fc_results_presenter = LlmAgent(
     instruction=_load_prompt("full_campaign/results_presenter.md"),
     generate_content_config=TEXT_MODE_NO_THINK_CONFIG,
     include_contents="none",
+    tools=[save_full_campaign_manifest_artifact],
     before_agent_callback=_fc_build_manifest_before_callback,
     after_agent_callback=_fc_session_state_export_callback,
 )
