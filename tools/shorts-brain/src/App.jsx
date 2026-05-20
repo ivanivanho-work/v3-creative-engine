@@ -1046,7 +1046,7 @@ const LandingPage = ({ uploadedFiles, handleFileUpload, startAnalysis, isAnalyzi
 // --- MAIN APPLICATION COMPONENT ---
 
 const App = ({ userEmail }) => {
-  const [isAnalyzed, setIsAnalyzed] = useState(false);  
+  const [showIngestion, setShowIngestion] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);  
   const [activeTab, setActiveTab] = useState('OKR');  
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);  
@@ -1165,10 +1165,9 @@ const App = ({ userEmail }) => {
             setRegionalData(rData);  
             setCampaignHubData(cHub);  
             if (d.reportingDate) setLatestGlobalDate(d.reportingDate);  
-            if (d.quarterStart) setQuarterStart(d.quarterStart);  
-            setIsAnalyzed(true);  
-            setActiveTab('OKR'); // FORCED SNAPSHOT LANDING  
-            initialLoadDone.current = true;  
+            if (d.quarterStart) setQuarterStart(d.quarterStart);
+            setActiveTab('OKR'); // FORCED SNAPSHOT LANDING
+            initialLoadDone.current = true;
           }  
         } else if (d.chunkCount !== undefined && !d.batchId) {  
           let fullList = [];  
@@ -1185,9 +1184,8 @@ const App = ({ userEmail }) => {
             setCampaignHubData(cHub);  
             if (d.reportingDate) setLatestGlobalDate(d.reportingDate);  
             if (d.quarterStart) setQuarterStart(d.quarterStart);  
-            setIsAnalyzed(true);  
-            setActiveTab('OKR');  
-            initialLoadDone.current = true;  
+            setActiveTab('OKR');
+            initialLoadDone.current = true;
           }  
         } else if (d.masterList) {  
           const { gData, rData, cHub } = rebuildState(d.masterList);  
@@ -1196,9 +1194,8 @@ const App = ({ userEmail }) => {
           setCampaignHubData(cHub);  
           if (d.reportingDate) setLatestGlobalDate(d.reportingDate);  
           if (d.quarterStart) setQuarterStart(d.quarterStart);  
-          setIsAnalyzed(true);  
-          setActiveTab('OKR');  
-          initialLoadDone.current = true;  
+          setActiveTab('OKR');
+          initialLoadDone.current = true;
         }  
       }  
     });  
@@ -1564,9 +1561,9 @@ const App = ({ userEmail }) => {
 
       const { gData, rData, cHub } = rebuildState(masterList);  
       setGlobalData(gData); setRegionalData(rData); setCampaignHubData(cHub);  
-      initialLoadDone.current = true;  
-      setIsAnalyzed(true);  
+      initialLoadDone.current = true;
       setActiveTab('OKR'); // EXPLICIT ROUTING SNAP FOR UPLOADER
+      setShowIngestion(false);
 
       // BUG FIX 1: ATOMIC WRITE SEQUENCE  
       const batchId = Date.now().toString();  
@@ -1602,7 +1599,7 @@ const App = ({ userEmail }) => {
     return { ...prev, [s]: upd };  
   });
 
-  if (!isAnalyzed) return <LandingPage uploadedFiles={uploadedFiles} handleFileUpload={handleFileUpload} startAnalysis={startAnalysis} isAnalyzing={isAnalyzing} />;
+  if (showIngestion) return <LandingPage uploadedFiles={uploadedFiles} handleFileUpload={handleFileUpload} startAnalysis={startAnalysis} isAnalyzing={isAnalyzing} />;
 
   return (  
     <div className="flex h-screen bg-black text-[#e0e0e0] overflow-hidden font-sans">  
@@ -1629,7 +1626,7 @@ const App = ({ userEmail }) => {
                     if (!isDataIngestionAdmin) { setAccessDenied(true); return; }
                     setAccessDenied(false);
                     initialLoadDone.current = true;
-                    setIsAnalyzed(false);
+                    setShowIngestion(true);
                   } else {
                     setAccessDenied(false);
                     setActiveTab(item.id);
@@ -1695,9 +1692,9 @@ const App = ({ userEmail }) => {
                         setCampaignHubData(snap.campaignHubData || {});  
                       }  
                       setLatestGlobalDate(snap.reportingDate);  
-                      if (snap.quarterStart) setQuarterStart(snap.quarterStart);  
-                      setIsAnalyzed(true);  
-                      setActiveTab('OKR'); // EXPLICIT ROUTING SNAP  
+                      if (snap.quarterStart) setQuarterStart(snap.quarterStart);
+                      setActiveTab('OKR'); // EXPLICIT ROUTING SNAP
+                      setShowIngestion(false);
                     }} className="flex-1 text-[10px] font-bold text-[#666] group-hover:text-white">{String(snap.weekId || 'Snapshot')}</button>  
                     <button type="button" onClick={() => deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'snapshots', snap.id))} className="opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 className="w-3 h-3 text-red-500" /></button>  
                   </div>  
