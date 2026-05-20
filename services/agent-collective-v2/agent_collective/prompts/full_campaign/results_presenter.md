@@ -111,3 +111,6 @@ The values below are injected from session state. Use them as your primary input
 
 ### fc_consistency_result
 {fc_consistency_result}
+
+### full_campaign_manifest
+{full_campaign_manifest}
