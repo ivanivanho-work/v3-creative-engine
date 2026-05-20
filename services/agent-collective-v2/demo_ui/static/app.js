@@ -465,9 +465,11 @@ async function sendWithStream(text, phaseIndicatorEl) {
 
       // Queue download buttons for this presenter the first time we see it.
       // Buttons are rendered after the stream completes, once callbacks have run.
+      console.log("[download debug] presenter event:", author, "has downloads:", !!PRESENTER_DOWNLOADS[author]);
       if (PRESENTER_DOWNLOADS[author] && !downloadedAuthors.has(author)) {
         pendingDownloads.push(...PRESENTER_DOWNLOADS[author]);
         downloadedAuthors.add(author);
+        console.log("[download debug] queued", pendingDownloads.length, "buttons for", author);
       }
 
       const parts = event.content?.parts || [];
@@ -495,6 +497,7 @@ async function sendWithStream(text, phaseIndicatorEl) {
 
   // Stream is done -- after_agent_callbacks have run, files exist.
   // Now render the download buttons.
+  console.log("[download debug] stream done, pendingDownloads:", pendingDownloads.length, pendingDownloads.map(d => d.label));
   appendDownloadButtons(pendingDownloads);
 
   // If nothing renderable came through, show stalled warning

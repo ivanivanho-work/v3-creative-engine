@@ -444,7 +444,16 @@ def _parse_state_value(value):
             cleaned = re.sub(r"\n?```$", "", cleaned).strip()
         try:
             return json.loads(cleaned)
-        except (json.JSONDecodeError, ValueError):
+        except json.JSONDecodeError:
+            # Fallback: gemini-3.5 sometimes appends extra content after valid
+            # JSON (e.g. a stray closing brace). raw_decode stops at the first
+            # complete JSON value and ignores the trailing content.
+            try:
+                parsed, _ = json.JSONDecoder().raw_decode(cleaned)
+                return parsed
+            except (json.JSONDecodeError, ValueError):
+                return value
+        except ValueError:
             return value
     return value
 
