@@ -101,6 +101,10 @@ class TestPresenterPromptsHaveOrderingInstruction:
         "never call the tool before",
         "never call either tool before",
         "tool call ordering",
+        "only call the tool after",
+        "only call the tools after",
+        "write sections",
+        "in full before calling",
     ]
 
     @pytest.mark.parametrize("agent_name,prompt_path", PRESENTER_PROMPTS.items())
