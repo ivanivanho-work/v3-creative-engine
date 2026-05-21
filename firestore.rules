@@ -94,6 +94,13 @@ service cloud.firestore {
       allow write: if authed();
     }
 
+    // Auto-restore store: the analyzed dataset (shortsbrain_data/latest +
+    // chunk_* docs) the app reloads on open so work survives exit/re-entry.
+    match /shortsbrain_data/{docId} {
+      allow read: if authed();
+      allow write: if authed();
+    }
+
     match /artifacts/{appId}/public/data/{collection}/{document=**} {
       allow read: if authed();
       allow write: if authed();
