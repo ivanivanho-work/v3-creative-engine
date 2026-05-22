@@ -32,8 +32,8 @@ from google.genai import types
 
 # Both set to Flash for cost-effective testing (~$0.15/run).
 # Change MODEL_PRO to "gemini-2.5-pro" for production quality.
-MODEL_FLASH = "gemini-2.5-flash"
-MODEL_PRO = "gemini-2.5-flash"
+MODEL_FLASH = "gemini-3.5-flash"
+MODEL_PRO = "gemini-3.5-flash"
 
 # Paths (relative to this file)
 BASE_DIR = Path(__file__).parent
