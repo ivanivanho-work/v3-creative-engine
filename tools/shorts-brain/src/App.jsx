@@ -34,14 +34,7 @@ const AO_CATEGORIES = ['SSC', 'Shelf', 'UTS', 'MVR', 'UTS SFV', 'JP Proactive Co
 
 const DATA_INGESTION_ADMINS = ['kanishak@google.com', 'danilpalma@google.com', 'ivanho.wz@gmail.com', 'ivho@google.com'];
 
-const OKR_TARGETS = {
-  'APAC': 0.4, 'INDIA': 0.16, 'INDONESIA': 0.29, 'JAPAN': 1.2, 'SOUTH KOREA': 1.08, 'AUNZ': 1.56,
-  'IN': 0.16, 'ID': 0.29, 'JP': 1.2, 'KR': 1.08
-};
-
-const CAMPAIGN_TYPES = ['Effects', 'GenAI', 'Topical Moments', 'BAU', 'Others'];
-
-const GENDERS_KEYS = ['female', 'male', 'total'];  
+const GENDERS_KEYS = ['female', 'male', 'total'];
 const GENDERS_DISPLAY_MAP = { 'female': 'FEMALE', 'male': 'MALE', 'total': 'GenPop' };  
 const AGE_BUCKETS = ['18-24', '25-34', '18-34', '35+', 'total'];
 
@@ -53,8 +46,10 @@ const AGE_BUCKETS_DISPLAY_MAP = {
   'total': 'GenPop'  
 };
 
-const getOkrTarget = (startDate) => {  
-  return 0.4;  
+const getOkrTarget = (startDate) => {
+  if (startDate && startDate >= '2026-10-01') return 1.0;
+  if (startDate && startDate >= '2026-07-01') return 0.65;
+  return 0.4;
 };
 
 const NAV_ITEMS = [  
@@ -66,8 +61,9 @@ const NAV_ITEMS = [
 
 const CAMPAIGN_CHILDREN = [  
   { id: 'AlwaysOn', label: 'Always-On', icon: Zap },  
-  { id: 'ScaledCreation', label: 'Scaled Creation', icon: Sparkles },  
-  { id: 'Trends', label: 'Trends', icon: TrendingUp },  
+  { id: 'ScaledCreation', label: 'Scaled Creation', icon: Sparkles },
+  { id: 'Effects', label: 'Effects', icon: Lightbulb },
+  { id: 'Trends', label: 'Trends', icon: TrendingUp },
   { id: 'CultMo', label: 'CultMo', icon: ComponentIcon },  
   { id: 'ArtMo', label: 'ArtMo', icon: Palette },  
   { id: 'GenAI Hub', label: 'GenAI Hub', icon: Wand2 }  
@@ -93,16 +89,7 @@ const normalizeCampaignKey = (s) => {
     .trim();
 };
 
-const getCampaignType = (campaign) => {
-  const n = ((campaign.country || '') + ' ' + (campaign.meta?.tab || '') + ' ' + (campaign.meta?.subTab || '')).toLowerCase();
-  if (n.includes('effect')) return 'Effects';
-  if (n.includes('genai') || n.includes('gen ai')) return 'GenAI';
-  if (n.includes('topical') || n.includes('cultmo') || n.includes('artmo')) return 'Topical Moments';
-  if (n.includes('bau') || n.includes('alwayson') || n.includes('always-on') || n.includes('shelf') || n.includes('ssc') || n.includes('uts') || n.includes('mvr') || n.includes('scaled')) return 'BAU';
-  return 'Others';
-};
-
-const formatCompactNumber = (val) => {  
+const formatCompactNumber = (val) => {
   if (val === 0) return '0.00';  
   if (val === 'NA' || val === null || val === undefined || isNaN(val)) return '-';  
   return new Intl.NumberFormat('en-US', {  
@@ -375,10 +362,12 @@ const parseCSVData = (text, existingAcc = {}, metaMap = {}, searchPriority = ['C
         } else if (targeting) {  
           const ageAllowed = targeting.ages.length === 0 || targeting.ages.includes(age);  
           const genderAllowed = targeting.genders.length === 0 || targeting.genders.includes(gender);  
-          isTargeted = ageAllowed && genderAllowed;  
+          isTargeted = ageAllowed && genderAllowed;
         }
+        // Impressions/CTR are volume metrics — not gated by demographic targeting.
+        if (m === 'Impressions' || m === 'CTR') isTargeted = true;
 
-        const isGenAIMetric = m === 'GenAI DAU-SCT';  
+        const isGenAIMetric = m === 'GenAI DAU-SCT';
         const isGenAICampaign = (acc[compositeKey].meta.tab || '').toLowerCase() === 'genai hub';
 
         const isValid = isTargeted && (!isGenAIMetric || isGenAICampaign || isAnchorRow);  
@@ -674,11 +663,11 @@ const OKRAndRecsView = ({ globalData, regionalData, latestDate, quarterStart }) 
       const record = globalData.find(d => eq(d.country, mName) || eq(d.country, MARKET_KEYS[mName]));
       const actual = record?.metrics?.['DAU-SCT']?.total?.total?.v;
       const safeActual = (actual === 'NA' || isNaN(actual) || actual === undefined) ? 0 : actual;
-      const target = OKR_TARGETS[mName.toUpperCase()] || 0.4;
+      const target = getOkrTarget(quarterStart);
       const pi = target > 0 ? (safeActual / target) * 100 : 0;
       return { market: mName.toUpperCase(), actual: safeActual, target, perfIndex: pi, isOffline: !record || actual === 'NA' };
     });
-  }, [globalData]);
+  }, [globalData, quarterStart]);
 
   const recommendationRows = useMemo(() => {  
     const tableData = [];  
@@ -687,7 +676,10 @@ const OKRAndRecsView = ({ globalData, regionalData, latestDate, quarterStart }) 
     MARKET_SEGMENTS.forEach(market => {  
       const allCampsInMarket = regionalData[market] || [];  
       allCampsInMarket.forEach((camp, ci) => {  
-        if (isCampaignEnded(camp.optimisationEndDate, camp.campaignEndDate)) return;  
+        if (isCampaignEnded(camp.optimisationEndDate, camp.campaignEndDate)) return;
+        // Campaign Hub module rows are evaluated in their own tabs, not in pause/scale recs.
+        const campTab = camp.meta?.tab ? cleanStr(camp.meta.tab) : null;
+        if (campTab && CAMPAIGN_CHILDREN.some(child => eq(child.id, campTab) || eq(child.label, campTab))) return;
         const metrics = camp.metrics?.['DAU-SCT'] || {};
 
         if (metrics.total?.total?.isPaused) return;
@@ -1056,16 +1048,15 @@ const App = ({ userEmail }) => {
   const [latestGlobalDate, setLatestGlobalDate] = useState(null);  
   const [quarterStart, setQuarterStart] = useState("2026-02-01");  
   const [user, setUser] = useState(null);
-  const [campaignTypeFilter, setCampaignTypeFilter] = useState('');
   const [accessDenied, setAccessDenied] = useState(false);
 
   const isDataIngestionAdmin = DATA_INGESTION_ADMINS.includes((userEmail || '').toLowerCase());
 
   const initialLoadDone = useRef(false);
 
-  const [tabMarketFilter, setTabMarketFilter] = useState({ 'AlwaysOn': 'India', 'ScaledCreation': 'India', 'Trends': 'India', 'CultMo': 'India', 'ArtMo': 'India', 'GenAI Hub': 'India' });  
-  const [subTabFilter, setSubTabFilter] = useState({ 'AlwaysOn': 'SSC', 'ScaledCreation': '', 'Trends': '', 'CultMo': '', 'ArtMo': '', 'GenAI Hub': '' });  
-  const [subSubTabFilter, setSubSubTabFilter] = useState({ 'AlwaysOn': '', 'ScaledCreation': '', 'Trends': '', 'CultMo': '', 'ArtMo': '', 'GenAI Hub': '' });
+  const [tabMarketFilter, setTabMarketFilter] = useState({ 'AlwaysOn': 'India', 'ScaledCreation': 'India', 'Effects': 'India', 'Trends': 'India', 'CultMo': 'India', 'ArtMo': 'India', 'GenAI Hub': 'India' });
+  const [subTabFilter, setSubTabFilter] = useState({ 'AlwaysOn': 'SSC', 'ScaledCreation': '', 'Effects': '', 'Trends': '', 'CultMo': '', 'ArtMo': '', 'GenAI Hub': '' });
+  const [subSubTabFilter, setSubSubTabFilter] = useState({ 'AlwaysOn': '', 'ScaledCreation': '', 'Effects': '', 'Trends': '', 'CultMo': '', 'ArtMo': '', 'GenAI Hub': '' });
 
   const [globalData, setGlobalData] = useState([]);  
   const [regionalData, setRegionalData] = useState({});  
@@ -1422,7 +1413,12 @@ const App = ({ userEmail }) => {
           }  
         }
 
-        return { sgd, mh, ao };  
+        let jpProactive = {};
+        if (s.jpProactive) {
+          jpProactive = parseCSVData(await readFile(s.jpProactive), {}, metaLookup, undefined, isAb, 'Japan', false, true);
+        }
+
+        return { sgd, mh, ao, jpProactive };
       };
 
       const pct = await process('pct', false), abs = await process('abs', true);
@@ -1727,7 +1723,6 @@ const App = ({ userEmail }) => {
               {activeTab === 'Market Hub' && (
                 <div className="flex flex-wrap items-center gap-4">
                   <div className="flex items-center gap-4 p-4 bg-[#111] rounded-xl border border-[#2a2a2a] w-fit shadow-lg"><MapPin className="w-6 h-6 text-red-600" /><select value={activeMarketSubTab} onChange={e => setActiveMarketSubTab(e.target.value)} className="bg-transparent text-white font-bold uppercase outline-none cursor-pointer pr-8">{MARKET_SEGMENTS.map(m => <option key={m} value={m} className="bg-neutral-900">{m}</option>)}</select></div>
-                  <div className="flex items-center gap-4 p-4 bg-[#111] rounded-xl border border-[#2a2a2a] w-fit shadow-lg"><Filter className="w-6 h-6 text-amber-500" /><select value={campaignTypeFilter} onChange={e => setCampaignTypeFilter(e.target.value)} className="bg-transparent text-white font-bold uppercase outline-none cursor-pointer pr-8"><option value="" className="bg-neutral-900">ALL TYPES</option>{CAMPAIGN_TYPES.map(t => <option key={t} value={t} className="bg-neutral-900">{t}</option>)}</select></div>
                 </div>
               )}
               <MasterTableView
@@ -1736,8 +1731,7 @@ const App = ({ userEmail }) => {
                   const campaigns = rawCampaigns.filter(c =>
                     c.country &&
                     c.country.toUpperCase() !== 'UNKNOWN' &&
-                    (eq(c.market, activeMarketSubTab) || eq(c.market, MARKET_KEYS[activeMarketSubTab])) &&
-                    (!campaignTypeFilter || getCampaignType(c) === campaignTypeFilter)
+                    (eq(c.market, activeMarketSubTab) || eq(c.market, MARKET_KEYS[activeMarketSubTab]))
                   );
                   const globalRef = globalData.find(d => eq(d.country, activeMarketSubTab) || eq(d.country, MARKET_KEYS[activeMarketSubTab]));
                   return globalRef ? [{ ...globalRef, isAnchor: true }, ...campaigns] : campaigns;
