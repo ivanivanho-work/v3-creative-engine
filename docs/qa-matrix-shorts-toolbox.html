@@ -1,0 +1,2363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Shorts Toolbox - QA Reference Document</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #22263a;
+      --border: #2e3450;
+      --accent: #e53935;
+      --accent2: #ff6b6b;
+      --text: #e8eaf6;
+      --muted: #8892b0;
+      --green: #4caf50;
+      --amber: #ffc107;
+      --red: #f44336;
+      --blue: #42a5f5;
+      --purple: #ce93d8;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: 14px;
+      line-height: 1.65;
+    }
+
+    /* ---- HEADER ---- */
+    header {
+      background: var(--surface);
+      border-bottom: 2px solid var(--accent);
+      padding: 18px 32px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    header .logo {
+      width: 36px; height: 36px;
+      background: var(--accent);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; font-weight: 900; color: #fff;
+      flex-shrink: 0;
+    }
+    header h1 { font-size: 18px; font-weight: 700; color: var(--text); }
+    header p { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .badge {
+      margin-left: auto;
+      background: rgba(229,57,53,0.15);
+      border: 1px solid var(--accent);
+      color: var(--accent2);
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    /* ---- TAB NAV ---- */
+    .tab-nav {
+      display: flex;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 32px;
+      overflow-x: auto;
+      gap: 0;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .tab-btn {
+      background: none;
+      border: none;
+      border-bottom: 3px solid transparent;
+      color: var(--muted);
+      padding: 14px 22px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      white-space: nowrap;
+      transition: color 0.2s, border-color 0.2s;
+      letter-spacing: 0.3px;
+    }
+    .tab-btn:hover { color: var(--text); }
+    .tab-btn.active {
+      color: var(--text);
+      border-bottom-color: var(--accent);
+    }
+    .tab-btn .dot {
+      display: inline-block;
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      margin-right: 7px;
+      position: relative;
+      top: -1px;
+    }
+
+    /* ---- CONTENT ---- */
+    .tab-content { display: none; padding: 32px; max-width: 1100px; margin: 0 auto; }
+    .tab-content.active { display: block; }
+
+    /* ---- COMPONENTS ---- */
+    h2 {
+      font-size: 22px; font-weight: 800;
+      color: var(--text);
+      margin-bottom: 6px;
+    }
+    h2 .sub { font-size: 13px; font-weight: 400; color: var(--muted); margin-left: 10px; }
+
+    h3 {
+      font-size: 15px; font-weight: 700;
+      color: var(--text);
+      margin: 28px 0 10px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--border);
+    }
+    h4 {
+      font-size: 13px; font-weight: 700;
+      color: var(--accent2);
+      margin: 18px 0 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+    }
+
+    p { color: var(--muted); margin-bottom: 10px; }
+    p strong { color: var(--text); }
+
+    ul, ol { padding-left: 20px; color: var(--muted); margin-bottom: 12px; }
+    li { margin-bottom: 5px; }
+    li strong { color: var(--text); }
+
+    /* Cards row */
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin: 16px 0; }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+    }
+    .card .card-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.7px; margin-bottom: 4px; }
+    .card .card-value { font-size: 18px; font-weight: 800; color: var(--text); }
+    .card .card-note { font-size: 11px; color: var(--muted); margin-top: 4px; }
+    .card.accent-green { border-color: rgba(76,175,80,0.4); }
+    .card.accent-amber { border-color: rgba(255,193,7,0.4); }
+    .card.accent-red { border-color: rgba(244,67,54,0.4); }
+    .card.accent-blue { border-color: rgba(66,165,245,0.4); }
+
+    /* Flow diagram */
+    .flow {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px 24px;
+      margin: 14px 0;
+    }
+    .flow-step {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      margin-bottom: 12px;
+    }
+    .flow-step:last-child { margin-bottom: 0; }
+    .step-num {
+      width: 26px; height: 26px;
+      background: var(--accent);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 800; color: #fff;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+    .step-body strong { color: var(--text); display: block; margin-bottom: 2px; font-size: 13px; }
+    .step-body span { color: var(--muted); font-size: 12px; }
+
+    /* Arrow connector */
+    .flow-arrow { text-align: center; color: var(--border); font-size: 18px; margin: -4px 0; padding-left: 13px; }
+
+    /* Code / pre blocks */
+    pre, code {
+      font-family: 'Cascadia Code', 'Fira Code', monospace;
+      font-size: 12px;
+    }
+    pre {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      overflow-x: auto;
+      color: var(--text);
+      margin: 10px 0;
+    }
+    code {
+      background: var(--surface2);
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: var(--accent2);
+    }
+
+    /* Tables */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 14px 0;
+      font-size: 12.5px;
+    }
+    th {
+      background: var(--surface2);
+      color: var(--muted);
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      font-size: 11px;
+      padding: 10px 14px;
+      text-align: left;
+      border-bottom: 2px solid var(--border);
+    }
+    td {
+      padding: 9px 14px;
+      border-bottom: 1px solid var(--border);
+      color: var(--muted);
+    }
+    td strong { color: var(--text); }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(255,255,255,0.02); }
+
+    /* Quirk / callout blocks */
+    .callout {
+      border-radius: 8px;
+      padding: 14px 18px;
+      margin: 12px 0;
+      border-left: 4px solid;
+    }
+    .callout.warn { background: rgba(255,193,7,0.08); border-color: var(--amber); }
+    .callout.info { background: rgba(66,165,245,0.08); border-color: var(--blue); }
+    .callout.danger { background: rgba(244,67,54,0.08); border-color: var(--red); }
+    .callout.success { background: rgba(76,175,80,0.08); border-color: var(--green); }
+    .callout .callout-title { font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 5px; }
+    .callout.warn .callout-title { color: var(--amber); }
+    .callout.info .callout-title { color: var(--blue); }
+    .callout.danger .callout-title { color: var(--red); }
+    .callout.success .callout-title { color: var(--green); }
+    .callout p { margin: 0; font-size: 12.5px; }
+
+    /* Checklist */
+    .checklist { list-style: none; padding: 0; }
+    .checklist li {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 7px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      color: var(--muted);
+      font-size: 13px;
+      cursor: pointer;
+      transition: background 0.15s;
+      border-radius: 4px;
+      padding-left: 4px;
+      padding-right: 4px;
+    }
+    .checklist li:hover { background: rgba(255,255,255,0.025); }
+    .checklist li:last-child { border-bottom: none; }
+    .checklist li.done { color: rgba(255,255,255,0.3); text-decoration: line-through; text-decoration-color: rgba(255,255,255,0.2); }
+    .checklist .cb {
+      width: 16px; height: 16px;
+      border: 2px solid var(--border);
+      border-radius: 4px;
+      flex-shrink: 0;
+      margin-top: 2px;
+      transition: all 0.15s;
+      position: relative;
+    }
+    .checklist li.done .cb {
+      background: var(--green);
+      border-color: var(--green);
+    }
+    .checklist li.done .cb::after {
+      content: '';
+      position: absolute;
+      left: 3px; top: 1px;
+      width: 5px; height: 8px;
+      border: 2px solid #fff;
+      border-top: none;
+      border-left: none;
+      transform: rotate(45deg);
+    }
+    .checklist .priority-high { color: var(--red); font-size: 10px; font-weight: 700; margin-left: auto; flex-shrink: 0; padding: 1px 7px; background: rgba(244,67,54,0.12); border-radius: 10px; }
+    .checklist .priority-med  { color: var(--amber); font-size: 10px; font-weight: 700; margin-left: auto; flex-shrink: 0; padding: 1px 7px; background: rgba(255,193,7,0.12); border-radius: 10px; }
+
+    /* Screens grid */
+    .screens { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; margin: 14px 0; }
+    .screen-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+    }
+    .screen-card .screen-name { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+    .screen-card .screen-desc { font-size: 12px; color: var(--muted); }
+    .screen-card ul { font-size: 12px; margin-top: 8px; }
+
+    /* Divider */
+    .divider { border: none; border-top: 1px solid var(--border); margin: 28px 0; }
+
+    /* Pill tags */
+    .tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+    .tag {
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .tag.tech { background: rgba(206,147,216,0.15); color: var(--purple); }
+    .tag.role { background: rgba(66,165,245,0.15); color: var(--blue); }
+    .tag.status { background: rgba(76,175,80,0.15); color: var(--green); }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">S</div>
+  <div>
+    <h1>Shorts Toolbox - QA Reference Document</h1>
+    <p>Functional documentation, core workflows, and known quirks for the QA team</p>
+  </div>
+  <div class="badge">For QA / Deployment Team</div>
+</header>
+
+<!-- TAB NAVIGATION -->
+<nav class="tab-nav">
+  <button class="tab-btn active" onclick="showTab('overview')">
+    <span class="dot" style="background:#e53935"></span>Overview
+  </button>
+  <button class="tab-btn" onclick="showTab('shorts-brain')">
+    <span class="dot" style="background:#42a5f5"></span>Shorts Brain 2.0
+  </button>
+  <button class="tab-btn" onclick="showTab('intel-hub')">
+    <span class="dot" style="background:#ce93d8"></span>Shorts Intel Hub
+  </button>
+  <button class="tab-btn" onclick="showTab('agent-collective')">
+    <span class="dot" style="background:#ff9800"></span>Agent Collective
+  </button>
+  <button class="tab-btn" onclick="showTab('creative-generator')">
+    <span class="dot" style="background:#26c6da"></span>Creative Generator
+  </button>
+  <button class="tab-btn" onclick="showTab('template-stamper')">
+    <span class="dot" style="background:#ab47bc"></span>Template Stamper
+  </button>
+  <button class="tab-btn" onclick="showTab('admin')">
+    <span class="dot" style="background:#4caf50"></span>Admin Dashboard &amp; Hub Portal
+  </button>
+  <button class="tab-btn" onclick="showTab('backend')">
+    <span class="dot" style="background:#ffc107"></span>Backend &amp; Infrastructure
+  </button>
+</nav>
+
+
+<!-- ======================================================= -->
+<!-- TAB 1: OVERVIEW -->
+<!-- ======================================================= -->
+<div id="overview" class="tab-content active">
+  <h2>Shorts Toolbox <span class="sub">What it is, who it's for, and how the apps connect</span></h2>
+
+  <p>The Shorts Toolbox is a suite of internal Google tools built for the <strong>APAC Shorts Marketing team</strong>. It covers the full lifecycle of a YouTube Shorts campaign: intelligence gathering, campaign creation, asset generation, and performance optimisation.</p>
+
+  <div class="cards">
+    <div class="card accent-blue">
+      <div class="card-label">Apps in Scope</div>
+      <div class="card-value">7</div>
+      <div class="card-note">Brain, Intel Hub, Agent Collective, Creative Generator, Template Stamper, Admin, Hub Portal</div>
+    </div>
+    <div class="card accent-red">
+      <div class="card-label">Auth Method</div>
+      <div class="card-value">Google SSO</div>
+      <div class="card-note">@google.com domain allowlist + Firebase Auth</div>
+    </div>
+    <div class="card accent-green">
+      <div class="card-label">Hosting</div>
+      <div class="card-value">Firebase</div>
+      <div class="card-note">v3-creative-engine.web.app (GCP)</div>
+    </div>
+    <div class="card accent-amber">
+      <div class="card-label">Backend</div>
+      <div class="card-value">Cloud Functions</div>
+      <div class="card-note">us-central1, Firestore + Cloud SQL</div>
+    </div>
+  </div>
+
+  <h3>How the Apps Connect</h3>
+  <p>The toolbox is not a single app. It is four separate web applications that share a backend and pass data between each other via Firestore and API calls.</p>
+
+  <div class="flow">
+    <div class="flow-step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <strong>Shorts Intel Hub</strong>
+        <span>Aggregates trending topics from agencies and music teams. A marketing manager reviews, ranks, and approves the best topics each week.</span>
+      </div>
+    </div>
+    <div class="flow-arrow">&#8595;</div>
+    <div class="flow-step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <strong>Agent Collective</strong>
+        <span>Approved topics are pushed from Intel Hub and used to generate campaign briefs, creative storyboards, and generation manifests automatically.</span>
+      </div>
+    </div>
+    <div class="flow-arrow">&#8595;</div>
+    <div class="flow-step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <strong>Campaign Runs &amp; Asset Production</strong>
+        <span>Creative Generator and Template Stamper produce the final video assets and deliver them to the agency or media team.</span>
+      </div>
+    </div>
+    <div class="flow-arrow">&#8595;</div>
+    <div class="flow-step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <strong>Shorts Brain 2.0</strong>
+        <span>Once campaigns are live, performance data (holdback lift metrics) is uploaded weekly. Shorts Brain analyses it and produces strategic guidance for the team.</span>
+      </div>
+    </div>
+    <div class="flow-arrow">&#8595;</div>
+    <div class="flow-step">
+      <div class="step-num">5</div>
+      <div class="step-body">
+        <strong>Admin Dashboard</strong>
+        <span>Aggregates real-time utilisation data across all tools so the programme lead can monitor adoption and pipeline health.</span>
+      </div>
+    </div>
+  </div>
+
+  <h3>Target Users</h3>
+  <table>
+    <thead>
+      <tr><th>App</th><th>Primary User</th><th>Auth Required?</th><th>Markets Covered</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Shorts Brain 2.0</strong></td>
+        <td>APAC Shorts Marketing Managers, Performance Analysts</td>
+        <td>Yes (@google.com)</td>
+        <td>APAC, India, Indonesia, Japan, South Korea, AUNZ</td>
+      </tr>
+      <tr>
+        <td><strong>Shorts Intel Hub</strong></td>
+        <td>Country Marketing Managers (view/approve), Agencies (upload only)</td>
+        <td>Managers: Yes. Upload tab: No</td>
+        <td>Japan, South Korea, India, Indonesia</td>
+      </tr>
+      <tr>
+        <td><strong>Admin Dashboard</strong></td>
+        <td>Programme Lead / Toolbox Admin</td>
+        <td>Yes (@google.com)</td>
+        <td>All markets</td>
+      </tr>
+      <tr>
+        <td><strong>Hub Portal</strong></td>
+        <td>All internal users (entry point / navigation)</td>
+        <td>Yes (@google.com)</td>
+        <td>All markets</td>
+      </tr>
+      <tr>
+        <td><strong>Agent Collective</strong></td>
+        <td>Marketing Strategists, Creative Directors</td>
+        <td>Yes (@google.com)</td>
+        <td>Korea, India, Japan, Indonesia</td>
+      </tr>
+      <tr>
+        <td><strong>Creative Generator</strong></td>
+        <td>Operations Teams, Creative QA</td>
+        <td>Yes (@google.com)</td>
+        <td>Korea, India, Japan, Indonesia</td>
+      </tr>
+      <tr>
+        <td><strong>Template Stamper</strong></td>
+        <td>Creative Operations, Template Admins</td>
+        <td>Yes (@google.com)</td>
+        <td>Japan, Korea, Taiwan, Hong Kong</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Firebase Hosting URL Map</h3>
+  <table>
+    <thead>
+      <tr><th>App</th><th>URL Path</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><strong>Hub Portal (entry point)</strong></td><td><code>/hub.html</code></td></tr>
+      <tr><td><strong>Admin Dashboard</strong></td><td><code>/admin.html</code></td></tr>
+      <tr><td><strong>Shorts Brain 2.0</strong></td><td><code>/shorts-brain/</code></td></tr>
+      <tr><td><strong>Shorts Intel Hub</strong></td><td><code>/shorts-intel-hub/</code></td></tr>
+      <tr><td><strong>Agent Collective (v2)</strong></td><td><code>/agent-collective-v2/</code></td></tr>
+      <tr><td><strong>Creative Generator (v2)</strong></td><td><code>/creative-generator-v2/</code></td></tr>
+      <tr><td><strong>Template Stamper</strong></td><td><code>/template-stamper/</code></td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout info">
+    <div class="callout-title">Full Toolbox Coverage</div>
+    <p>This document covers all seven tools: <strong>Shorts Brain 2.0, Shorts Intel Hub, Agent Collective, Creative Generator, Template Stamper, Admin Dashboard, and Hub Portal.</strong> The Backend &amp; Infrastructure tab covers the shared Cloud Functions, Cloud Run services, Firestore, and deployment checklist that underpin all tools.</p>
+  </div>
+</div>
+
+
+<!-- ======================================================= -->
+<!-- TAB 2: SHORTS BRAIN 2.0 -->
+<!-- ======================================================= -->
+<div id="shorts-brain" class="tab-content">
+  <h2>Shorts Brain 2.0 <span class="sub">Performance Intelligence &amp; OKR Tracking</span></h2>
+
+  <div class="tags">
+    <span class="tag tech">React 18.2</span>
+    <span class="tag tech">Firebase Firestore</span>
+    <span class="tag tech">Vite</span>
+    <span class="tag tech">Tailwind CSS</span>
+    <span class="tag role">Marketing Managers</span>
+    <span class="tag role">Performance Analysts</span>
+    <span class="tag status">Production Ready (v2.0)</span>
+  </div>
+
+  <p><strong>What it does:</strong> Shorts Brain is a performance intelligence platform for YouTube Shorts campaigns in APAC. Marketing managers upload weekly holdback experiment data (CSV files), and the app processes it into an interactive dashboard showing campaign lift metrics, OKR progress by market, and auto-generated strategic guidance (scale, maintain, or pause).</p>
+
+  <h3>Application Screens &amp; Features</h3>
+
+  <div class="screens">
+    <div class="screen-card">
+      <div class="screen-name">Data Ingestion (Upload Tab)</div>
+      <div class="screen-desc">Admin-only. Upload weekly CSV data files across four data stream categories.</div>
+      <ul>
+        <li>Ratio-Based Analysis (Relative Lift %)</li>
+        <li>Volume-Based Analysis (Discrete Delta)</li>
+        <li>Structural Metadata (Campaign Definitions + State Instructions)</li>
+        <li>Attribution Analysis (Impressions / CTR)</li>
+        <li>"Execute Intelligent Engine" button triggers processing</li>
+        <li>Access denied screen shown to non-admin users</li>
+      </ul>
+    </div>
+    <div class="screen-card">
+      <div class="screen-name">OKR Performance Tab (Default)</div>
+      <div class="screen-desc">Landing screen. Shows quarterly OKR progress per market.</div>
+      <ul>
+        <li>Quarter-start date + reporting date display</li>
+        <li>Days remaining in quarter countdown</li>
+        <li>6 market performance cards: APAC, India, Indonesia, Japan, South Korea, AUNZ</li>
+        <li>Performance Index % per market (color-coded)</li>
+        <li>Actual vs. Target metric comparison</li>
+        <li>Strategic Guidance Matrix (editable table) below the cards</li>
+      </ul>
+    </div>
+    <div class="screen-card">
+      <div class="screen-name">Global Holdback Tab</div>
+      <div class="screen-desc">Master APAC-level holdback data across all campaigns.</div>
+      <ul>
+        <li>Metric selector: DAU-SCT, DAC-SCT, GenAI DAU-SCT, Impressions, CTR</li>
+        <li>3-level header: Gender / Age Group / Metric</li>
+        <li>Anchor row highlighting</li>
+        <li>Date columns hidden at global level</li>
+        <li>Horizontal scroll navigation (left/right chevrons)</li>
+      </ul>
+    </div>
+    <div class="screen-card">
+      <div class="screen-name">Campaign Holdback Tab (Market Hub)</div>
+      <div class="screen-desc">Market-specific holdback data. Drill down by market.</div>
+      <ul>
+        <li>Market selector dropdown (India, Indonesia, Japan, South Korea, AUNZ)</li>
+        <li>Same metric selector and demographic filtering as Global Hub</li>
+        <li>Date ranges shown inline: Start, End, Days Live</li>
+        <li>Anchor row + campaign-level data per market</li>
+      </ul>
+    </div>
+    <div class="screen-card">
+      <div class="screen-name">Campaign Hub (Sidebar Sub-tabs)</div>
+      <div class="screen-desc">7 campaign category sub-tabs with 3-level drill-down.</div>
+      <ul>
+        <li>Always-On (SSC, Shelf, UTS, MVR, UTS SFV, JP Proactive Container)</li>
+        <li>Scaled Creation, Effects, Trends, CultMo, ArtMo, GenAI Hub</li>
+        <li>Market selector per sub-tab</li>
+        <li>Sub-sub-tab filter (3rd level if applicable)</li>
+        <li>Campaign date view with start/end dates</li>
+      </ul>
+    </div>
+    <div class="screen-card">
+      <div class="screen-name">Memory / Snapshot System</div>
+      <div class="screen-desc">Historical snapshot management in the sidebar.</div>
+      <ul>
+        <li>Auto-loads most recent snapshot on app open</li>
+        <li>Up to 10 recent snapshots shown in sidebar (clickable to restore)</li>
+        <li>Export button in header saves current state as JSON</li>
+        <li>Admins can delete snapshots</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Core User Journeys</h3>
+
+  <h4>Journey 1: Weekly Data Ingestion (Admin Only)</h4>
+  <div class="flow">
+    <div class="flow-step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <strong>Admin opens the Upload tab</strong>
+        <span>Non-admins see an "Access Denied" banner. Admin list: kanishak@google.com, danilpalma@google.com, ivanho.wz@gmail.com, ivho@google.com</span>
+      </div>
+    </div>
+    <div class="flow-arrow">&#8595;</div>
+    <div class="flow-step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <strong>Upload 4 data stream CSVs</strong>
+        <span>Ratio-Based Analysis (Global Hub Master, Market Hub Nodes, Always-On Trends, JP Proactive Container), Volume-Based Analysis (same structure), Campaign Definitions CSV, State Instructions CSV, and optionally Impressions/CTR CSV</span>
+      </div>
+    </div>
+    <div class="flow-arrow">&#8595;</div>
+    <div class="flow-step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <strong>Click "Execute Intelligent Engine"</strong>
+        <span>All uploaded files are parsed together. The engine matches campaigns to metadata, calculates lift metrics, identifies pause/active states, and compresses the result into a row structure.</span>
+      </div>
+    </div>
+    <div class="flow-arrow">&#8595;</div>
+    <div class="flow-step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <strong>Data saved to Firestore in chunks</strong>
+        <span>Compressed rows are stored in 100-row chunks under /shortsbrain_data/ to stay within the 1MB Firestore document limit. A metadata index document is saved at /shortsbrain_data/latest.</span>
+      </div>
+    </div>
+    <div class="flow-arrow">&#8595;</div>
+    <div class="flow-step">
+      <div class="step-num">5</div>
+      <div class="step-body">
+        <strong>All users can now view the new data</strong>
+        <span>On next page load, or after refreshing, the new snapshot is automatically loaded for all authenticated users.</span>
+      </div>
+    </div>
+  </div>
+
+  <h4>Journey 2: Weekly Performance Review (Marketing Manager)</h4>
+  <div class="flow">
+    <div class="flow-step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <strong>Manager opens Shorts Brain, lands on OKR tab</strong>
+        <span>The app auto-loads the most recent snapshot from Firestore. The OKR Performance tab is the default landing screen.</span>
+      </div>
+    </div>
+    <div class="flow-arrow">&#8595;</div>
+    <div class="flow-step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <strong>Review market performance cards</strong>
+        <span>Each of the 6 market cards shows Performance Index %. Green = 100%+, Amber = 80-99%, Red = below 80%. Manager identifies underperforming markets.</span>
+      </div>
+    </div>
+    <div class="flow-arrow">&#8595;</div>
+    <div class="flow-step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <strong>Review Strategic Guidance Matrix</strong>
+        <span>Below the market cards, an auto-generated table shows SCALE / MAINTAIN / PAUSE directives per market, entity, age group, and gender. Managers can edit entries or add manual pointers.</span>
+      </div>
+    </div>
+    <div class="flow-arrow">&#8595;</div>
+    <div class="flow-step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <strong>Drill into Global or Market Holdback tabs</strong>
+        <span>For more detail, the manager switches to the Global Holdback or Campaign Holdback tab, selects a market, and reviews lift data by demographic (gender / age group) for each campaign.</span>
+      </div>
+    </div>
+    <div class="flow-arrow">&#8595;</div>
+    <div class="flow-step">
+      <div class="step-num">5</div>
+      <div class="step-body">
+        <strong>Export or copy guidance</strong>
+        <span>The "Copy All" button in the Strategic Guidance Matrix exports the table content. The header Export button saves a full JSON snapshot for archiving.</span>
+      </div>
+    </div>
+  </div>
+
+  <h3>Data Model &amp; Key Calculations</h3>
+
+  <h4>Metrics Tracked</h4>
+  <table>
+    <thead>
+      <tr><th>Metric Code</th><th>Full Name</th><th>Type</th><th>Notes</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>DAU-SCT</code></td><td>Daily Active Users - Shorts Creation Tool</td><td>Ratio (%)</td><td>Primary KPI</td></tr>
+      <tr><td><code>DAC-SCT</code></td><td>Daily Active Creators - Shorts Creation Tool</td><td>Ratio (%)</td><td>Creator-specific</td></tr>
+      <tr><td><code>GenAI DAU-SCT</code></td><td>GenAI-specific DAU-SCT</td><td>Ratio (%)</td><td>GenAI Hub campaigns only</td></tr>
+      <tr><td><code>Impressions</code></td><td>Ad Impressions</td><td>Volume (absolute delta)</td><td>Always shown, not gated by targeting</td></tr>
+      <tr><td><code>CTR</code></td><td>Click-Through Rate</td><td>Volume (absolute delta)</td><td>Always shown, not gated by targeting</td></tr>
+    </tbody>
+  </table>
+
+  <h4>Demographic Dimensions</h4>
+  <p>Every metric is broken down by <strong>Gender</strong> (Female, Male, GenPop/Total) and <strong>Age Group</strong> (18-24, 25-34, 18-34, 35+, GenPop/Total). Only segments that match a campaign's targeting are shown; non-targeted segments display "NA".</p>
+
+  <h4>Color Coding Logic</h4>
+  <table>
+    <thead>
+      <tr><th>Cell Color</th><th>Meaning</th></tr>
+    </thead>
+    <tbody>
+      <tr><td style="color:var(--green)">Green</td><td>Statistically significant positive lift</td></tr>
+      <tr><td style="color:var(--red)">Red</td><td>Statistically significant negative lift</td></tr>
+      <tr><td style="color:var(--amber)">Amber</td><td>Neutral / not statistically significant</td></tr>
+      <tr><td><code>-</code></td><td>No data (null / missing)</td></tr>
+      <tr><td><code>NA</code></td><td>Not applicable - demographic not in campaign targeting</td></tr>
+      <tr><td><em>Paused [date]</em></td><td>Campaign is paused; last known date shown</td></tr>
+    </tbody>
+  </table>
+
+  <h4>Strategic Guidance Rules Engine</h4>
+  <table>
+    <thead>
+      <tr><th>Directive</th><th>Condition</th></tr>
+    </thead>
+    <tbody>
+      <tr><td style="color:var(--green)">SCALE</td><td>Positive lift + statistically significant (&gt;0.001%) for GenPop</td></tr>
+      <tr><td style="color:var(--amber)">MAINTAIN</td><td>Neutral result, or campaign is less than 14 days live</td></tr>
+      <tr><td style="color:var(--red)">PAUSE</td><td>Both male and female in the same age bucket show significant negative lift AND campaign is at least 14 days live</td></tr>
+      <tr><td style="color:var(--muted)">Restricted (no SCALE)</td><td>Campaign type is SHELF, SSC, UTS, MVR, or UTS SFV - these categories cannot be scaled</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Known Quirks &amp; Things to Watch</h3>
+
+  <div class="callout warn">
+    <div class="callout-title">JP Proactive Container - Special Handling</div>
+    <p>This campaign category has an explicit mapping in the code to force it into the Always-On tab under the Japan market. If this mapping breaks, JP Proactive Container data will not appear in the dashboard. Verify it appears in the correct sub-tab after upload.</p>
+  </div>
+
+  <div class="callout warn">
+    <div class="callout-title">Date Format Sensitivity</div>
+    <p>The CSV parser supports MM/DD/YYYY, DD-MM-YYYY, and YYYY-MM-DD. If dates arrive in an unexpected format, they silently fall back to null and the row may be excluded from calculations. Always verify the date column format in source CSVs before upload.</p>
+  </div>
+
+  <div class="callout warn">
+    <div class="callout-title">Firestore Chunking Limit</div>
+    <p>Data is saved in chunks of 100 rows to stay within Firestore's 1MB document limit. Extremely large datasets (&gt;1000 rows) will produce many chunk documents. If a save is interrupted mid-chunk, partial data may be loaded on the next open. A full re-upload is the fix.</p>
+  </div>
+
+  <div class="callout info">
+    <div class="callout-title">GenAI DAU-SCT Visibility Rule</div>
+    <p>This metric is only shown for campaigns in the GenAI Hub or for anchor rows. It is intentionally hidden for all other campaign types. This is expected behaviour, not a bug.</p>
+  </div>
+
+  <div class="callout info">
+    <div class="callout-title">Pause State Logic for "Total" Demographic</div>
+    <p>The "Total" (GenPop) row is only marked as Paused if BOTH the male AND female rows in the same age bucket are paused. If only one gender is paused, Total remains active. This is intentional and must not be changed.</p>
+  </div>
+
+  <div class="callout danger">
+    <div class="callout-title">Market Resolution Default</div>
+    <p>If the app cannot resolve a campaign's market from the CSV data or metadata, it defaults to India. This means incorrectly formatted CSVs could silently assign campaigns to the wrong market. Always validate market column values in source files.</p>
+  </div>
+
+  <h3>QA Checklist - Shorts Brain 2.0</h3>
+  <h4>Data Ingestion</h4>
+  <ul class="checklist">
+    <li><div class="cb"></div>Upload CSV with MM/DD/YYYY dates - verify parsing succeeds<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Upload CSV with YYYY-MM-DD dates - verify parsing succeeds<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Upload CSV with DD-MM-YYYY dates - verify parsing succeeds<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Upload with a missing required column - verify the app degrades gracefully without crashing<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Upload with special characters in campaign names (e.g. ampersands, slashes, Japanese characters)<div class="priority-med">MED</div></li>
+    <li><div class="cb"></div>Upload a large dataset (&gt;500 rows) and verify chunking completes without Firestore errors<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Verify non-admin user sees "Access Denied" on the Upload tab<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Verify admin user sees "Ingestion Admin" badge and full upload interface<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Upload JP Proactive Container data and confirm it appears in Always-On / Japan, not elsewhere<div class="priority-high">HIGH</div></li>
+  </ul>
+  <h4>OKR Tab</h4>
+  <ul class="checklist">
+    <li><div class="cb"></div>Verify Performance Index % matches formula: (actual / target) * 100<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Verify green/amber/red status at exact thresholds: 100% green, 80-99% amber, below 80% red<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Verify "Days Remaining" countdown is correct relative to today's date<div class="priority-med">MED</div></li>
+    <li><div class="cb"></div>Verify Strategic Guidance Matrix generates SCALE/MAINTAIN/PAUSE correctly per the rules<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Verify "Add Pointer" button adds a manual row to the matrix<div class="priority-med">MED</div></li>
+    <li><div class="cb"></div>Verify "Copy All" button copies matrix content<div class="priority-med">MED</div></li>
+    <li><div class="cb"></div>Verify SHELF / SSC / UTS / MVR / UTS SFV campaigns are never marked SCALE<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Verify campaigns under 14 days live are not marked PAUSE<div class="priority-high">HIGH</div></li>
+  </ul>
+  <h4>Data Tables (Global Hub / Market Hub / Campaign Hub)</h4>
+  <ul class="checklist">
+    <li><div class="cb"></div>Metric toggle switches displayed data correctly across all tabs<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>GenAI DAU-SCT is hidden for non-GenAI campaigns<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Impressions and CTR always visible regardless of targeting<div class="priority-med">MED</div></li>
+    <li><div class="cb"></div>Non-targeted demographic segments display "NA" (not zero, not blank)<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Paused campaigns show "Paused [date]", not a number<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Date columns are hidden in Global Hub tab, visible in other tabs<div class="priority-med">MED</div></li>
+    <li><div class="cb"></div>Market selector on Campaign Hub tab changes data displayed<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Horizontal scroll navigation works (left/right chevrons)<div class="priority-med">MED</div></li>
+  </ul>
+  <h4>Snapshot / Memory System</h4>
+  <ul class="checklist">
+    <li><div class="cb"></div>App auto-loads latest snapshot on fresh page open<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Clicking a historical snapshot in the sidebar restores its data correctly<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Export button downloads a valid JSON file<div class="priority-med">MED</div></li>
+    <li><div class="cb"></div>Admin can delete a snapshot; it disappears from the list<div class="priority-med">MED</div></li>
+  </ul>
+</div>
+
+
+<!-- ======================================================= -->
+<!-- TAB 3: SHORTS INTEL HUB -->
+<!-- ======================================================= -->
+<div id="intel-hub" class="tab-content">
+  <h2>Shorts Intel Hub <span class="sub">Trending Topic Intelligence &amp; Manager Approval</span></h2>
+
+  <div class="tags">
+    <span class="tag tech">React / TypeScript</span>
+    <span class="tag tech">Cloud Functions (REST API)</span>
+    <span class="tag tech">Cloud SQL (PostgreSQL + pgvector)</span>
+    <span class="tag tech">Gemini AI</span>
+    <span class="tag role">Country Marketing Managers</span>
+    <span class="tag role">Agencies (upload only)</span>
+  </div>
+
+  <p><strong>What it does:</strong> The Shorts Intel Hub is a trending topic aggregation and approval platform. It collects competitive intelligence from agencies and music teams, runs it through AI processing (normalization, deduplication, ranking), and presents a shortlist of top topics for marketing managers to approve each week. Approved topics are automatically handed off to the Agent Collective to generate campaign briefs.</p>
+
+  <h3>Data Sources</h3>
+  <table>
+    <thead>
+      <tr><th>Source</th><th>Method</th><th>Auth Required?</th><th>Status</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><strong>Agency Upload</strong></td><td>CSV drag-and-drop on Upload tab</td><td>No (public-facing)</td><td style="color:var(--green)">Live</td></tr>
+      <tr><td><strong>Music Team Data</strong></td><td>CSV drag-and-drop on Upload tab</td><td>No (public-facing)</td><td style="color:var(--green)">Live</td></tr>
+      <tr><td><strong>YouTube Search API</strong></td><td>Automated pipeline</td><td>n/a</td><td style="color:var(--amber)">TBC - not yet built</td></tr>
+      <tr><td><strong>Nyan Cat Pipeline</strong></td><td>Automated video content filter</td><td>n/a</td><td style="color:var(--amber)">TBC - not yet built</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout warn">
+    <div class="callout-title">Data Source Scope for Launch</div>
+    <p>At launch, only Agency Upload and Music Team Data are active. YouTube Search API and Nyan Cat Pipeline are planned but not built. Do not test or validate those two sources - they do not exist in the current codebase.</p>
+  </div>
+
+  <h3>Application Screens &amp; Features</h3>
+
+  <div class="screens">
+    <div class="screen-card">
+      <div class="screen-name">Marketing Dashboard (Default Tab)</div>
+      <div class="screen-desc">Main view for managers. Filter by market and week to see ranked topics.</div>
+      <ul>
+        <li>Market selector: JP, KR, IN, ID (AUNZ defined but not shown in UI)</li>
+        <li>Week selector: Dropdown of available weeks from the database</li>
+        <li>Three sub-tabs: Top Topics &amp; Trends, Scoring Settings, Archive</li>
+      </ul>
+    </div>
+    <div class="screen-card">
+      <div class="screen-name">Top Topics &amp; Trends Sub-tab</div>
+      <div class="screen-desc">Three-track view of ranked, pending, and long-tail topics.</div>
+      <ul>
+        <li>Stats row: Trending Velocity, Top Demo Engagement, Approval Status</li>
+        <li>Track 1 - Shortlist: Top 10 approved topics with one-click approval</li>
+        <li>Track 2 - Pending: Ranked but not yet approved, with expandable details</li>
+        <li>Track 3 - Long Tail: Topics &gt;3 weeks old or negative velocity</li>
+      </ul>
+    </div>
+    <div class="screen-card">
+      <div class="screen-name">Data Upload Tab</div>
+      <div class="screen-desc">No authentication required. Agencies upload CSV files here.</div>
+      <ul>
+        <li>Drag-and-drop CSV/TSV upload zone</li>
+        <li>Template download link (expected format)</li>
+        <li>Upload history log with timestamps and processing status</li>
+        <li>Rate limit: 20 uploads per hour</li>
+      </ul>
+    </div>
+    <div class="screen-card">
+      <div class="screen-name">Scoring Settings Sub-tab</div>
+      <div class="screen-desc">Configure the topic ranking weights (admin only).</div>
+      <ul>
+        <li>Velocity weight slider (default 40%)</li>
+        <li>Creation rate weight slider (default 35%)</li>
+        <li>Watchtime weight slider (default 25%)</li>
+        <li>Preview impact before saving</li>
+        <li>Changes apply on next weekly scheduler run</li>
+      </ul>
+    </div>
+    <div class="screen-card">
+      <div class="screen-name">Archive Sub-tab</div>
+      <div class="screen-desc">Expired or manually archived topics.</div>
+      <ul>
+        <li>Topics older than 3 weeks auto-archived</li>
+        <li>Negative velocity topics moved here</li>
+        <li>Archived topics older than 2 years auto-deleted (with approval)</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Core User Journeys</h3>
+
+  <h4>Journey 1: Agency Submits Topics (No Login Required)</h4>
+  <div class="flow">
+    <div class="flow-step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <strong>Agency opens the Data Upload tab</strong>
+        <span>No authentication required. The upload tab is publicly accessible so agencies do not need Google accounts.</span>
+      </div>
+    </div>
+    <div class="flow-arrow">&#8595;</div>
+    <div class="flow-step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <strong>Download template to see expected format</strong>
+        <span>Required fields: Topic Name, Description, Target Demo, Reference Link. Optional: Hashtags, Audio ID.</span>
+      </div>
+    </div>
+    <div class="flow-arrow">&#8595;</div>
+    <div class="flow-step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <strong>Drag-drop prepared CSV into the upload zone</strong>
+        <span>The system accepts CSV and TSV formats. Rate limit is 20 uploads per hour. File is sent to the Cloud Function /api/upload endpoint.</span>
+      </div>
+    </div>
+    <div class="flow-arrow">&#8595;</div>
+    <div class="flow-step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <strong>AI processing runs in the background</strong>
+        <span>Gemini normalizes field names and formats, validates required fields and URL integrity, generates embeddings for deduplication via pgvector, and stores topics with status "raw".</span>
+      </div>
+    </div>
+    <div class="flow-arrow">&#8595;</div>
+    <div class="flow-step">
+      <div class="step-num">5</div>
+      <div class="step-body">
+        <strong>Upload appears in history log</strong>
+        <span>Agency can see the upload record with file name, record count, and processing status. Processing is asynchronous and may take a few minutes for large files.</span>
+      </div>
+    </div>
+  </div>
+
+  <h4>Journey 2: Weekly Ranking Refresh (Automated - Every Monday 6 AM UTC)</h4>
+  <div class="flow">
+    <div class="flow-step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <strong>Cloud Scheduler triggers weekly refresh</strong>
+        <span>Runs every Monday at 06:00 UTC. Memory: 1GiB, Timeout: 9 minutes (540s). Adjustable per market by admins.</span>
+      </div>
+    </div>
+    <div class="flow-arrow">&#8595;</div>
+    <div class="flow-step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <strong>Ranking recalculated for all active topics</strong>
+        <span>Composite score = (Velocity x 40%) + (Creation Rate x 35%) + (Watchtime x 25%). These weights are configurable in the Scoring Settings tab.</span>
+      </div>
+    </div>
+    <div class="flow-arrow">&#8595;</div>
+    <div class="flow-step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <strong>Status transitions applied</strong>
+        <span>Topics move from "raw" to "active" if valid. Topics older than 3 weeks, or with negative velocity, move to "expired".</span>
+      </div>
+    </div>
+    <div class="flow-arrow">&#8595;</div>
+    <div class="flow-step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <strong>Dashboard refreshes with new rankings</strong>
+        <span>The next time a manager opens the dashboard, they see the updated shortlist ranked by the new scores.</span>
+      </div>
+    </div>
+  </div>
+
+  <h4>Journey 3: Manager Reviews and Approves Topics</h4>
+  <div class="flow">
+    <div class="flow-step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <strong>Manager opens Marketing Dashboard, selects market and week</strong>
+        <span>Authenticated with Google SSO (@google.com). Selects market (JP, KR, IN, ID) from the dropdown and the relevant week.</span>
+      </div>
+    </div>
+    <div class="flow-arrow">&#8595;</div>
+    <div class="flow-step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <strong>Reviews the Top 10 Shortlist in Track 1</strong>
+        <span>Topics are displayed with: name, description, target demo, reference link, and composite rank score. Expandable for detail view.</span>
+      </div>
+    </div>
+    <div class="flow-arrow">&#8595;</div>
+    <div class="flow-step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <strong>Clicks the Approve button on a topic</strong>
+        <span>Topic status changes from "active" to "approved". Approved by email address is recorded with timestamp.</span>
+      </div>
+    </div>
+    <div class="flow-arrow">&#8595;</div>
+    <div class="flow-step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <strong>MCP Bridge push to Agent Collective</strong>
+        <span>Approval triggers an automatic push of the topic's 6 mandatory fields (Topic Name, Description, Target Demo, Reference Link, Status, Market) to the Agent Collective pipeline, which begins generating a campaign brief.</span>
+      </div>
+    </div>
+  </div>
+
+  <h3>Topic Status Lifecycle</h3>
+  <table>
+    <thead>
+      <tr><th>Status</th><th>Meaning</th><th>Next State</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>raw</code></td><td>Just uploaded, not yet processed</td><td>processing or active</td></tr>
+      <tr><td><code>processing</code></td><td>AI normalization in progress</td><td>active (or raw if failed)</td></tr>
+      <tr><td><code>active</code></td><td>Ranked and visible in dashboard</td><td>approved or expired</td></tr>
+      <tr><td><code>approved</code></td><td>Manager approved, pushed to Agent Collective</td><td>archived (eventually)</td></tr>
+      <tr><td><code>expired</code></td><td>Older than 3 weeks OR negative velocity</td><td>archived</td></tr>
+      <tr><td><code>archived</code></td><td>No longer active, stored for reference</td><td>deleted (after 2 years)</td></tr>
+    </tbody>
+  </table>
+
+  <h3>API Endpoints (Cloud Functions)</h3>
+  <table>
+    <thead>
+      <tr><th>Method</th><th>Endpoint</th><th>Auth</th><th>Purpose</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>GET</code></td><td><code>/api/topics</code></td><td>Admin</td><td>List topics with filters (market, status, week)</td></tr>
+      <tr><td><code>GET</code></td><td><code>/api/topics/:id</code></td><td>Admin</td><td>Get full topic detail</td></tr>
+      <tr><td><code>POST</code></td><td><code>/api/topics</code></td><td>Admin</td><td>Create a single topic manually</td></tr>
+      <tr><td><code>PATCH</code></td><td><code>/api/topics/:id</code></td><td>Admin</td><td>Update topic fields or status</td></tr>
+      <tr><td><code>POST</code></td><td><code>/api/upload</code></td><td>None (public)</td><td>CSV batch upload (20/hour rate limit)</td></tr>
+      <tr><td><code>GET</code></td><td><code>/api/scoring-config</code></td><td>Admin</td><td>Get current scoring weights</td></tr>
+      <tr><td><code>POST</code></td><td><code>/api/scoring-config</code></td><td>Admin</td><td>Update scoring weights</td></tr>
+      <tr><td><code>POST</code></td><td><code>/api/approve/:id</code></td><td>Admin</td><td>Approve topic + trigger MCP push</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Known Quirks &amp; Things to Watch</h3>
+
+  <div class="callout warn">
+    <div class="callout-title">AUNZ Market - Not in UI</div>
+    <p>AUNZ is defined in the database schema and constants but is NOT shown in the market selector in the current UI. If AUNZ data is uploaded, it will be stored but not visible to managers. This is a known gap, not a bug in the traditional sense, but needs to be clarified before launch.</p>
+  </div>
+
+  <div class="callout warn">
+    <div class="callout-title">Scoring Settings Take Effect Next Week</div>
+    <p>Changes made in the Scoring Settings tab are saved but only applied during the next Monday scheduler run. They do not retroactively change the current week's rankings. If a manager adjusts weights on Tuesday, they will not see any change until the following Monday.</p>
+  </div>
+
+  <div class="callout warn">
+    <div class="callout-title">Upload Rate Limit Behaviour</div>
+    <p>The API enforces a hard limit of 20 uploads per hour per IP (no auth). The 21st upload within an hour will be rejected with a 429 error. The error message should be tested to ensure it is user-friendly and not a raw HTTP error code.</p>
+  </div>
+
+  <div class="callout info">
+    <div class="callout-title">MCP Bridge - Critical Integration</div>
+    <p>The approval action in the dashboard triggers a push to the Agent Collective via MCP Bridge. This integration must be verified end-to-end before launch. If the push fails silently, a topic appears approved in the UI but no campaign brief is generated.</p>
+  </div>
+
+  <div class="callout danger">
+    <div class="callout-title">Gemini AI Key Dependency</div>
+    <p>All AI processing (normalization, deduplication, embedding generation) depends on the GEMINI_API_KEY secret being configured correctly in Cloud Functions. If the key is missing or expired, uploads will fail at the processing stage. Topics will remain in "raw" status indefinitely and never appear in the dashboard.</p>
+  </div>
+
+  <div class="callout info">
+    <div class="callout-title">Public Upload Tab - No Auth</div>
+    <p>The upload tab intentionally requires no authentication so external agencies can submit data without Google accounts. However, the /api/topics endpoints for read/write by managers are admin-only. These two access tiers are separate by design.</p>
+  </div>
+
+  <h3>QA Checklist - Shorts Intel Hub</h3>
+  <h4>Upload Tab (Public - No Auth)</h4>
+  <ul class="checklist">
+    <li><div class="cb"></div>Verify the Upload tab is accessible without signing in<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Verify template download link works and shows correct required fields<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Upload a valid CSV - verify it appears in the upload history with correct record count<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Upload a CSV with missing required fields - verify a clear error message is shown<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Upload a CSV with an invalid reference link - verify validation catches it<div class="priority-med">MED</div></li>
+    <li><div class="cb"></div>Upload 21 times within an hour - verify the 21st is rejected with a user-friendly message<div class="priority-med">MED</div></li>
+    <li><div class="cb"></div>Upload a duplicate topic - verify deduplication prevents it from appearing twice<div class="priority-high">HIGH</div></li>
+  </ul>
+  <h4>Marketing Dashboard (Authenticated)</h4>
+  <ul class="checklist">
+    <li><div class="cb"></div>Verify non-google.com users cannot access the dashboard<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Market selector changes the topics displayed (JP, KR, IN, ID)<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Week selector shows correct available weeks from the database<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Top 10 shortlist in Track 1 is sorted by rank score (highest first)<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Approve button changes topic status to "approved" (verify in API or Firestore)<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Approved topic disappears from Track 2 (Pending) and moves to approved state<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Topics older than 3 weeks appear in Archive sub-tab, not in active tracks<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Stats row shows correct values (Trending Velocity, Top Demo Engagement, Approval Status)<div class="priority-med">MED</div></li>
+  </ul>
+  <h4>Scoring Settings</h4>
+  <ul class="checklist">
+    <li><div class="cb"></div>Default weights shown: Velocity 40%, Creation Rate 35%, Watchtime 25%<div class="priority-med">MED</div></li>
+    <li><div class="cb"></div>Adjust sliders and save - verify config is stored (check /api/scoring-config)<div class="priority-med">MED</div></li>
+    <li><div class="cb"></div>Confirm weights do NOT immediately change current rankings (takes effect next Monday)<div class="priority-med">MED</div></li>
+  </ul>
+  <h4>AI Processing &amp; Automation</h4>
+  <ul class="checklist">
+    <li><div class="cb"></div>Verify GEMINI_API_KEY secret is configured in Cloud Functions environment<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Upload a topic and verify it transitions from "raw" to "active" after processing<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Verify approval triggers an MCP Bridge push (check Agent Collective receives it)<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Confirm weekly scheduler fires on Monday 06:00 UTC (or test via manual trigger)<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Verify scheduler completes within 9-minute timeout for expected data volume<div class="priority-med">MED</div></li>
+  </ul>
+</div>
+
+
+<!-- ======================================================= -->
+<!-- TAB 4: ADMIN DASHBOARD & HUB PORTAL -->
+<!-- ======================================================= -->
+<div id="admin" class="tab-content">
+  <h2>Admin Dashboard &amp; Hub Portal <span class="sub">Monitoring, Navigation &amp; Toolbox Entry Points</span></h2>
+
+  <div class="tags">
+    <span class="tag tech">Vanilla HTML / JS</span>
+    <span class="tag tech">Firebase Firestore</span>
+    <span class="tag role">Programme Lead</span>
+    <span class="tag role">Toolbox Admin</span>
+  </div>
+
+  <h3>Hub Portal (hub.html)</h3>
+  <p><strong>URL:</strong> <code>/hub.html</code> | <strong>Purpose:</strong> The entry point for all internal users. It provides navigation to every tool in the Shorts Toolbox and a visual overview of how the workflow fits together.</p>
+
+  <h4>What It Contains</h4>
+  <div class="screens">
+    <div class="screen-card">
+      <div class="screen-name">Three-Track Navigation</div>
+      <div class="screen-desc">Three columns organizing the toolbox by purpose.</div>
+      <ul>
+        <li>Track 1 - Intelligence Gathering: Shorts Intel Hub</li>
+        <li>Track 2 - Campaign Creation: Agent Collective (ADK), Creative Generator, Template Stamper</li>
+        <li>Track 3 - Performance Optimisation: Shorts Brain, Campaign Learnings Agent (coming soon)</li>
+      </ul>
+    </div>
+    <div class="screen-card">
+      <div class="screen-name">How It Works Section</div>
+      <div class="screen-desc">Three-step workflow visualization showing the end-to-end pipeline.</div>
+      <ul>
+        <li>Step 1: Gather intelligence (Intel Hub)</li>
+        <li>Step 2: Create campaign (Agent Collective)</li>
+        <li>Step 3: Optimise performance (Shorts Brain)</li>
+      </ul>
+    </div>
+    <div class="screen-card">
+      <div class="screen-name">Admin Dashboard Link</div>
+      <div class="screen-desc">Top-right corner link to /admin.html for programme leads.</div>
+      <ul>
+        <li>Link label: "Admin Dashboard"</li>
+        <li>Dark theme, red accent design matching the toolbox aesthetic</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Admin Dashboard (admin.html)</h3>
+  <p><strong>URL:</strong> <code>/admin.html</code> | <strong>Purpose:</strong> Real-time KPI dashboard for the programme lead to monitor adoption, quality, and activity across all five tools in the toolbox.</p>
+
+  <h4>Dashboard Sections</h4>
+  <div class="screens">
+    <div class="screen-card">
+      <div class="screen-name">KPI Tiles (5 metrics)</div>
+      <div class="screen-desc">Top-of-page headline numbers.</div>
+      <ul>
+        <li>Campaigns Run (Agent Collective)</li>
+        <li>Generation Jobs (Creative Generator)</li>
+        <li>Renders Completed (Template Stamper)</li>
+        <li>Intel Hub Queries</li>
+        <li>Shorts Brain Queries</li>
+      </ul>
+    </div>
+    <div class="screen-card">
+      <div class="screen-name">Charts</div>
+      <div class="screen-desc">Visual breakdowns of pipeline activity.</div>
+      <ul>
+        <li>Campaign Runs by Week (stacked bar: Create, Full Campaign, Adapt)</li>
+        <li>Pipeline Mix (doughnut chart: distribution by pipeline type)</li>
+      </ul>
+    </div>
+    <div class="screen-card">
+      <div class="screen-name">Quality Metrics Cards</div>
+      <div class="screen-desc">Pass rates for automated quality checks in the pipeline.</div>
+      <ul>
+        <li>Brief Quality pass rate</li>
+        <li>Prompt Quality pass rate</li>
+        <li>Average quality loops per campaign</li>
+      </ul>
+    </div>
+    <div class="screen-card">
+      <div class="screen-name">Tool Activity Table</div>
+      <div class="screen-desc">Per-tool summary of activity and status.</div>
+      <ul>
+        <li>Columns: Tool Name, Sessions/Runs, Output Units, Last Active, Status</li>
+        <li>Covers all 5 tools: Agent Collective, Creative Generator, Template Stamper, Intel Hub, Shorts Brain</li>
+      </ul>
+    </div>
+    <div class="screen-card">
+      <div class="screen-name">Recent Campaign Runs</div>
+      <div class="screen-desc">Live feed of the 5 most recent campaign runs.</div>
+      <ul>
+        <li>Shows: Market, Pipeline Type, Duration, Quality Loops, Status</li>
+        <li>Newest first</li>
+      </ul>
+    </div>
+    <div class="screen-card">
+      <div class="screen-name">Filters</div>
+      <div class="screen-desc">Scoping controls for all dashboard data.</div>
+      <ul>
+        <li>Market dropdown (All / India / Indonesia / Japan / South Korea / AUNZ)</li>
+        <li>Date range: 7 days, 30 days, 90 days</li>
+      </ul>
+    </div>
+  </div>
+
+  <h4>How the Admin Dashboard Gets Its Data</h4>
+  <p>All tools in the toolbox log events to a shared Firestore collection: <code>/usage_events/{eventId}</code>. These events are immutable (create-only, no update or delete). The Admin Dashboard reads from this collection, filtered by market and date range, to populate all its KPIs and charts.</p>
+
+  <table>
+    <thead>
+      <tr><th>Tool</th><th>Events Logged</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><strong>Shorts Brain</strong></td><td>tab_viewed, snapshot_saved, snapshot_loaded</td></tr>
+      <tr><td><strong>Shorts Intel Hub</strong></td><td>query_completed, upload_completed, approval_event</td></tr>
+      <tr><td><strong>Agent Collective</strong></td><td>campaign_run_started, campaign_run_completed, pipeline_type</td></tr>
+      <tr><td><strong>Creative Generator</strong></td><td>job_created, job_completed</td></tr>
+      <tr><td><strong>Template Stamper</strong></td><td>render_started, render_completed</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Known Quirks &amp; Things to Watch</h3>
+
+  <div class="callout info">
+    <div class="callout-title">Admin Dashboard Shows Aggregated Events - Not Real-Time Per-User</div>
+    <p>The dashboard aggregates all usage_events. There is no per-user breakdown. If two users are using Shorts Brain simultaneously, their events are counted together. This is by design.</p>
+  </div>
+
+  <div class="callout warn">
+    <div class="callout-title">KPI Tiles Depend on Event Logging in All Tools</div>
+    <p>If any tool stops logging events to /usage_events (due to a deployment issue or code change), the corresponding KPI tile will appear as zero. Always verify event logging is working after any deployment to any tool.</p>
+  </div>
+
+  <div class="callout warn">
+    <div class="callout-title">Hub Portal Links Must Match Firebase Hosting Routes</div>
+    <p>Each tool card on hub.html links to a specific URL path. If the Firebase Hosting configuration changes a URL or adds/removes a rewrite rule, the hub.html links will break. Verify all navigation links after any hosting config change.</p>
+  </div>
+
+  <div class="callout info">
+    <div class="callout-title">"Campaign Learnings Agent" Placeholder</div>
+    <p>The Hub Portal shows a "Campaign Learnings Agent" card in the Performance track. This tool is marked "coming soon" and is not built. The link should either be disabled or clearly marked as unavailable. Do not test this as a functional feature.</p>
+  </div>
+
+  <h3>QA Checklist - Admin Dashboard &amp; Hub Portal</h3>
+  <h4>Hub Portal</h4>
+  <ul class="checklist">
+    <li><div class="cb"></div>All six working tool cards link to the correct URLs<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>"Campaign Learnings Agent" card is visually marked as coming soon and link is disabled or absent<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Admin Dashboard link in top-right navigates to /admin.html<div class="priority-med">MED</div></li>
+    <li><div class="cb"></div>How It Works section displays the 3-step flow correctly<div class="priority-med">MED</div></li>
+    <li><div class="cb"></div>Hub portal is accessible only to authenticated @google.com users<div class="priority-high">HIGH</div></li>
+  </ul>
+  <h4>Admin Dashboard</h4>
+  <ul class="checklist">
+    <li><div class="cb"></div>KPI tiles display non-zero values after at least one run of each tool<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Market filter changes all KPI tiles, charts, and the tool activity table<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Date range filter (7d / 30d / 90d) changes data scope correctly<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Campaign Runs by Week chart renders correctly with real data<div class="priority-med">MED</div></li>
+    <li><div class="cb"></div>Pipeline Mix doughnut chart renders correctly<div class="priority-med">MED</div></li>
+    <li><div class="cb"></div>Quality Metrics cards show correct pass rates from pipeline run data<div class="priority-med">MED</div></li>
+    <li><div class="cb"></div>Recent Campaign Runs feed shows the 5 most recent, newest first<div class="priority-med">MED</div></li>
+    <li><div class="cb"></div>All 5 tools appear in the Tool Activity Table with a non-zero "Last Active" value after use<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Dashboard is accessible only to authenticated @google.com users<div class="priority-high">HIGH</div></li>
+  </ul>
+</div>
+
+
+<!-- ======================================================= -->
+<!-- TAB 5: BACKEND & INFRASTRUCTURE -->
+<!-- ======================================================= -->
+<div id="backend" class="tab-content">
+  <h2>Backend &amp; Infrastructure <span class="sub">Cloud Functions, Firestore, Auth, and Deployment</span></h2>
+
+  <h3>Authentication &amp; Access Control</h3>
+
+  <p>All apps (except the Intel Hub upload tab) are protected by <strong>Firebase Authentication with Google SSO</strong>. Access is restricted to the <code>@google.com</code> domain plus a small set of explicitly listed external collaborators.</p>
+
+  <table>
+    <thead>
+      <tr><th>User Type</th><th>Access</th><th>Method</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>@google.com accounts</td><td>Full access to all apps</td><td>Google SSO + Firebase Auth</td></tr>
+      <tr><td>ivanho.wz@gmail.com</td><td>Full access (external collaborator)</td><td>Firebase Auth allowlist</td></tr>
+      <tr><td>Agency / External</td><td>Intel Hub Upload tab only</td><td>No auth required on that tab</td></tr>
+      <tr><td>All others</td><td>Denied</td><td>Firebase Auth blocks sign-in</td></tr>
+    </tbody>
+  </table>
+
+  <h4>Shorts Brain Admin Users (Data Ingestion Only)</h4>
+  <p>A separate in-app admin check gates the Upload tab in Shorts Brain. Hardcoded admin list:</p>
+  <ul>
+    <li>kanishak@google.com</li>
+    <li>danilpalma@google.com</li>
+    <li>ivanho.wz@gmail.com</li>
+    <li>ivho@google.com</li>
+  </ul>
+
+  <div class="callout warn">
+    <div class="callout-title">Admin List is Hardcoded in App.jsx</div>
+    <p>The Shorts Brain admin list is not stored in Firestore or a config file. It lives directly in the frontend source code. To add or remove an admin, the source code must be edited and a new build deployed. Flag this to the team as a maintenance risk if the list needs to change frequently.</p>
+  </div>
+
+  <h3>Firebase Cloud Functions</h3>
+
+  <div class="callout info">
+    <div class="callout-title">Cloud Functions vs Cloud Run</div>
+    <p>The <strong>Agent Collective</strong> and <strong>Creative Generator</strong> backends are deployed as <strong>Cloud Run services</strong> (FastAPI + Google ADK), not Cloud Functions. Their entry points are separate Cloud Run URLs. The functions below handle async job processing, API endpoints for Template Stamper and Intel Hub, and Shorts Brain memory. See the Cloud Run section below.</p>
+  </div>
+
+  <table>
+    <thead>
+      <tr><th>Function Name</th><th>Trigger</th><th>Purpose</th><th>Memory / Timeout</th></tr>
+    </thead>
+    <tbody>
+      <tr><td colspan="4" style="color:var(--accent2);font-size:11px;text-transform:uppercase;letter-spacing:0.6px;padding:10px 14px 4px;">Shorts Brain</td></tr>
+      <tr><td><strong>sbSaveSnapshot</strong></td><td>HTTPS Callable</td><td>Saves compressed holdback data to Firestore chunks</td><td>Default / Default</td></tr>
+      <tr><td><strong>sbLoadSnapshots</strong></td><td>HTTPS Callable</td><td>Retrieves snapshot metadata list</td><td>Default / Default</td></tr>
+      <tr><td><strong>sbDeleteSnapshot</strong></td><td>HTTPS Callable</td><td>Deletes a snapshot and its chunk documents</td><td>Default / Default</td></tr>
+      <tr><td colspan="4" style="color:var(--accent2);font-size:11px;text-transform:uppercase;letter-spacing:0.6px;padding:10px 14px 4px;">Shorts Intel Hub</td></tr>
+      <tr><td><strong>shortsIntelApi</strong></td><td>HTTPS Request</td><td>Express-based REST API for all /api/* routes</td><td>512MiB / 60s</td></tr>
+      <tr><td><strong>shortsIntelWeeklyRefresh</strong></td><td>Cloud Scheduler (Mon 06:00 UTC)</td><td>Weekly topic ranking + status transition run</td><td>1GiB / 540s</td></tr>
+      <tr><td colspan="4" style="color:var(--accent2);font-size:11px;text-transform:uppercase;letter-spacing:0.6px;padding:10px 14px 4px;">Creative Generator (Job Processing)</td></tr>
+      <tr><td><strong>processJob</strong></td><td>Firestore trigger: jobs/{jobId}.onCreate</td><td>Main async job processor - calls Vertex AI for image/video generation</td><td>Default / Default</td></tr>
+      <tr><td><strong>imageToVideoJob</strong></td><td>HTTPS Callable</td><td>Image-to-video conversion via Veo (needs GOOGLE_API_KEY)</td><td>Default / Default</td></tr>
+      <tr><td><strong>regenerateJob</strong></td><td>HTTPS Callable</td><td>Re-trigger generation for a specific job</td><td>Default / Default</td></tr>
+      <tr><td><strong>upscaleJob</strong></td><td>HTTPS Callable</td><td>Upscale a completed image asset</td><td>Default / Default</td></tr>
+      <tr><td><strong>expandImageJob</strong></td><td>HTTPS Callable</td><td>Expand image canvas (outpainting)</td><td>Default / Default</td></tr>
+      <tr><td><strong>iterateJob</strong></td><td>HTTPS Callable</td><td>Create a variation of an existing job</td><td>Default / Default</td></tr>
+      <tr><td><strong>callGeminiAgent</strong></td><td>HTTPS Callable</td><td>Secure server-side Gemini API proxy (needs GOOGLE_API_KEY)</td><td>Default / Default</td></tr>
+      <tr><td><strong>pollVideoOperations</strong></td><td>Pub/Sub: video-operations-poll</td><td>Polls Veo long-running operations for status updates</td><td>Default / Default</td></tr>
+      <tr><td><strong>importPrompt</strong></td><td>HTTPS Request (MCP Bridge)</td><td>Import prompts from external sources into CG</td><td>Default / Default</td></tr>
+      <tr><td><strong>downloadAsset</strong></td><td>HTTPS Request</td><td>CORS-safe proxy for downloading GCS assets</td><td>Default / Default</td></tr>
+      <tr><td colspan="4" style="color:var(--accent2);font-size:11px;text-transform:uppercase;letter-spacing:0.6px;padding:10px 14px 4px;">Template Stamper</td></tr>
+      <tr><td><strong>tsGetTemplates</strong></td><td>HTTPS Request</td><td>List all available Remotion templates</td><td>Default / Default</td></tr>
+      <tr><td><strong>tsGetTemplate</strong></td><td>HTTPS Request</td><td>Get template detail + slot definitions</td><td>Default / Default</td></tr>
+      <tr><td><strong>tsCreateJob</strong></td><td>HTTPS Request</td><td>Create a new render job (templateId + assetMappings + market)</td><td>Default / Default</td></tr>
+      <tr><td><strong>tsGetJob</strong></td><td>HTTPS Request</td><td>Poll render job status</td><td>Default / Default</td></tr>
+      <tr><td><strong>tsGetJobHistory</strong></td><td>HTTPS Request</td><td>List historical render jobs</td><td>Default / Default</td></tr>
+      <tr><td><strong>tsPreprocessAsset</strong></td><td>HTTPS Request</td><td>Validate and prepare uploaded assets before render</td><td>Default / Default</td></tr>
+      <tr><td><strong>tsTriggerRemotionRender</strong></td><td>Firestore trigger: jobs/{jobId}</td><td>Fires when a job document is created; calls Remotion Lambda on AWS</td><td>Default / Default</td></tr>
+      <tr><td><strong>tsReceiveAssets</strong></td><td>HTTPS Request (MCP Bridge)</td><td>Receives asset handoff from Creative Generator via MCP</td><td>Default / Default</td></tr>
+      <tr><td><strong>tsReceiveHandoff</strong></td><td>HTTPS Request (routed via Firebase Hosting: /template-stamper/api/receiveHandoff)</td><td>Entry point for Creative Generator template handoff POST</td><td>Default / Default</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Cloud Run Services</h3>
+  <table>
+    <thead>
+      <tr><th>Service Name</th><th>Tool</th><th>Runtime</th><th>Resources</th><th>Notes</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>agent-collective-v2</strong></td>
+        <td>Agent Collective</td>
+        <td>Python (FastAPI + Google ADK)</td>
+        <td>2 CPU / 2GiB / 600s timeout</td>
+        <td>Secret: GOOGLE_API_KEY=GEMINI_API_KEY:latest. Min 0 instances (cold start possible).</td>
+      </tr>
+      <tr>
+        <td><strong>creative-generator-v2</strong></td>
+        <td>Creative Generator</td>
+        <td>Python (FastAPI + Google ADK)</td>
+        <td>2 CPU / 2GiB / 600s timeout</td>
+        <td>Env: GCS_BUCKET, GCP_PROJECT_ID, VERTEX_AI_LOCATION. Secret: GOOGLE_API_KEY. Min 0 instances.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout warn">
+    <div class="callout-title">Cold Start Warning for Cloud Run Services</div>
+    <p>Both Agent Collective and Creative Generator are configured with <code>min-instances=0</code>, meaning they scale to zero when idle. The first request after a period of inactivity may take 10-30 seconds while the container spins up. If the pipeline appears to hang on first use, wait a moment before assuming it has failed.</p>
+  </div>
+
+  <h3>Firestore Collections Reference</h3>
+
+  <table>
+    <thead>
+      <tr><th>Collection Path</th><th>Used By</th><th>Access</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>/shortsbrain_data/{docId}</code></td><td>Shorts Brain</td><td>Read/Write (auth users)</td></tr>
+      <tr><td><code>/artifacts/shorts-brain-v2/public/data/snapshots/{snapId}</code></td><td>Shorts Brain</td><td>Read/Write (auth users)</td></tr>
+      <tr><td><code>/weekly_topics/{topicId}</code></td><td>Intel Hub</td><td>Read (auth), Write (Cloud Functions only)</td></tr>
+      <tr><td><code>/shorts_intel_hub/{docId}</code></td><td>Intel Hub</td><td>Read/Write (auth users)</td></tr>
+      <tr><td><code>/shorts_intel_hub_archive/{archiveId}</code></td><td>Intel Hub</td><td>Read/Write (auth users)</td></tr>
+      <tr><td><code>/usage_events/{eventId}</code></td><td>All tools</td><td>Read/Create (auth). No update or delete (immutable)</td></tr>
+      <tr><td><code>/jobs/{jobId}</code></td><td>Creative Generator</td><td>Read/Create (auth)</td></tr>
+      <tr><td><code>/gallery/{galleryId}</code></td><td>Creative Generator</td><td>Read/Create/Delete (auth)</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Cloud SQL (Shorts Intel Hub Only)</h3>
+  <p>The Intel Hub uses a PostgreSQL database with the pgvector extension for AI-powered deduplication. This is separate from Firestore.</p>
+  <ul>
+    <li>Engine: PostgreSQL</li>
+    <li>Extension: pgvector (768-dimension embeddings for cosine similarity deduplication)</li>
+    <li>Key table: <code>topics</code> (stores all topic records with embeddings)</li>
+    <li>Indexes: on (market, status), on (created_at DESC), on embedding (IVFFLAT for fast vector search)</li>
+  </ul>
+
+  <h3>Firebase Hosting Configuration</h3>
+  <p>All web apps are served from Firebase Hosting under the same project: <code>v3-creative-engine</code>. Each single-page app (React build) needs a rewrite rule so that deep links resolve to the correct <code>index.html</code>.</p>
+
+  <div class="callout warn">
+    <div class="callout-title">SPA Rewrite Rules Must Be in Place for All Five Apps</div>
+    <p>Each React/SPA app needs a rewrite rule in firebase.json pointing all requests under its path to its index.html. Without this, refreshing the page on any sub-route returns a 404. The five apps that need this rule are: <strong>Shorts Brain</strong> (/shorts-brain/**), <strong>Shorts Intel Hub</strong> (/shorts-intel-hub/**), <strong>Agent Collective</strong> (/agent-collective-v2/**), <strong>Creative Generator</strong> (/creative-generator-v2/**), and <strong>Template Stamper</strong> (/template-stamper/**). Additionally, <code>/template-stamper/api/receiveHandoff</code> must be routed to the <code>tsReceiveHandoff</code> Cloud Function before the catch-all SPA rule.</p>
+  </div>
+
+  <h3>Environment Variables &amp; Secrets</h3>
+  <table>
+    <thead>
+      <tr><th>Secret / Variable</th><th>Used By</th><th>Required?</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>GEMINI_API_KEY</code> (Secret Manager)</td><td>Intel Hub Cloud Functions (AI normalization, embeddings)</td><td>Yes - topic processing will fail without it</td></tr>
+      <tr><td><code>GOOGLE_API_KEY</code> (Secret Manager, value = GEMINI_API_KEY secret)</td><td>Agent Collective Cloud Run, Creative Generator Cloud Run, callGeminiAgent + imageToVideoJob + pollVideoOperations Cloud Functions</td><td>Yes - pipeline will not run without it</td></tr>
+      <tr><td><code>GCS_BUCKET</code></td><td>Creative Generator Cloud Run</td><td>Yes - asset storage will fail</td></tr>
+      <tr><td><code>GCP_PROJECT_ID</code></td><td>Creative Generator Cloud Run</td><td>Yes</td></tr>
+      <tr><td><code>VERTEX_AI_LOCATION</code></td><td>Creative Generator Cloud Run</td><td>Yes - Vertex AI calls will fail</td></tr>
+      <tr><td><code>TEMPLATE_STAMPER_URL</code></td><td>Creative Generator Cloud Run (template handoff POST)</td><td>Yes if using template mode - handoff will fail silently</td></tr>
+      <tr><td>AWS credentials / Remotion Lambda config</td><td>Template Stamper Cloud Functions (tsTriggerRemotionRender)</td><td>Yes - video rendering will fail</td></tr>
+      <tr><td>Firebase project config (apiKey, authDomain, etc.)</td><td>All frontend apps</td><td>Yes - Firebase auth will not initialise</td></tr>
+      <tr><td>Cloud SQL connection string / credentials</td><td>Intel Hub Cloud Functions</td><td>Yes - topic storage and deduplication will fail</td></tr>
+      <tr><td><code>VITE_API_BASE</code></td><td>Creative Generator frontend (points to Cloud Run URL)</td><td>Yes - frontend cannot reach the generation backend</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Deployment Checklist - Full QA Team Reference</h3>
+  <h4>Pre-Deployment Verification</h4>
+  <ul class="checklist">
+    <li><div class="cb"></div>Firebase project config is set correctly in all frontend builds (not pointing at a dev project)<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>GEMINI_API_KEY secret is set in Cloud Functions environment (not expired)<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>GOOGLE_API_KEY secret is set in Cloud Functions AND in Agent Collective + Creative Generator Cloud Run environments<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Cloud SQL connection credentials are configured in Cloud Functions<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Firestore security rules are deployed (verify with firebase deploy --only firestore:rules)<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Firebase Hosting rewrite rules exist for all five SPAs: shorts-brain, shorts-intel-hub, agent-collective-v2, creative-generator-v2, template-stamper<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Cloud Scheduler job for weekly Intel Hub refresh is enabled and set to Monday 06:00 UTC<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Creative Generator Cloud Run service is deployed and VITE_API_BASE in the frontend build points to its URL<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Agent Collective Cloud Run service is deployed and reachable from the frontend<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>AWS credentials and Remotion Lambda deployment are in place for Template Stamper<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>At least one template document is seeded in the Firestore templates collection<div class="priority-high">HIGH</div></li>
+  </ul>
+  <h4>Post-Deployment Smoke Tests</h4>
+  <ul class="checklist">
+    <li><div class="cb"></div>Sign in with a @google.com account - verify auth works<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Sign in with a non-allowlisted account - verify access is denied<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Navigate to hub.html - verify all tool links load correctly<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Open Shorts Brain - verify it loads the latest snapshot<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Open Intel Hub - verify dashboard loads with market selector<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Open Intel Hub Upload tab without auth - verify it is accessible<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Open Admin Dashboard - verify KPI tiles show data (or zeros if no activity yet)<div class="priority-med">MED</div></li>
+    <li><div class="cb"></div>Open Agent Collective - verify it loads, market dropdown is present, KB panel shows documents<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Open Creative Generator - verify manifest upload zone renders correctly<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Open Template Stamper - verify home page and /generate page load<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Refresh page inside Shorts Brain (not home page) - verify no 404<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Refresh page inside Intel Hub (not home page) - verify no 404<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Refresh page inside Agent Collective - verify no 404<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Refresh page inside Creative Generator - verify no 404<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Refresh page inside Template Stamper - verify no 404<div class="priority-high">HIGH</div></li>
+  </ul>
+</div>
+
+
+<!-- ======================================================= -->
+<!-- TAB 6: AGENT COLLECTIVE -->
+<!-- ======================================================= -->
+<div id="agent-collective" class="tab-content">
+  <h2>Agent Collective <span class="sub">AI-Powered Campaign Creation Pipeline</span></h2>
+
+  <div class="tags">
+    <span class="tag tech">Vanilla JS + SSE</span>
+    <span class="tag tech">Google ADK</span>
+    <span class="tag tech">Gemini Flash / Pro</span>
+    <span class="tag tech">FastAPI</span>
+    <span class="tag role">Marketing Strategists</span>
+    <span class="tag role">Creative Directors</span>
+  </div>
+
+  <p><strong>What it does:</strong> Agent Collective is a multi-agent AI pipeline that turns a natural language campaign request into a full creative package: a marketing brief, creative storyboards, and a production-ready generation manifest for YouTube Shorts. It supports three pipeline paths depending on the user's starting point.</p>
+
+  <h3>Three Pipeline Paths</h3>
+  <table>
+    <thead>
+      <tr><th>Path</th><th>When to Use</th><th>Phases</th><th>Output</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Create</strong></td>
+        <td>Starting from scratch with a new campaign idea</td>
+        <td>Discovery → Brief → Creative → Production (4 phases, 14 agents)</td>
+        <td>generation_manifest.json</td>
+      </tr>
+      <tr>
+        <td><strong>Adapt</strong></td>
+        <td>User has an existing video asset to adapt for new audiences</td>
+        <td>Analysis → Strategy → Delivery (3 phases, 14 agents)</td>
+        <td>variation_output_complete.json</td>
+      </tr>
+      <tr>
+        <td><strong>Full Campaign</strong></td>
+        <td>Create a new campaign AND adapt it for 4 targeted audiences in one run</td>
+        <td>Create path (4 phases) + FC Pre-Strategy + FC Strategy + FC Execution</td>
+        <td>full_campaign_manifest.json (5-audience unified)</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Application Screens &amp; Features</h3>
+
+  <div class="screens">
+    <div class="screen-card">
+      <div class="screen-name">Main Chat Interface</div>
+      <div class="screen-desc">The primary workspace. A chat-style conversation where the user gives instructions and the pipeline responds with structured output.</div>
+      <ul>
+        <li>Left sidebar: Market selector + Knowledge Base panel</li>
+        <li>Center: Conversation feed with markdown-rendered messages</li>
+        <li>Bottom: File attachment button, text input, send button</li>
+        <li>Phase indicator: Real-time label showing current pipeline phase</li>
+        <li>Download buttons appear after each phase completes</li>
+      </ul>
+    </div>
+    <div class="screen-card">
+      <div class="screen-name">Knowledge Base Panel (Sidebar)</div>
+      <div class="screen-desc">Collapsible panel showing the documents the pipeline reads from per market.</div>
+      <ul>
+        <li>Global documents section + market-specific section</li>
+        <li>File operations: View, Upload (requires passcode), Delete (requires passcode)</li>
+        <li>Intel Hub briefs older than 14 days are automatically excluded</li>
+        <li>File viewer modal with content preview</li>
+      </ul>
+    </div>
+    <div class="screen-card">
+      <div class="screen-name">Error Overlay</div>
+      <div class="screen-desc">Full-screen error card shown when the pipeline fails or stalls.</div>
+      <ul>
+        <li>"Start over" button clears the session</li>
+        <li>Shown for: network errors, stalled pipeline, missing responses</li>
+        <li>Stall message: "the pipeline may have stalled"</li>
+      </ul>
+    </div>
+    <div class="screen-card">
+      <div class="screen-name">File Upload</div>
+      <div class="screen-desc">Attach reference files to a message for the Adapt or Full Campaign paths.</div>
+      <ul>
+        <li>Accepted: MP4, MOV, AVI, PNG, JPG, PDF, TXT, MD</li>
+        <li>Size limit: 50 MB per file</li>
+        <li>Alert shown if file exceeds limit</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Core User Journeys</h3>
+
+  <h4>Journey 1: Create Path (New Campaign from Scratch)</h4>
+  <div class="flow">
+    <div class="flow-step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <strong>Select market from dropdown</strong>
+        <span>Choose from Korea, India, Japan, or Indonesia. The dropdown locks immediately after the session starts and cannot be changed mid-run.</span>
+      </div>
+    </div>
+    <div class="flow-arrow">&#8595;</div>
+    <div class="flow-step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <strong>Type a natural language campaign request and send</strong>
+        <span>Example: "Create a summer fitness campaign targeting Gen Z women in Korea." The pipeline starts. Phase indicator shows "Analyzing..." with rotating sub-labels.</span>
+      </div>
+    </div>
+    <div class="flow-arrow">&#8595;</div>
+    <div class="flow-step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <strong>Phase 1 - Discovery: Three concepts presented (A, B, C)</strong>
+        <span>The pipeline reads the knowledge base, generates three creative directions, and presents them in the chat. User selects a concept (e.g. "Go with B") and can add optional feedback.</span>
+      </div>
+    </div>
+    <div class="flow-arrow">&#8595;</div>
+    <div class="flow-step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <strong>Phase 2 - Brief: Marketing brief generated with quality loop</strong>
+        <span>A full marketing brief is written and checked by a quality agent (up to 5 iteration loops). When approved, the brief is presented in the chat with a download button for marketing_brief.md.</span>
+      </div>
+    </div>
+    <div class="flow-arrow">&#8595;</div>
+    <div class="flow-step">
+      <div class="step-num">5</div>
+      <div class="step-body">
+        <strong>Phase 3 - Creative: Storyboard package presented</strong>
+        <span>A creative director agent produces the storyboard and scene structure. Presented in the chat with a download button for creative_package.md.</span>
+      </div>
+    </div>
+    <div class="flow-arrow">&#8595;</div>
+    <div class="flow-step">
+      <div class="step-num">6</div>
+      <div class="step-body">
+        <strong>Phase 4 - Production: Generation manifest produced</strong>
+        <span>AI image and video generation prompts are written, quality-checked (up to 5 loops), and packaged into generation_manifest.json. Download button appears. This file is the input to Creative Generator.</span>
+      </div>
+    </div>
+  </div>
+
+  <h4>Journey 2: Adapt Path (Existing Asset)</h4>
+  <div class="flow">
+    <div class="flow-step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <strong>Attach a video file and describe the adaptation goal</strong>
+        <span>Example: "Adapt this video for four APAC audiences." File must be under 50 MB. Accepted formats: MP4, MOV, AVI.</span>
+      </div>
+    </div>
+    <div class="flow-arrow">&#8595;</div>
+    <div class="flow-step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <strong>Analysis phase: Scene structure decoded</strong>
+        <span>Three agents run in parallel (kb_analyzer, preprocessor, deconstructor), then audience_mapper identifies the best demographic angles. Results presented in chat.</span>
+      </div>
+    </div>
+    <div class="flow-arrow">&#8595;</div>
+    <div class="flow-step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <strong>Strategy phase: Adaptation strategy per audience</strong>
+        <span>strategy_generator produces an audience-specific approach. Presented for review.</span>
+      </div>
+    </div>
+    <div class="flow-arrow">&#8595;</div>
+    <div class="flow-step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <strong>Delivery phase: Up to 4 variation manifests generated in parallel</strong>
+        <span>One variation_generator per audience runs in parallel. A consistency checker validates all variations. Final output: variation_output_complete.json with download button.</span>
+      </div>
+    </div>
+  </div>
+
+  <h4>Journey 3: Full Campaign Path (Create + Adapt in One Run)</h4>
+  <p>The Full Campaign path extends the Create path. After Phase 4 (Production) delivers the gen pop manifest, the user opts to continue adapting it for up to four targeted audiences. Three additional phases run automatically using the creative package already produced.</p>
+  <div class="flow">
+    <div class="flow-step">
+      <div class="step-num">1-6</div>
+      <div class="step-body">
+        <strong>Phases 1-4 run identically to the Create Path</strong>
+        <span>Discovery → Brief → Creative → Production. The gen pop generation_manifest.json is produced and a download button appears. Instead of stopping here, the user sends a message indicating they want to adapt for all audiences (e.g. "Yes, adapt for all four audiences").</span>
+      </div>
+    </div>
+    <div class="flow-arrow">&#8595;</div>
+    <div class="flow-step">
+      <div class="step-num">7</div>
+      <div class="step-body">
+        <strong>FC Pre-Strategy: Creative bridge + KB analysis run in parallel</strong>
+        <span>fc_creative_bridge reads the existing creative package; fc_kb_analyzer re-reads the market KB for audience-specific insights. Both run simultaneously. fc_audience_mapper then identifies the four best demographic audience angles. fc_analysis_presenter summarises the findings in chat.</span>
+      </div>
+    </div>
+    <div class="flow-arrow">&#8595;</div>
+    <div class="flow-step">
+      <div class="step-num">8</div>
+      <div class="step-body">
+        <strong>FC Strategy: Audience-specific adaptation strategy</strong>
+        <span>fc_strategy_generator produces a tailored approach for each of the four targeted audiences. fc_strategy_presenter shows the strategy in chat for review before proceeding.</span>
+      </div>
+    </div>
+    <div class="flow-arrow">&#8595;</div>
+    <div class="flow-step">
+      <div class="step-num">9</div>
+      <div class="step-body">
+        <strong>FC Execution: Up to 4 variation generators run in parallel</strong>
+        <span>One fc_variation_generator per audience runs simultaneously. A consistency checker validates all variations against the original creative package. If any fail, fc_variation_regenerator corrects them. fc_results_presenter builds the unified 5-audience manifest (gen pop + 4 targeted) and saves full_campaign_manifest.json.</span>
+      </div>
+    </div>
+    <div class="flow-arrow">&#8595;</div>
+    <div class="flow-step">
+      <div class="step-num">10</div>
+      <div class="step-body">
+        <strong>Download full_campaign_manifest.json</strong>
+        <span>A single download button appears for the unified manifest. This file contains all five audiences and is the direct input to Creative Generator for a full multi-audience generation run.</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout info">
+    <div class="callout-title">Full Campaign vs Create + Separate Adapt</div>
+    <p>The Full Campaign path uses the creative package from the current session directly as FC Pre-Strategy input - no file upload needed. Running a separate Adapt session requires the user to manually attach the reference video. Full Campaign is the preferred route when the user intends to produce all audience variants in one sitting.</p>
+  </div>
+
+  <h3>What the User Sees During Processing (SSE Stream)</h3>
+  <p>Only output from "presenter" agents is shown in the chat. All other agents (analyzers, generators, checkers) run silently. The phase indicator updates in real-time.</p>
+  <table>
+    <thead>
+      <tr><th>Phase</th><th>Indicator Label</th><th>Rotating Sub-labels</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Discovery</td><td>Analyzing...</td><td>"Reading between the lines...", "Picking up nuances...", "Connecting dots..."</td></tr>
+      <tr><td>Brief</td><td>Generating...</td><td>"Thinking it through...", "Getting words right...", "Almost there..."</td></tr>
+      <tr><td>Creative</td><td>Developing creative concepts...</td><td>"Picturing scenes...", "Finding angle...", "Building it out..."</td></tr>
+      <tr><td>Production</td><td>Creating production prompts...</td><td>"Getting specific...", "Adding detail...", "Nearly ready..."</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Downloadable Artifacts</h3>
+  <table>
+    <thead>
+      <tr><th>File</th><th>Phase</th><th>Used By</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>marketing_brief.md</code></td><td>Brief (Phase 2)</td><td>Human review / client-facing</td></tr>
+      <tr><td><code>creative_package.md</code></td><td>Creative (Phase 3)</td><td>Human review / creative team</td></tr>
+      <tr><td><code>generation_manifest.json</code></td><td>Production (Phase 4)</td><td>Creative Generator input</td></tr>
+      <tr><td><code>full_campaign_manifest.json</code></td><td>Full Campaign path</td><td>Creative Generator input (5-audience)</td></tr>
+      <tr><td><code>variation_output_complete.json</code></td><td>Adapt path</td><td>Creative Generator input</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Backend Configuration &amp; Limits</h3>
+  <table>
+    <thead>
+      <tr><th>Constraint</th><th>Value</th><th>Notes</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>File upload size</td><td>50 MB</td><td>Client-side check; alert shown if exceeded</td></tr>
+      <tr><td>Quality loop max iterations</td><td>5</td><td>Brief checker + Prompt checker both cap at 5</td></tr>
+      <tr><td>Template catalog entries</td><td>1</td><td>Only "Photo to Video" (veo_shorts_v1) currently</td></tr>
+      <tr><td>Concept options</td><td>3 (A, B, C)</td><td>Always exactly 3 in Discovery phase</td></tr>
+      <tr><td>KB intel brief max age</td><td>14 days</td><td>Older Intel Hub briefs excluded automatically</td></tr>
+      <tr><td>Session latest file TTL</td><td>24 hours</td><td>Auto-pruned on next run creation</td></tr>
+      <tr><td>Markets supported</td><td>4</td><td>Korea, India, Japan, Indonesia</td></tr>
+      <tr><td>Full Campaign audiences</td><td>Up to 4</td><td>Variation generators run in parallel</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Known Quirks &amp; Things to Watch</h3>
+
+  <div class="callout warn">
+    <div class="callout-title">Market Lock - Cannot Change Mid-Session</div>
+    <p>The market dropdown disables the moment the first message is sent. If the user selects the wrong market, the only fix is to start a completely new session. There is no mid-session market switch.</p>
+  </div>
+
+  <div class="callout warn">
+    <div class="callout-title">Concurrent Session File Collision</div>
+    <p>If two users run the pipeline for the same market simultaneously, market-level "latest_*" files in the output folder can overwrite each other. Session-keyed copies are the fallback, but the "latest" pointer may be wrong. Avoid running two sessions for the same market at the same time.</p>
+  </div>
+
+  <div class="callout warn">
+    <div class="callout-title">Stall Detection - Manual Recovery Only</div>
+    <p>If the SSE stream completes but no renderable output was produced, the phase indicator shows a stall warning. There is no automatic retry. The user must click "Start over" and re-run the pipeline from scratch.</p>
+  </div>
+
+  <div class="callout info">
+    <div class="callout-title">Template Mode - Overlaid on Create and Full Campaign</div>
+    <p>If the campaign's featured Shorts Creation Tool matches an entry in the TEMPLATE_CATALOG (currently only "Photo to Video"), the pipeline automatically sets a template_schema in session state. All downstream agents use it to constrain scene types and assign Remotion slot IDs. The manifest produced will include a template_id field, which triggers a direct handoff to Template Stamper when loaded in Creative Generator.</p>
+  </div>
+
+  <div class="callout info">
+    <div class="callout-title">Gemini Output Wrapping - Automatically Stripped</div>
+    <p>Gemini sometimes wraps JSON responses in markdown code fences (```json ... ```). The pipeline strips these automatically via internal parsing. This is expected and not a bug, but if an agent output looks malformed in the chat, the raw response may have an unexpected wrapping format.</p>
+  </div>
+
+  <div class="callout danger">
+    <div class="callout-title">KB Passcode Required for File Management</div>
+    <p>Uploading or deleting KB files requires a passcode. The passcode is not stored in the codebase. If the passcode is lost, KB file management is blocked entirely. Ensure the passcode is documented securely before deploying to production.</p>
+  </div>
+
+  <h3>QA Checklist - Agent Collective</h3>
+  <h4>Setup &amp; Session</h4>
+  <ul class="checklist">
+    <li><div class="cb"></div>Market dropdown shows all 4 markets (Korea, India, Japan, Indonesia)<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Market dropdown locks after first message is sent<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>KB panel loads and shows global + market-specific documents<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Intel Hub briefs older than 14 days are not listed in the KB panel<div class="priority-med">MED</div></li>
+  </ul>
+  <h4>Create Path</h4>
+  <ul class="checklist">
+    <li><div class="cb"></div>Phase indicator updates through all 4 phases without freezing<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Exactly 3 concepts (A, B, C) are presented in Discovery phase<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>User can select a concept and add feedback - pipeline proceeds correctly<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Brief quality loop runs and produces an approved brief (max 5 iterations)<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Download button for marketing_brief.md appears after Phase 2<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Download button for creative_package.md appears after Phase 3<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Download button for generation_manifest.json appears after Phase 4<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>generation_manifest.json is valid JSON and loads correctly in Creative Generator<div class="priority-high">HIGH</div></li>
+  </ul>
+  <h4>Full Campaign Path (Create + Adapt)</h4>
+  <ul class="checklist">
+    <li><div class="cb"></div>After Phase 4 completes, pipeline accepts a "continue to adapt" message and proceeds to FC Pre-Strategy<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>FC Pre-Strategy: fc_creative_bridge and fc_kb_analyzer run in parallel before fc_audience_mapper<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>FC Strategy presents the audience-specific approach in chat before proceeding<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>FC Execution: up to 4 fc_variation_generators run in parallel<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Consistency checker runs after all variation generators complete<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>full_campaign_manifest.json download appears at the end (contains gen pop + 4 targeted audiences)<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>full_campaign_manifest.json loads correctly in Creative Generator and shows 5 audience tabs<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Verify generation_manifest.json (gen pop only) is also available as a separate download from Phase 4<div class="priority-med">MED</div></li>
+  </ul>
+  <h4>Adapt Path</h4>
+  <ul class="checklist">
+    <li><div class="cb"></div>File attachment button accepts MP4, MOV, AVI under 50 MB<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Alert shown if file exceeds 50 MB<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>All 3 parallel analysis agents complete before audience_mapper runs<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Up to 4 variation generators run in parallel during Delivery phase<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>variation_output_complete.json download appears at end<div class="priority-high">HIGH</div></li>
+  </ul>
+  <h4>Error Handling</h4>
+  <ul class="checklist">
+    <li><div class="cb"></div>Error overlay appears on network failure with "Start over" button<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Stall message appears if stream completes with no renderable output<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>KB passcode modal appears when trying to upload/delete a KB file<div class="priority-med">MED</div></li>
+    <li><div class="cb"></div>Incorrect KB passcode shows alert and does not grant access<div class="priority-med">MED</div></li>
+  </ul>
+</div>
+
+
+<!-- ======================================================= -->
+<!-- TAB 7: CREATIVE GENERATOR -->
+<!-- ======================================================= -->
+<div id="creative-generator" class="tab-content">
+  <h2>Creative Generator <span class="sub">Manifest-Driven Batch Asset Generation</span></h2>
+
+  <div class="tags">
+    <span class="tag tech">React 18 (JS)</span>
+    <span class="tag tech">Google ADK</span>
+    <span class="tag tech">Vertex AI (Imagen 3.0 + Veo 3.1)</span>
+    <span class="tag tech">Google Cloud Storage</span>
+    <span class="tag role">Operations Teams</span>
+    <span class="tag role">Creative QA</span>
+  </div>
+
+  <p><strong>What it does:</strong> Creative Generator takes the <code>generation_manifest.json</code> produced by Agent Collective and executes it at scale, calling Vertex AI to generate AI images (Imagen 3.0) and videos (Veo 3.1) for each scene and audience. It manages the generation queue, tracks job status in real time, and hands off the final assets to Template Stamper when a template is in use.</p>
+
+  <h3>How It Connects to Agent Collective</h3>
+  <p>The input to Creative Generator is always a JSON manifest file produced by Agent Collective. There are two manifest types, determined by which pipeline path was run:</p>
+  <table>
+    <thead>
+      <tr><th>Manifest File</th><th>Source Path</th><th>Contains</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>generation_manifest.json</code></td><td>Create path</td><td>Reference images + jobs for one audience (GenPop)</td></tr>
+      <tr><td><code>full_campaign_manifest.json</code></td><td>Full Campaign path</td><td>Reference images + jobs for all 5 audiences</td></tr>
+      <tr><td><code>variation_output_complete.json</code></td><td>Adapt path</td><td>Jobs for up to 4 adapted audiences (no refs)</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Application Screens &amp; Features</h3>
+
+  <div class="screens">
+    <div class="screen-card">
+      <div class="screen-name">Manifest Uploader (Initial Screen)</div>
+      <div class="screen-desc">The starting point. User drops the manifest JSON file here to begin.</div>
+      <ul>
+        <li>Drag-and-drop zone for JSON files</li>
+        <li>File picker fallback</li>
+        <li>Parses and validates the manifest on upload</li>
+        <li>Validation errors shown if manifest is malformed or version mismatched</li>
+      </ul>
+    </div>
+    <div class="screen-card">
+      <div class="screen-name">Reference View</div>
+      <div class="screen-desc">Shows all reference images that must be generated before job generation begins.</div>
+      <ul>
+        <li>One SubjectCard per reference: thumbnail, ref_id, subject_label, status badge</li>
+        <li>"Generate" button per reference</li>
+        <li>"Generate All" button for batch kick-off</li>
+        <li>Jobs are gated behind references - cannot generate jobs until all refs complete</li>
+      </ul>
+    </div>
+    <div class="screen-card">
+      <div class="screen-name">Job View (Audience/Deliverable Selection)</div>
+      <div class="screen-desc">Filtered view of generation jobs by audience or deliverable group.</div>
+      <ul>
+        <li>Sidebar tabs: Refs + dynamic audience/deliverable tabs + "All Jobs"</li>
+        <li>Table/card layout: Job ID, asset type (image/video), scene_id, status, aspect ratio</li>
+        <li>"Generate" button per job</li>
+        <li>"View Prompt" modal shows full prompt + negative_prompt</li>
+      </ul>
+    </div>
+    <div class="screen-card">
+      <div class="screen-name">Lightbox (Right Panel)</div>
+      <div class="screen-desc">Full preview of the selected image or video asset.</div>
+      <ul>
+        <li>Navigation arrows (next/prev through all items)</li>
+        <li>Metadata: ID, status, timestamps</li>
+        <li>Prompt and reference info displayed</li>
+        <li>Download button (only when status is completed)</li>
+      </ul>
+    </div>
+    <div class="screen-card">
+      <div class="screen-name">Sidebar Archive</div>
+      <div class="screen-desc">History of previous generation runs saved in browser localStorage.</div>
+      <ul>
+        <li>Previous runs listed by market + label</li>
+        <li>Clickable to restore (creates fresh backend session)</li>
+        <li>Deletable</li>
+        <li>Ref status summary shown per archived run</li>
+      </ul>
+    </div>
+    <div class="screen-card">
+      <div class="screen-name">Creative Package Panel</div>
+      <div class="screen-desc">Shown when transferred directly from Agent Collective.</div>
+      <ul>
+        <li>Collapsible side panel with markdown-rendered creative package</li>
+        <li>Transferred via URL param: ?transfer={transferId}&amp;market={code}</li>
+        <li>"Dismiss" option available</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Core User Journey: Generate a Campaign</h3>
+  <div class="flow">
+    <div class="flow-step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <strong>Drop generation_manifest.json into the uploader</strong>
+        <span>System validates: manifest_version must be "1.1", all text items must have fits_limit=true, exactly one of brief_id or pipeline_run_id must be present. Any failure shows validation errors and blocks progress.</span>
+      </div>
+    </div>
+    <div class="flow-arrow">&#8595;</div>
+    <div class="flow-step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <strong>Generate all reference images first</strong>
+        <span>Click "Generate All" in the Reference View. References use Imagen 3.0 synchronously. Status updates every 3 seconds via polling. All references must reach "completed" before jobs can run.</span>
+      </div>
+    </div>
+    <div class="flow-arrow">&#8595;</div>
+    <div class="flow-step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <strong>Generate jobs by audience tab</strong>
+        <span>Switch to an audience tab and click "Generate" on each job, or batch all. Images use Imagen 3.0 (synchronous). Videos use Veo 3.1 (asynchronous, polled every 10 seconds, 5-minute max wait). Failed jobs can be individually retried (3 attempts with exponential backoff).</span>
+      </div>
+    </div>
+    <div class="flow-arrow">&#8595;</div>
+    <div class="flow-step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <strong>Review assets in the Lightbox</strong>
+        <span>Click any completed image or video card to open the full preview in the right Lightbox panel. Navigate with arrows. Download individual assets via the download button.</span>
+      </div>
+    </div>
+    <div class="flow-arrow">&#8595;</div>
+    <div class="flow-step">
+      <div class="step-num">5</div>
+      <div class="step-body">
+        <strong>Session completes - outputs written to GCS</strong>
+        <span>When all jobs finish, the backend writes execution_report.json (summary with any failures), an updated generation_manifest.json (final statuses), and template_handoff.json if a template_id was present in the manifest. All files stored in GCS under gs://bucket/{run_id}/.</span>
+      </div>
+    </div>
+    <div class="flow-arrow">&#8595;</div>
+    <div class="flow-step">
+      <div class="step-num">6</div>
+      <div class="step-body">
+        <strong>Automatic handoff to Template Stamper (if template mode)</strong>
+        <span>If the manifest contains a template_id, the backend POSTs template_handoff.json to Template Stamper. If the POST fails, the handoff is still saved to GCS with "partial" status - it is not silently lost.</span>
+      </div>
+    </div>
+  </div>
+
+  <h3>Job Status Lifecycle</h3>
+  <table>
+    <thead>
+      <tr><th>Status</th><th>Meaning</th><th>UI Indicator</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>pending</code></td><td>Not yet started</td><td>Gray badge, no thumbnail</td></tr>
+      <tr><td><code>running</code></td><td>Generation in progress</td><td>Amber badge, loading animation</td></tr>
+      <tr><td><code>completed</code></td><td>Asset ready</td><td>Green badge, thumbnail shown, download available</td></tr>
+      <tr><td><code>failed</code></td><td>Generation failed after 3 retries</td><td>Red badge, retry button</td></tr>
+    </tbody>
+  </table>
+
+  <h3>AI Models Used</h3>
+  <table>
+    <thead>
+      <tr><th>Asset Type</th><th>Model</th><th>Mode</th><th>Output</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Reference images</td><td>Imagen 3.0 (imagen-3.0-generate-001)</td><td>Synchronous</td><td>PNG, base64 decoded to GCS</td></tr>
+      <tr><td>Generation images</td><td>Imagen 3.0 (with reference support)</td><td>Synchronous</td><td>PNG at 9:16 aspect ratio</td></tr>
+      <tr><td>Generation videos</td><td>Veo 3.1 (veo-3.1-generate-preview)</td><td>Async + polling</td><td>MP4, 6s, 9:16 aspect ratio</td></tr>
+    </tbody>
+  </table>
+
+  <h3>GCS Output Structure</h3>
+  <pre>gs://v3-creative-engine.firebasestorage.app/
+└── {run_id}/
+    ├── references/
+    │   ├── ref_001.png
+    │   └── ref_002.png
+    ├── audience_1/
+    │   ├── scene_1/element_1.png
+    │   └── scene_1/element_2.mp4
+    ├── audience_2/ ...
+    ├── execution_report.json
+    ├── generation_manifest.json   (updated with final statuses)
+    └── template_handoff.json      (only if template_id present)</pre>
+
+  <h3>Hardcoded Constraints</h3>
+  <table>
+    <thead>
+      <tr><th>Constraint</th><th>Value</th><th>Notes</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Video polling interval</td><td>10 seconds</td><td>Between Veo status checks</td></tr>
+      <tr><td>Video max wait</td><td>300 seconds (5 min)</td><td>Job marked failed after timeout</td></tr>
+      <tr><td>Retry attempts</td><td>3</td><td>Exponential backoff: 2s, 4s, 8s</td></tr>
+      <tr><td>Session poll interval</td><td>3 seconds</td><td>Frontend polls backend for status</td></tr>
+      <tr><td>Manifest version required</td><td>1.1</td><td>Older versions rejected at validation</td></tr>
+      <tr><td>Video duration</td><td>6 seconds</td><td>Fixed in Veo API call parameters</td></tr>
+      <tr><td>Aspect ratio</td><td>9:16</td><td>All assets, fixed for Shorts format</td></tr>
+      <tr><td>Safety filter level</td><td>block_some</td><td>Imagen parameter</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Environment Variables</h3>
+  <table>
+    <thead>
+      <tr><th>Variable</th><th>Default</th><th>Required?</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>GOOGLE_API_KEY</code></td><td>Injected from Secret Manager</td><td>Yes - Vertex AI and Gemini calls will fail without it</td></tr>
+      <tr><td><code>GCS_BUCKET</code></td><td>v3-creative-engine.firebasestorage.app</td><td>Yes</td></tr>
+      <tr><td><code>GCP_PROJECT_ID</code></td><td>v3-creative-engine</td><td>Yes</td></tr>
+      <tr><td><code>VERTEX_AI_LOCATION</code></td><td>us-central1</td><td>Yes</td></tr>
+      <tr><td><code>TEMPLATE_STAMPER_URL</code></td><td>Cloud Functions base URL</td><td>Yes (for template handoff)</td></tr>
+      <tr><td><code>MARKET</code></td><td>UNKNOWN</td><td>No (telemetry only)</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Known Quirks &amp; Things to Watch</h3>
+
+  <div class="callout warn">
+    <div class="callout-title">Reference Gating - Jobs Cannot Run Until All Refs Complete</div>
+    <p>Jobs that reference specific reference images are blocked until those references reach "completed" status. Clicking "Generate" on a blocked job does nothing. Always run "Generate All" on the Reference View first and wait for all refs to complete before moving to the Job View.</p>
+  </div>
+
+  <div class="callout warn">
+    <div class="callout-title">Video Jobs Can Take Up to 5 Minutes Each</div>
+    <p>Veo 3.1 video generation is asynchronous. Each video is polled every 10 seconds for up to 300 seconds. If a campaign has many video jobs, total generation time can be significant. Plan for this in QA testing time estimates.</p>
+  </div>
+
+  <div class="callout warn">
+    <div class="callout-title">Session Expiry Requires Re-Upload</div>
+    <p>If the backend session expires due to inactivity, the frontend receives a 404 on polling and auto-creates a new session. However, the new session starts empty - the manifest must be re-uploaded. Archived runs in the sidebar do allow restoring, but they create a fresh backend session, not a true resume.</p>
+  </div>
+
+  <div class="callout danger">
+    <div class="callout-title">Manifest Version Must Be Exactly 1.1</div>
+    <p>The manifest validator rejects any manifest where manifest_version is not exactly "1.1". If Agent Collective produces a manifest with a different version (e.g. due to a code update), Creative Generator will not accept it. Check the version field in the manifest before handing off between the two tools.</p>
+  </div>
+
+  <div class="callout danger">
+    <div class="callout-title">All Text Items Must Pass Quality Check (fits_limit=true)</div>
+    <p>If any text item in the manifest has fits_limit=false, the manifest fails validation and cannot be loaded. This means the Agent Collective prompt quality loop must have passed before the manifest is exported. A manifest with a failed quality check cannot be "forced through" Creative Generator.</p>
+  </div>
+
+  <div class="callout info">
+    <div class="callout-title">Template Handoff Failure is Non-Blocking</div>
+    <p>If the POST to Template Stamper fails after generation is complete, the handoff file is saved to GCS with a "partial" status. The generation session is still marked complete. The template handoff can be retried manually by POSTing the saved template_handoff.json to Template Stamper directly.</p>
+  </div>
+
+  <h3>QA Checklist - Creative Generator</h3>
+  <h4>Manifest Loading</h4>
+  <ul class="checklist">
+    <li><div class="cb"></div>Valid generation_manifest.json (v1.1) loads without errors<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Manifest with wrong version (e.g. "1.0") shows validation error and blocks progress<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Manifest with fits_limit=false on any text item shows validation error<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Manifest with missing brief_id AND pipeline_run_id shows validation error<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Manifest with BOTH brief_id AND pipeline_run_id shows validation error<div class="priority-high">HIGH</div></li>
+  </ul>
+  <h4>Reference Generation</h4>
+  <ul class="checklist">
+    <li><div class="cb"></div>"Generate All" triggers all reference jobs simultaneously<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Reference status updates from pending to running to completed without page refresh<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Completed reference shows thumbnail image in SubjectCard<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Job "Generate" buttons are disabled while any references are pending<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Failed reference shows retry option<div class="priority-med">MED</div></li>
+  </ul>
+  <h4>Job Generation</h4>
+  <ul class="checklist">
+    <li><div class="cb"></div>Image jobs complete and show thumbnail (synchronous, should be fast)<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Video jobs show "running" status for up to 5 minutes before completing or failing<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>"View Prompt" modal shows correct prompt and negative_prompt for the job<div class="priority-med">MED</div></li>
+    <li><div class="cb"></div>Audience tabs correctly filter jobs to the relevant audience only<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Failed job (after 3 retries) shows red status badge<div class="priority-med">MED</div></li>
+  </ul>
+  <h4>Output &amp; Handoff</h4>
+  <ul class="checklist">
+    <li><div class="cb"></div>Lightbox opens on clicking a completed asset - correct image/video shown<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Download button in Lightbox downloads the correct asset<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>execution_report.json written to GCS at end of session<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>If manifest has template_id, template_handoff.json is sent to Template Stamper<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>If template handoff POST fails, GCS file shows "partial" status (not silent failure)<div class="priority-med">MED</div></li>
+    <li><div class="cb"></div>Archived runs appear in sidebar and can be restored<div class="priority-med">MED</div></li>
+  </ul>
+</div>
+
+
+<!-- ======================================================= -->
+<!-- TAB 8: TEMPLATE STAMPER -->
+<!-- ======================================================= -->
+<div id="template-stamper" class="tab-content">
+  <h2>Template Stamper <span class="sub">Branded Video Generation from Remotion Templates</span></h2>
+
+  <div class="tags">
+    <span class="tag tech">React 18 + TypeScript</span>
+    <span class="tag tech">Remotion Lambda (AWS)</span>
+    <span class="tag tech">Firebase Storage</span>
+    <span class="tag tech">React Router</span>
+    <span class="tag role">Creative Operations</span>
+    <span class="tag role">Template Admins</span>
+  </div>
+
+  <p><strong>What it does:</strong> Template Stamper takes pre-designed Remotion video templates and fills their variable slots with images, videos, and text to produce branded vertical video ads (9:16, ~17 seconds). It is the final step in the pipeline when a campaign is running in "template mode" - receiving assets from Creative Generator and rendering them as polished branded videos.</p>
+
+  <p><strong>Capacity target:</strong> 64 videos per month across 4 markets (16 per market), rendered at 1-2 minutes per video via Remotion Lambda.</p>
+
+  <h3>How It Connects to Creative Generator</h3>
+  <p>Template Stamper receives a <code>template_handoff.json</code> file either automatically via webhook (POSTed by Creative Generator on session completion) or manually uploaded by the user. This file contains the template ID, slot mappings, and asset URLs from the generation run.</p>
+
+  <div class="callout info">
+    <div class="callout-title">Template Mode Must Be Active in Agent Collective</div>
+    <p>Template Stamper only receives jobs when the Agent Collective pipeline was run in "template mode" - i.e., the campaign's featured Shorts Creation Tool matched an entry in the TEMPLATE_CATALOG (currently only "Photo to Video"). If template mode was not active, no handoff is sent and Template Stamper is not used for that campaign.</p>
+  </div>
+
+  <h3>Application Pages &amp; Navigation</h3>
+  <table>
+    <thead>
+      <tr><th>Route</th><th>Page</th><th>Status</th><th>Purpose</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>/</code></td><td>Home Page</td><td style="color:var(--green)">Built</td><td>Welcome screen, feature cards, quick actions</td></tr>
+      <tr><td><code>/generate</code></td><td>Generate Page</td><td style="color:var(--green)">Built</td><td>Main workflow: market → template → assets → render</td></tr>
+      <tr><td><code>/templates</code></td><td>Templates Page</td><td style="color:var(--amber)">Pending</td><td>Template gallery and catalog browser</td></tr>
+      <tr><td><code>/assets</code></td><td>Assets Page</td><td style="color:var(--amber)">Pending</td><td>Manual asset upload and gallery</td></tr>
+      <tr><td><code>/jobs</code></td><td>Jobs Page</td><td style="color:var(--amber)">Pending</td><td>Job tracking and history</td></tr>
+      <tr><td><code>/template-guide</code></td><td>Template Guide</td><td style="color:var(--amber)">Pending</td><td>Documentation and template usage examples</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout warn">
+    <div class="callout-title">Four Pages Are Not Yet Built</div>
+    <p>Only the Home page and Generate page are implemented. The Templates, Assets, Jobs, and Template Guide pages exist as routes but have no content. Do not test these pages as functional features - their absence is expected at this stage.</p>
+  </div>
+
+  <h3>Core User Journey: Generate a Branded Video</h3>
+  <div class="flow">
+    <div class="flow-step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <strong>Select market</strong>
+        <span>Choose from Japan, Korea, Taiwan, or Hong Kong. Note: these markets differ from the Agent Collective markets (which use India, Indonesia instead of Taiwan and Hong Kong). Market selection locks once a template is chosen.</span>
+      </div>
+    </div>
+    <div class="flow-arrow">&#8595;</div>
+    <div class="flow-step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <strong>Select a template from the gallery</strong>
+        <span>Each template card shows: name, duration (seconds), number of slots, and a preview image. Selecting a template loads its slot requirements into the right sidebar (Asset Guidelines).</span>
+      </div>
+    </div>
+    <div class="flow-arrow">&#8595;</div>
+    <div class="flow-step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <strong>Fill each slot with an asset</strong>
+        <span>Text slots get a text input field. Image slots and video slots accept drag-and-drop or file picker. Assets can also be selected from the left panel asset gallery. The "Generate Video" button stays disabled until all required slots have assets.</span>
+      </div>
+    </div>
+    <div class="flow-arrow">&#8595;</div>
+    <div class="flow-step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <strong>Click "Generate Video"</strong>
+        <span>Button shows sequential states: "Uploading Assets..." then "Creating Job..." then returns to "Generate Video." Behind the scenes: files are uploaded to Firebase Storage, asset mappings are created combining URLs + text values, and a job is created via /api/jobs/create.</span>
+      </div>
+    </div>
+    <div class="flow-arrow">&#8595;</div>
+    <div class="flow-step">
+      <div class="step-num">5</div>
+      <div class="step-body">
+        <strong>Monitor generation progress</strong>
+        <span>The GenerationProgress component shows live job status: queued → preprocessing → rendering → completed (or failed). Target render time is 1-2 minutes via Remotion Lambda.</span>
+      </div>
+    </div>
+    <div class="flow-arrow">&#8595;</div>
+    <div class="flow-step">
+      <div class="step-num">6</div>
+      <div class="step-body">
+        <strong>Download the completed video</strong>
+        <span>When status reaches "completed," a download button appears. User can also click "Reset" to start a new job from scratch.</span>
+      </div>
+    </div>
+  </div>
+
+  <h3>Job Status Lifecycle</h3>
+  <table>
+    <thead>
+      <tr><th>Status</th><th>Meaning</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>queued</code></td><td>Job created, waiting for Remotion Lambda to pick it up</td></tr>
+      <tr><td><code>preprocessing</code></td><td>Assets being prepared and validated before render</td></tr>
+      <tr><td><code>rendering</code></td><td>Remotion Lambda is actively rendering the video (1-2 min)</td></tr>
+      <tr><td><code>completed</code></td><td>Video rendered and available for download</td></tr>
+      <tr><td><code>failed</code></td><td>Rendering failed - check logs, restart job</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Template Slot Types</h3>
+  <table>
+    <thead>
+      <tr><th>Slot Type</th><th>Input Method</th><th>File Constraints</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>text</code></td><td>Text input field</td><td>n/a</td></tr>
+      <tr><td><code>image</code></td><td>Drag-and-drop or file picker</td><td>JPEG, max 100 MB</td></tr>
+      <tr><td><code>video</code></td><td>Drag-and-drop or file picker</td><td>MPEG, max 100 MB</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Backend API Endpoints</h3>
+  <table>
+    <thead>
+      <tr><th>Method</th><th>Endpoint</th><th>Purpose</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>GET</code></td><td><code>/api/templates</code></td><td>List all available templates</td></tr>
+      <tr><td><code>GET</code></td><td><code>/api/templates/:id</code></td><td>Get template detail + slot definitions</td></tr>
+      <tr><td><code>POST</code></td><td><code>/api/assets/upload</code></td><td>Upload a single asset to Firebase Storage</td></tr>
+      <tr><td><code>GET</code></td><td><code>/api/assets?projectId={id}</code></td><td>List assets for a project</td></tr>
+      <tr><td><code>POST</code></td><td><code>/api/jobs/create</code></td><td>Create a render job (templateId + assetMappings + market)</td></tr>
+      <tr><td><code>GET</code></td><td><code>/api/jobs/:id</code></td><td>Poll job status</td></tr>
+      <tr><td><code>GET</code></td><td><code>/api/jobs/:id/video</code></td><td>Download completed video</td></tr>
+      <tr><td><code>GET</code></td><td><code>/api/jobs/history</code></td><td>Job history list</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Hardcoded Constraints</h3>
+  <table>
+    <thead>
+      <tr><th>Constraint</th><th>Value</th><th>Notes</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>File size limit</td><td>100 MB</td><td>Images and videos (higher than Agent Collective's 50 MB)</td></tr>
+      <tr><td>Markets</td><td>4</td><td>Japan, Korea, Taiwan, Hong Kong (different from AC markets)</td></tr>
+      <tr><td>Video duration</td><td>~17 seconds</td><td>Template-dependent, Remotion-rendered</td></tr>
+      <tr><td>Render time per video</td><td>1-2 minutes</td><td>Via Remotion Lambda (AWS)</td></tr>
+      <tr><td>Target monthly output</td><td>64 videos</td><td>16 per market</td></tr>
+      <tr><td>Image format</td><td>JPEG</td><td>Slot type: image</td></tr>
+      <tr><td>Video format</td><td>MPEG</td><td>Slot type: video</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Infrastructure Dependencies</h3>
+  <table>
+    <thead>
+      <tr><th>Dependency</th><th>Purpose</th><th>Notes</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Remotion Lambda (AWS)</td><td>Video rendering engine</td><td>Requires AWS account + Lambda deployment separate from GCP</td></tr>
+      <tr><td>Firebase Storage</td><td>Asset file storage</td><td>/uploads/projects/{projectId}/</td></tr>
+      <tr><td>Firestore</td><td>templates, assets, jobs, usage_events collections</td><td>Standard project Firestore</td></tr>
+      <tr><td>Firebase Hosting</td><td>Serves the React frontend</td><td>/template-stamper/ path</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout danger">
+    <div class="callout-title">Remotion Lambda Runs on AWS, Not GCP</div>
+    <p>Remotion Lambda uses AWS Lambda for rendering - it is not a Firebase or GCP service. This means AWS credentials, a deployed Remotion Lambda function, and proper IAM permissions must all be in place separately from the GCP deployment. Verify the Remotion Lambda deployment and AWS configuration as a critical pre-launch step.</p>
+  </div>
+
+  <div class="callout warn">
+    <div class="callout-title">Markets Are Different From Agent Collective</div>
+    <p>Template Stamper serves Japan, Korea, Taiwan, and Hong Kong. Agent Collective serves Korea, India, Japan, and Indonesia. Taiwan and Hong Kong are not in Agent Collective; India and Indonesia are not in Template Stamper. This is intentional but can cause confusion when tracing a campaign end-to-end. Confirm with the team which markets are in scope for the full pipeline handoff.</p>
+  </div>
+
+  <div class="callout warn">
+    <div class="callout-title">Generate Button Has No Visible Error State</div>
+    <p>If the job creation API call fails, the button returns to "Generate Video" without showing an error message (based on current code). The user may not know the job was not created. Verify error handling on the Generate button is surfaced clearly in the UI.</p>
+  </div>
+
+  <div class="callout info">
+    <div class="callout-title">No Batch Job Creation Yet</div>
+    <p>The current API only supports creating one job at a time via /api/jobs/create. There is no batch endpoint. If a campaign needs 16 videos for one market, each must be triggered individually through the Generate page.</p>
+  </div>
+
+  <h3>QA Checklist - Template Stamper</h3>
+  <h4>Infrastructure Pre-Checks</h4>
+  <ul class="checklist">
+    <li><div class="cb"></div>Remotion Lambda is deployed to AWS and accessible from the Cloud Functions backend<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>AWS credentials / IAM permissions for Remotion Lambda are configured in Cloud Functions environment<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Firebase Storage rules allow write access under /uploads/projects/<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>At least one template is seeded in the Firestore templates collection<div class="priority-high">HIGH</div></li>
+  </ul>
+  <h4>Home Page</h4>
+  <ul class="checklist">
+    <li><div class="cb"></div>Feature cards display correctly (One-Click Generation, Fast Rendering, Template Library)<div class="priority-med">MED</div></li>
+    <li><div class="cb"></div>"Create Video" quick action navigates to /generate<div class="priority-med">MED</div></li>
+    <li><div class="cb"></div>"View Templates" quick action navigates to /templates (even if page is pending)<div class="priority-med">MED</div></li>
+  </ul>
+  <h4>Generate Page Workflow</h4>
+  <ul class="checklist">
+    <li><div class="cb"></div>Market selector shows Japan, Korea, Taiwan, Hong Kong<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Template gallery loads and shows available templates with name, duration, slot count<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Selecting a template loads its slot requirements in the right sidebar<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Text slot shows text input field<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Image slot accepts drag-and-drop JPEG under 100 MB<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Video slot accepts drag-and-drop MPEG under 100 MB<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>"Generate Video" button is disabled until all required slots are filled<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Clicking "Generate Video" shows "Uploading Assets..." then "Creating Job..." states<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Job status progresses: queued → preprocessing → rendering → completed<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Completed job shows a download button and video can be downloaded<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>"Reset" button returns the page to the initial state for a new job<div class="priority-med">MED</div></li>
+    <li><div class="cb"></div>Failed job status is surfaced to the user (not silently stuck on "rendering")<div class="priority-high">HIGH</div></li>
+  </ul>
+  <h4>Integration with Creative Generator</h4>
+  <ul class="checklist">
+    <li><div class="cb"></div>When Creative Generator completes a template-mode run, template_handoff.json is POSTed to Template Stamper<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Template Stamper receives the handoff and pre-fills the slot mapping on the Generate page<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Pre-filled slots correctly match the assets generated by Creative Generator<div class="priority-high">HIGH</div></li>
+  </ul>
+</div>
+
+
+<script>
+  function showTab(id) {
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    event.currentTarget.classList.add('active');
+  }
+
+  // Interactive checklist items
+  document.addEventListener('click', function(e) {
+    const li = e.target.closest('.checklist li');
+    if (li) li.classList.toggle('done');
+  });
+</script>
+
+</body>
+</html>
