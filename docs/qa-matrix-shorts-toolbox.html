@@ -1556,7 +1556,7 @@
       <div class="screen-desc">Collapsible panel showing the documents the pipeline reads from per market.</div>
       <ul>
         <li>Global documents section + market-specific section</li>
-        <li>File operations: View, Upload (requires passcode), Delete (requires passcode)</li>
+        <li>File operations: View, Upload, Delete (no passcode -- endpoints are open)</li>
         <li>Intel Hub briefs older than 14 days are automatically excluded</li>
         <li>File viewer modal with content preview</li>
       </ul>
@@ -1802,9 +1802,9 @@
     <p>Gemini sometimes wraps JSON responses in markdown code fences (```json ... ```). The pipeline strips these automatically via internal parsing. This is expected and not a bug, but if an agent output looks malformed in the chat, the raw response may have an unexpected wrapping format.</p>
   </div>
 
-  <div class="callout danger">
-    <div class="callout-title">KB Passcode Required for File Management</div>
-    <p>Uploading or deleting KB files requires a passcode. The passcode is not stored in the codebase. If the passcode is lost, KB file management is blocked entirely. Ensure the passcode is documented securely before deploying to production.</p>
+  <div class="callout warn">
+    <div class="callout-title">KB File Management Has No Auth Gate</div>
+    <p>The <code>/api/kb/upload</code> and <code>/api/kb/file</code> (DELETE) endpoints on the Agent Collective Cloud Run service have no authentication check. Any user who can reach the service URL can upload or delete KB files. This is a security gap to address before production.</p>
   </div>
 
   <h3>QA Checklist - Agent Collective</h3>
@@ -1815,6 +1815,23 @@
     <li><div class="cb"></div>KB panel loads and shows global + market-specific documents<div class="priority-high">HIGH</div></li>
     <li><div class="cb"></div>Intel Hub briefs older than 14 days are not listed in the KB panel<div class="priority-med">MED</div></li>
   </ul>
+  <h4>Create Path - Sample Test Case</h4>
+  <div class="callout info">
+    <div class="callout-title">Test Input</div>
+    <p><strong>Input text:</strong> I want to create a summer campaign for Photo To Video</p>
+    <p style="margin-top:8px;font-size:12px;color:var(--muted)">Select Korea as the market. This triggers template mode (Photo To Video matches the TEMPLATE_CATALOG entry) so the manifest will include a template_id and selected_slot_mapping.</p>
+  </div>
+  <ul class="checklist">
+    <li><div class="cb"></div>Pipeline routes to Create path -- phase indicator shows "Analyzing..."<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Discovery: exactly 3 concepts (A, B, C) are presented<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Brief phase: quality loop runs and brief is presented in chat<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Creative phase: storyboard reflects a Photo To Video product showcase<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Production phase: generation_manifest.json contains a template_id field (template mode active)<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Manifest includes selected_slot_mapping linking generation jobs to Remotion slot IDs<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>All 3 download buttons appear (marketing_brief.md, creative_package.md, generation_manifest.json)<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>"Send to Creative Generator" button activates after Phase 4<div class="priority-high">HIGH</div></li>
+  </ul>
+
   <h4>Create Path</h4>
   <ul class="checklist">
     <li><div class="cb"></div>Phase indicator updates through all 4 phases without freezing<div class="priority-high">HIGH</div></li>
@@ -1873,8 +1890,8 @@
   <ul class="checklist">
     <li><div class="cb"></div>Error overlay appears on network failure with "Start over" button<div class="priority-high">HIGH</div></li>
     <li><div class="cb"></div>Stall message appears if stream completes with no renderable output<div class="priority-high">HIGH</div></li>
-    <li><div class="cb"></div>KB passcode modal appears when trying to upload/delete a KB file<div class="priority-med">MED</div></li>
-    <li><div class="cb"></div>Incorrect KB passcode shows alert and does not grant access<div class="priority-med">MED</div></li>
+    <li><div class="cb"></div>KB upload accepts .md and .json files only -- other file types are rejected with an error<div class="priority-med">MED</div></li>
+    <li><div class="cb"></div>KB upload rejects files over 5 MB<div class="priority-med">MED</div></li>
   </ul>
 </div>
 
