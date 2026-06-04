@@ -1851,6 +1851,25 @@
     <li><div class="cb"></div>variation_output_complete.json download appears at end<div class="priority-high">HIGH</div></li>
     <li><div class="cb"></div>"Send to Creative Generator" MCP bridge button activates when variation_output_complete.json is saved<div class="priority-high">HIGH</div></li>
   </ul>
+
+  <h4>Adapt Path - Sample Test Case</h4>
+  <div class="callout info">
+    <div class="callout-title">Test Asset: Veo_Shorts_Ad.mp4</div>
+    <p>A 17-second YouTube Shorts ad showing someone selecting photos from their camera roll, typing a prompt, and getting an AI-generated video of a woman and her cat skydiving.</p>
+    <p><strong>Input message:</strong> "I uploaded a video file called Veo_Shorts_Ad.mp4. It is a 17-second YouTube Shorts ad showing someone selecting photos from their camera roll, typing a prompt, and getting an AI-generated video of a woman and her cat skydiving."</p>
+  </div>
+  <ul class="checklist">
+    <li><div class="cb"></div>File attaches without error and preview shows Veo_Shorts_Ad.mp4<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Pipeline enters Adapt path (not Create) -- phase indicator shows "Taking the asset apart..."<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Analysis phase: adapt_preprocessor, adapt_deconstructor, and kb_analyzer all run (check agent status sidebar)<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>adapt_analysis_presenter identifies the correct scene structure: photo selection UI, prompt input, AI-generated output (woman + cat skydiving)<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>adapt_analysis_presenter identifies the correct content category: Veo/GenAI creative tool showcase<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Audience mapper surfaces relevant APAC demographic angles for a Veo product demo<div class="priority-med">MED</div></li>
+    <li><div class="cb"></div>Strategy presenter shows distinct adaptation angles per audience segment<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Variation generators produce prompts that preserve the core "photo-to-video" product moment while adapting tone/demo per audience<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Consistency checker runs and variations do not contradict the source asset's product claim<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>variation_output_complete.json contains up to 4 audience variants and references the source asset<div class="priority-high">HIGH</div></li>
+  </ul>
   <h4>Error Handling</h4>
   <ul class="checklist">
     <li><div class="cb"></div>Error overlay appears on network failure with "Start over" button<div class="priority-high">HIGH</div></li>
