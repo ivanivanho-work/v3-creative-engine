@@ -1970,7 +1970,7 @@
       <div class="step-num">2</div>
       <div class="step-body">
         <strong>Generate all reference images first</strong>
-        <span>Click "Generate All" in the Reference View. References use Imagen 3.0 synchronously. Status updates every 3 seconds via polling. All references must reach "completed" before jobs can run.</span>
+        <span>Click "Generate All" in the Reference View. Each reference image calls <code>imagen-3.0-generate-001</code> synchronously -- the backend blocks until Imagen returns the image. The frontend polls <code>/api/status/{session_id}</code> every 3 seconds to update the UI. All references must reach "completed" before jobs can run.</span>
       </div>
     </div>
     <div class="flow-arrow">&#8595;</div>
@@ -2021,14 +2021,16 @@
   </table>
 
   <h3>AI Models Used</h3>
+  <p>The manifest uses <code>gemini-3-pro-image-preview</code> as the model identifier for images. This is a manifest-internal alias -- it maps to Imagen endpoints at runtime, not Gemini. <code>veo-3.1-generate-preview</code> maps directly to the Veo endpoint.</p>
   <table>
     <thead>
-      <tr><th>Asset Type</th><th>Model</th><th>Mode</th><th>Output</th></tr>
+      <tr><th>Asset Type</th><th>Vertex AI Endpoint</th><th>Mode</th><th>Output</th><th>Notes</th></tr>
     </thead>
     <tbody>
-      <tr><td>Reference images</td><td>Imagen 3.0 (imagen-3.0-generate-001)</td><td>Synchronous</td><td>PNG, base64 decoded to GCS</td></tr>
-      <tr><td>Generation images</td><td>Imagen 3.0 (with reference support)</td><td>Synchronous</td><td>PNG at 9:16 aspect ratio</td></tr>
-      <tr><td>Generation videos</td><td>Veo 3.1 (veo-3.1-generate-preview)</td><td>Async + polling</td><td>MP4, 6s, 9:16 aspect ratio</td></tr>
+      <tr><td>Reference images</td><td><code>imagen-3.0-generate-001</code></td><td>Synchronous (blocking HTTP call)</td><td>PNG to GCS, made public</td><td>Aspect ratio derived from <code>resolution</code> field (default 1:1). Safety: block_some, personGeneration: allow_adult</td></tr>
+      <tr><td>Generation images (no ref images)</td><td><code>imagen-3.0-generate-001</code></td><td>Synchronous</td><td>PNG to GCS</td><td>Aspect ratio from manifest <code>aspect_ratio</code> field (9:16 is fallback default)</td></tr>
+      <tr><td>Generation images (with ref images)</td><td><code>imagen-3.0-capability-001</code></td><td>Synchronous</td><td>PNG to GCS</td><td>Switches model when <code>ref_image_uris</code> are present. Refs downloaded from GCS and embedded as SUBJECT references (referenceType: 1)</td></tr>
+      <tr><td>Generation videos</td><td><code>veo-3.1-generate-preview</code> via <code>predictLongRunning</code></td><td>Async + polling</td><td>MP4 to GCS</td><td>Duration from manifest <code>duration_seconds</code> field. Aspect ratio from manifest <code>aspect_ratio</code> field (9:16 is fallback). Polled every 10s, max 300s</td></tr>
     </tbody>
   </table>
 
@@ -2052,14 +2054,16 @@
       <tr><th>Constraint</th><th>Value</th><th>Notes</th></tr>
     </thead>
     <tbody>
-      <tr><td>Video polling interval</td><td>10 seconds</td><td>Between Veo status checks</td></tr>
-      <tr><td>Video max wait</td><td>300 seconds (5 min)</td><td>Job marked failed after timeout</td></tr>
-      <tr><td>Retry attempts</td><td>3</td><td>Exponential backoff: 2s, 4s, 8s</td></tr>
-      <tr><td>Session poll interval</td><td>3 seconds</td><td>Frontend polls backend for status</td></tr>
+      <tr><td>Video polling interval</td><td>10 seconds</td><td>Between Veo long-running operation status checks</td></tr>
+      <tr><td>Video max wait</td><td>300 seconds (5 min)</td><td>TimeoutError raised after this; entire generate+poll wrapped in retry</td></tr>
+      <tr><td>Retry attempts</td><td>3</td><td>Exponential backoff: 2s, 4s, 8s. For video, the entire submit+poll cycle is retried.</td></tr>
+      <tr><td>Session poll interval</td><td>3 seconds</td><td>Frontend polls <code>/api/status/{session_id}</code> for overall job status</td></tr>
       <tr><td>Manifest version required</td><td>1.1</td><td>Older versions rejected at validation</td></tr>
-      <tr><td>Video duration</td><td>6 seconds</td><td>Fixed in Veo API call parameters</td></tr>
-      <tr><td>Aspect ratio</td><td>9:16</td><td>All assets, fixed for Shorts format</td></tr>
-      <tr><td>Safety filter level</td><td>block_some</td><td>Imagen parameter</td></tr>
+      <tr><td>Video duration</td><td>From manifest</td><td>Read from <code>duration_seconds</code> field per job -- NOT hardcoded</td></tr>
+      <tr><td>Aspect ratio</td><td>From manifest (9:16 fallback)</td><td>Read from <code>aspect_ratio</code> field per job/ref -- NOT fixed. 9:16 used only if field is absent</td></tr>
+      <tr><td>Safety filter level</td><td>block_some</td><td>Imagen parameter (all image calls)</td></tr>
+      <tr><td>Person generation</td><td>allow_adult</td><td>Imagen parameter (all image calls including refs)</td></tr>
+      <tr><td>Vertex AI auth</td><td>ADC (Application Default Credentials)</td><td>tools.py uses <code>google.auth.default()</code> with service account on Cloud Run. GOOGLE_API_KEY is used by the ADK framework for agent routing, not for Vertex AI generation calls.</td></tr>
     </tbody>
   </table>
 
@@ -2069,7 +2073,7 @@
       <tr><th>Variable</th><th>Default</th><th>Required?</th></tr>
     </thead>
     <tbody>
-      <tr><td><code>GOOGLE_API_KEY</code></td><td>Injected from Secret Manager</td><td>Yes - Vertex AI and Gemini calls will fail without it</td></tr>
+      <tr><td><code>GOOGLE_API_KEY</code></td><td>Injected from Secret Manager (value = GEMINI_API_KEY secret)</td><td>Yes - used by the ADK framework for Gemini agent routing. The Vertex AI generation calls (Imagen/Veo) use ADC independently and do not read this env var.</td></tr>
       <tr><td><code>GCS_BUCKET</code></td><td>v3-creative-engine.firebasestorage.app</td><td>Yes</td></tr>
       <tr><td><code>GCP_PROJECT_ID</code></td><td>v3-creative-engine</td><td>Yes</td></tr>
       <tr><td><code>VERTEX_AI_LOCATION</code></td><td>us-central1</td><td>Yes</td></tr>
@@ -2122,18 +2126,23 @@
   <h4>Reference Generation</h4>
   <ul class="checklist">
     <li><div class="cb"></div>"Generate All" triggers all reference jobs simultaneously<div class="priority-high">HIGH</div></li>
-    <li><div class="cb"></div>Reference status updates from pending to running to completed without page refresh<div class="priority-high">HIGH</div></li>
-    <li><div class="cb"></div>Completed reference shows thumbnail image in SubjectCard<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Reference calls <code>imagen-3.0-generate-001</code> synchronously -- verify the backend blocks and returns a completed image (no intermediate polling step on the backend)<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Reference status updates from pending → running → completed in the UI (frontend polls /api/status/ every 3s)<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Completed reference shows thumbnail image<div class="priority-high">HIGH</div></li>
     <li><div class="cb"></div>Job "Generate" buttons are disabled while any references are pending<div class="priority-high">HIGH</div></li>
-    <li><div class="cb"></div>Failed reference shows retry option<div class="priority-med">MED</div></li>
+    <li><div class="cb"></div>Failed reference shows retry option and retries up to 3 times<div class="priority-med">MED</div></li>
   </ul>
   <h4>Job Generation</h4>
   <ul class="checklist">
-    <li><div class="cb"></div>Image jobs complete and show thumbnail (synchronous, should be fast)<div class="priority-high">HIGH</div></li>
-    <li><div class="cb"></div>Video jobs show "running" status for up to 5 minutes before completing or failing<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Image jobs without ref images call <code>imagen-3.0-generate-001</code> -- verify completed image appears<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Image jobs WITH ref_image_uris call <code>imagen-3.0-capability-001</code> (subject reference mode) -- verify reference influence is visible in output<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Video jobs call Veo via <code>predictLongRunning</code> -- show "running" for up to 5 minutes before completing or failing<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Video duration matches the <code>duration_seconds</code> field in the manifest job (not assumed to be 6s)<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Aspect ratio used in API call matches the manifest job's <code>aspect_ratio</code> field (or 9:16 if absent)<div class="priority-med">MED</div></li>
     <li><div class="cb"></div>"View Prompt" modal shows correct prompt and negative_prompt for the job<div class="priority-med">MED</div></li>
     <li><div class="cb"></div>Audience tabs correctly filter jobs to the relevant audience only<div class="priority-high">HIGH</div></li>
-    <li><div class="cb"></div>Failed job (after 3 retries) shows red status badge<div class="priority-med">MED</div></li>
+    <li><div class="cb"></div>Failed job (after 3 retries) shows red status badge with retry button<div class="priority-med">MED</div></li>
+    <li><div class="cb"></div>Manifest with unrecognised model identifier (not gemini-3-pro-image-preview or veo-3.1-generate-preview) shows validation error at load time<div class="priority-med">MED</div></li>
   </ul>
   <h4>Output &amp; Handoff</h4>
   <ul class="checklist">
