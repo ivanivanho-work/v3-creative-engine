@@ -1808,6 +1808,7 @@
   </div>
 
   <h3>QA Checklist - Agent Collective</h3>
+  <p style="color:var(--muted);font-size:13px;margin-bottom:16px;">Each path has two parts: a <strong style="color:var(--text)">Sample Test Case</strong> with a specific input to run end-to-end, followed by a <strong style="color:var(--text)">General Checklist</strong> covering functional behaviours and edge cases that apply regardless of input. Run the sample test case first, then work through the general checklist.</p>
   <h4>Setup &amp; Session</h4>
   <ul class="checklist">
     <li><div class="cb"></div>Market dropdown shows all 4 markets (Korea, India, Japan, Indonesia)<div class="priority-high">HIGH</div></li>
@@ -1859,16 +1860,6 @@
     <li><div class="cb"></div>full_campaign_manifest.json loads correctly in Creative Generator and shows 5 audience tabs<div class="priority-high">HIGH</div></li>
     <li><div class="cb"></div>Verify generation_manifest.json (gen pop only) is also available as a separate download from Phase 4<div class="priority-med">MED</div></li>
   </ul>
-  <h4>Adapt Path</h4>
-  <ul class="checklist">
-    <li><div class="cb"></div>File attachment button accepts MP4, MOV, AVI under 50 MB<div class="priority-high">HIGH</div></li>
-    <li><div class="cb"></div>Alert shown if file exceeds 50 MB<div class="priority-high">HIGH</div></li>
-    <li><div class="cb"></div>All 3 parallel analysis agents complete before audience_mapper runs<div class="priority-high">HIGH</div></li>
-    <li><div class="cb"></div>Up to 4 variation generators run in parallel during Delivery phase<div class="priority-high">HIGH</div></li>
-    <li><div class="cb"></div>variation_output_complete.json download appears at end<div class="priority-high">HIGH</div></li>
-    <li><div class="cb"></div>"Send to Creative Generator" MCP bridge button activates when variation_output_complete.json is saved<div class="priority-high">HIGH</div></li>
-  </ul>
-
   <h4>Adapt Path - Sample Test Case</h4>
   <div class="callout info">
     <div class="callout-title">Test Asset: <a href="https://drive.google.com/file/d/1efo_9uuAYKfPngdhfESIvzzZeoESgw_b/view?usp=sharing&amp;resourcekey=0-xZ5iidiESgSFOeHG3K1UZQ" target="_blank" rel="noopener noreferrer">Veo_Shorts_Ad.mp4</a></div>
@@ -1885,6 +1876,16 @@
     <li><div class="cb"></div>Variation generators produce prompts that preserve the core "photo-to-video" product moment while adapting tone/demo per audience<div class="priority-high">HIGH</div></li>
     <li><div class="cb"></div>Consistency checker runs and variations do not contradict the source asset's product claim<div class="priority-high">HIGH</div></li>
     <li><div class="cb"></div>variation_output_complete.json contains up to 4 audience variants and references the source asset<div class="priority-high">HIGH</div></li>
+  </ul>
+
+  <h4>Adapt Path</h4>
+  <ul class="checklist">
+    <li><div class="cb"></div>File attachment button accepts MP4, MOV, AVI under 50 MB<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Alert shown if file exceeds 50 MB<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>All 3 parallel analysis agents complete before audience_mapper runs<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Up to 4 variation generators run in parallel during Delivery phase<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>variation_output_complete.json download appears at end<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>"Send to Creative Generator" MCP bridge button activates when variation_output_complete.json is saved<div class="priority-high">HIGH</div></li>
   </ul>
   <h4>Error Handling</h4>
   <ul class="checklist">
