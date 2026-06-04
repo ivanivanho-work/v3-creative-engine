@@ -546,12 +546,12 @@
       <div class="screen-name">OKR Performance Tab (Default)</div>
       <div class="screen-desc">Landing screen. Shows quarterly OKR progress per market.</div>
       <ul>
-        <li>Quarter-start date + reporting date display</li>
-        <li>Days remaining in quarter countdown</li>
+        <li>Quarter-start date + reporting date display (read from the uploaded CSV)</li>
+        <li>Days remaining countdown (hardcoded end-of-quarter = 2026-06-30)</li>
         <li>6 market performance cards: APAC, India, Indonesia, Japan, South Korea, AUNZ</li>
-        <li>Performance Index % per market (color-coded)</li>
-        <li>Actual vs. Target metric comparison</li>
-        <li>Strategic Guidance Matrix (editable table) below the cards</li>
+        <li>Performance Index % per market (color-coded: green ≥100%, amber ≥80%, red &lt;80%)</li>
+        <li>OKR target is quarter-driven (not per-market): 0.40% before 2026-07-01, 0.65% from 2026-07-01, 1.00% from 2026-10-01</li>
+        <li>Strategic Guidance Matrix (editable table) below the cards -- Campaign Hub module rows are excluded from the matrix</li>
       </ul>
     </div>
     <div class="screen-card">
@@ -590,10 +590,11 @@
       <div class="screen-name">Memory / Snapshot System</div>
       <div class="screen-desc">Historical snapshot management in the sidebar.</div>
       <ul>
-        <li>Auto-loads most recent snapshot on app open</li>
-        <li>Up to 10 recent snapshots shown in sidebar (clickable to restore)</li>
-        <li>Export button in header saves current state as JSON</li>
-        <li>Admins can delete snapshots</li>
+        <li>Auto-loads most recent snapshot on app open via Firestore <code>onSnapshot</code> listener on <code>shortsbrain_data/latest</code></li>
+        <li>All snapshots shown in sidebar (no hard limit) -- each labeled by ISO week ID, clickable to restore</li>
+        <li>Export button in header saves current state as JSON file to the browser</li>
+        <li>Any authenticated user can delete a snapshot from the sidebar (no admin check on delete)</li>
+        <li>Snapshot storage: processed rows stored as 100-row chunks under <code>shortsbrain_data/chunk_{batchId}_{i}</code>; sidebar history stored under <code>artifacts/shorts-brain-v2/public/data/snapshots/</code></li>
       </ul>
     </div>
   </div>
@@ -637,8 +638,8 @@
     <div class="flow-step">
       <div class="step-num">5</div>
       <div class="step-body">
-        <strong>All users can now view the new data</strong>
-        <span>On next page load, or after refreshing, the new snapshot is automatically loaded for all authenticated users.</span>
+        <strong>All users see the new data in real time</strong>
+        <span>The Firestore <code>onSnapshot</code> listener on <code>shortsbrain_data/latest</code> fires automatically when the document changes. All users who are currently viewing the app receive the update immediately without refreshing. Users who open the app later auto-load the latest snapshot on first render.</span>
       </div>
     </div>
   </div>
@@ -726,10 +727,11 @@
       <tr><th>Directive</th><th>Condition</th></tr>
     </thead>
     <tbody>
-      <tr><td style="color:var(--green)">SCALE</td><td>Positive lift + statistically significant (&gt;0.001%) for GenPop</td></tr>
-      <tr><td style="color:var(--amber)">MAINTAIN</td><td>Neutral result, or campaign is less than 14 days live</td></tr>
-      <tr><td style="color:var(--red)">PAUSE</td><td>Both male and female in the same age bucket show significant negative lift AND campaign is at least 14 days live</td></tr>
-      <tr><td style="color:var(--muted)">Restricted (no SCALE)</td><td>Campaign type is SHELF, SSC, UTS, MVR, or UTS SFV - these categories cannot be scaled</td></tr>
+      <tr><td style="color:var(--green)">SCALE</td><td>GenPop lift is stat-sig positive (sig===1) AND v &gt; 0.001% AND campaign is not in the scaling-restricted list. Campaign Hub module rows are excluded from this check.</td></tr>
+      <tr><td style="color:var(--amber)">MAINTAIN</td><td>Negative lift detected but campaign has been live fewer than 14 days (learning phase). Also used when lift is neutral with no strong signal.</td></tr>
+      <tr><td style="color:var(--red)">PAUSE</td><td>Negative lift (v &lt; -0.0001%) in an age bucket AND campaign is at least 14 days live. Stat-sig is NOT required -- raw negative lift triggers the recommendation. Generated per-gender: if both male and female are negative in the same age, a combined GenPop pause is issued; if only one gender is negative, a gender-specific pause is issued. Justification text labels it "stat sig negative" or "neutral negative" based on sig value.</td></tr>
+      <tr><td style="color:var(--muted)">Restricted (no SCALE)</td><td>Campaign name contains SHELF, SSC, UTS, MVR, or UTS SFV -- cannot be scaled. Pause recommendation changes to "pause current trend, wait 5-7d, decide whether to roll out next trend."</td></tr>
+      <tr><td style="color:var(--muted)">Excluded from matrix</td><td>Rows whose structural metadata <code>tab</code> field matches a Campaign Hub entry (AlwaysOn, ScaledCreation, Effects, Trends, CultMo, ArtMo, GenAI Hub). These are evaluated in their own tabs, not the global guidance matrix.</td></tr>
     </tbody>
   </table>
 
@@ -760,6 +762,16 @@
     <p>The "Total" (GenPop) row is only marked as Paused if BOTH the male AND female rows in the same age bucket are paused. If only one gender is paused, Total remains active. This is intentional and must not be changed.</p>
   </div>
 
+  <div class="callout info">
+    <div class="callout-title">Campaign Hub Rows Excluded from Strategic Guidance Matrix</div>
+    <p>Rows whose structural metadata <code>tab</code> field maps to a Campaign Hub sub-tab (AlwaysOn, ScaledCreation, Effects, Trends, CultMo, ArtMo, GenAI Hub) are excluded from the Strategic Guidance Matrix. These campaigns are evaluated in their own Campaign Hub tabs, not the global OKR-level matrix. Without this exclusion, the matrix would generate duplicate or misleading recommendations for campaigns that belong to a specific sub-tab.</p>
+  </div>
+
+  <div class="callout info">
+    <div class="callout-title">Cloud Functions for Shorts Brain Are Not Called by the Frontend</div>
+    <p>The <code>sbSaveSnapshot</code>, <code>sbLoadSnapshots</code>, and <code>sbDeleteSnapshot</code> Cloud Functions exist in the codebase but the current frontend does not call them. The <code>startAnalysis</code> function writes directly to Firestore (<code>shortsbrain_data/</code> and <code>artifacts/shorts-brain-v2/public/data/snapshots/</code>) without going through a Cloud Function. The Cloud Functions were written as a parallel system and may be used in a future refactor, but for now they are dead code from the frontend's perspective.</p>
+  </div>
+
   <div class="callout danger">
     <div class="callout-title">Market Resolution Default</div>
     <p>If the app cannot resolve a campaign's market from the CSV data or metadata, it defaults to India. This means incorrectly formatted CSVs could silently assign campaigns to the wrong market. Always validate market column values in source files.</p>
@@ -782,12 +794,16 @@
   <ul class="checklist">
     <li><div class="cb"></div>Verify Performance Index % matches formula: (actual / target) * 100<div class="priority-high">HIGH</div></li>
     <li><div class="cb"></div>Verify green/amber/red status at exact thresholds: 100% green, 80-99% amber, below 80% red<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Verify OKR target is 0.40% for quarter starting before 2026-07-01, 0.65% from 2026-07-01, 1.00% from 2026-10-01<div class="priority-high">HIGH</div></li>
     <li><div class="cb"></div>Verify "Days Remaining" countdown is correct relative to today's date<div class="priority-med">MED</div></li>
     <li><div class="cb"></div>Verify Strategic Guidance Matrix generates SCALE/MAINTAIN/PAUSE correctly per the rules<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Verify PAUSE is generated for raw negative lift (v &lt; -0.0001%) -- stat-sig is NOT required for the recommendation to appear<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Verify individual gender-level pauses are generated when only one gender is negative in an age bucket<div class="priority-med">MED</div></li>
+    <li><div class="cb"></div>Verify Campaign Hub module rows do NOT appear in the Strategic Guidance Matrix<div class="priority-high">HIGH</div></li>
     <li><div class="cb"></div>Verify "Add Pointer" button adds a manual row to the matrix<div class="priority-med">MED</div></li>
     <li><div class="cb"></div>Verify "Copy All" button copies matrix content<div class="priority-med">MED</div></li>
     <li><div class="cb"></div>Verify SHELF / SSC / UTS / MVR / UTS SFV campaigns are never marked SCALE<div class="priority-high">HIGH</div></li>
-    <li><div class="cb"></div>Verify campaigns under 14 days live are not marked PAUSE<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Verify campaigns under 14 days live show MAINTAIN, not PAUSE<div class="priority-high">HIGH</div></li>
   </ul>
   <h4>Data Tables (Global Hub / Market Hub / Campaign Hub)</h4>
   <ul class="checklist">
@@ -798,14 +814,16 @@
     <li><div class="cb"></div>Paused campaigns show "Paused [date]", not a number<div class="priority-high">HIGH</div></li>
     <li><div class="cb"></div>Date columns are hidden in Global Hub tab, visible in other tabs<div class="priority-med">MED</div></li>
     <li><div class="cb"></div>Market selector on Campaign Hub tab changes data displayed<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Always-On tab shows JP Proactive Container sub-tab correctly under Japan market<div class="priority-high">HIGH</div></li>
     <li><div class="cb"></div>Horizontal scroll navigation works (left/right chevrons)<div class="priority-med">MED</div></li>
   </ul>
   <h4>Snapshot / Memory System</h4>
   <ul class="checklist">
-    <li><div class="cb"></div>App auto-loads latest snapshot on fresh page open<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>App auto-loads latest snapshot on fresh page open (Firestore onSnapshot listener)<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>When an admin uploads new data, all currently-open browser windows update in real time without refreshing<div class="priority-high">HIGH</div></li>
     <li><div class="cb"></div>Clicking a historical snapshot in the sidebar restores its data correctly<div class="priority-high">HIGH</div></li>
     <li><div class="cb"></div>Export button downloads a valid JSON file<div class="priority-med">MED</div></li>
-    <li><div class="cb"></div>Admin can delete a snapshot; it disappears from the list<div class="priority-med">MED</div></li>
+    <li><div class="cb"></div>Any authenticated user can delete a snapshot; it disappears from the sidebar list<div class="priority-med">MED</div></li>
   </ul>
 </div>
 
@@ -818,11 +836,11 @@
 
   <div class="tags">
     <span class="tag tech">React / TypeScript</span>
+    <span class="tag tech">Firebase Storage</span>
+    <span class="tag tech">Firestore</span>
     <span class="tag tech">Cloud Functions (REST API)</span>
-    <span class="tag tech">Cloud SQL (PostgreSQL + pgvector)</span>
-    <span class="tag tech">Gemini AI</span>
     <span class="tag role">Country Marketing Managers</span>
-    <span class="tag role">Agencies (upload only)</span>
+    <span class="tag role">Internal Analysts</span>
   </div>
 
   <p><strong>What it does:</strong> The Shorts Intel Hub is a trending topic matching and ranking platform. Internal analysts upload two CSV datasets -- Nyan Cat (YouTube-internal, video-level) and Vayner (externally-curated, trend-level) -- and click "Run Matching + Ranking" to run a two-stage topic matching pipeline. The result populates a three-track view: topics only in Nyan Cat (Internal track), topics matched across both sources (Matching track), and topics only in Vayner (External track). Managers can approve trends from any track, which stages them for use in Agent Collective campaign briefs.</p>
