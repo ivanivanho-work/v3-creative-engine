@@ -1567,6 +1567,18 @@
         <li>Alert shown if file exceeds limit</li>
       </ul>
     </div>
+    <div class="screen-card">
+      <div class="screen-name">MCP Bridge Panel</div>
+      <div class="screen-desc">One-click transfer of the completed manifest directly into Creative Generator. Appears below the chat after any path completes.</div>
+      <ul>
+        <li>"Send to Creative Generator" button - disabled until a manifest is ready</li>
+        <li>Activates automatically when generation_manifest.json, full_campaign_manifest.json, or variation_output_complete.json is saved by the pipeline</li>
+        <li>On click: fetches manifest + creative package from Agent Collective, writes both to a Firestore transfer doc (prompt_transfers_v2), then opens Creative Generator in a new tab at /creative-generator-v2/?transfer={docId}&amp;market={code}</li>
+        <li>Creative Generator reads the transfer doc on load and pre-populates the manifest and creative package panel automatically</li>
+        <li>Button can be clicked again to resend (e.g. after a failed transfer)</li>
+        <li>Hint text updates: "Complete the pipeline to send manifests" → "Manifest ready. Click to send to Creative Generator." → "Transfer sent. Click again to resend."</li>
+      </ul>
+    </div>
   </div>
 
   <h3>Core User Journeys</h3>
@@ -1617,7 +1629,7 @@
       <div class="step-num">6</div>
       <div class="step-body">
         <strong>Phase 4 - Production: Generation manifest produced</strong>
-        <span>AI image and video generation prompts are written, quality-checked (up to 5 loops), and packaged into generation_manifest.json. Download button appears. This file is the input to Creative Generator.</span>
+        <span>AI image and video generation prompts are written, quality-checked (up to 5 loops), and packaged into generation_manifest.json. A download button and the "Send to Creative Generator" MCP bridge button both become active. Clicking "Send to Creative Generator" automatically transfers the manifest and creative package to Creative Generator and opens it in a new tab - no manual file upload needed.</span>
       </div>
     </div>
   </div>
@@ -1652,7 +1664,7 @@
       <div class="step-num">4</div>
       <div class="step-body">
         <strong>Delivery phase: Up to 4 variation manifests generated in parallel</strong>
-        <span>One variation_generator per audience runs in parallel. A consistency checker validates all variations. Final output: variation_output_complete.json with download button.</span>
+        <span>One variation_generator per audience runs in parallel. A consistency checker validates all variations. Final output: variation_output_complete.json. A download button and the "Send to Creative Generator" MCP bridge button both become active. Clicking "Send to Creative Generator" transfers the manifest to Creative Generator and opens it in a new tab automatically.</span>
       </div>
     </div>
   </div>
@@ -1664,7 +1676,7 @@
       <div class="step-num">1-6</div>
       <div class="step-body">
         <strong>Phases 1-4 run identically to the Create Path</strong>
-        <span>Discovery → Brief → Creative → Production. The gen pop generation_manifest.json is produced and a download button appears. Instead of stopping here, the user sends a message indicating they want to adapt for all audiences (e.g. "Yes, adapt for all four audiences").</span>
+        <span>Discovery → Brief → Creative → Production. The gen pop generation_manifest.json is produced, a download button appears, and the MCP bridge button becomes available. Instead of stopping here, the user sends a message indicating they want to adapt for all audiences (e.g. "Yes, adapt for all four audiences").</span>
       </div>
     </div>
     <div class="flow-arrow">&#8595;</div>
@@ -1695,8 +1707,8 @@
     <div class="flow-step">
       <div class="step-num">10</div>
       <div class="step-body">
-        <strong>Download full_campaign_manifest.json</strong>
-        <span>A single download button appears for the unified manifest. This file contains all five audiences and is the direct input to Creative Generator for a full multi-audience generation run.</span>
+        <strong>Send to Creative Generator (or download)</strong>
+        <span>The "Send to Creative Generator" MCP bridge button becomes active and a download button appears for full_campaign_manifest.json. Clicking "Send to Creative Generator" automatically transfers the unified 5-audience manifest and creative package to Creative Generator and opens it in a new tab. Downloading is optional if the user wants a local copy.</span>
       </div>
     </div>
   </div>
@@ -1801,6 +1813,10 @@
     <li><div class="cb"></div>Download button for creative_package.md appears after Phase 3<div class="priority-high">HIGH</div></li>
     <li><div class="cb"></div>Download button for generation_manifest.json appears after Phase 4<div class="priority-high">HIGH</div></li>
     <li><div class="cb"></div>generation_manifest.json is valid JSON and loads correctly in Creative Generator<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>"Send to Creative Generator" MCP bridge button activates after Phase 4 completes<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Clicking "Send to Creative Generator" opens Creative Generator in a new tab with ?transfer= and ?market= params in the URL<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Creative Generator auto-loads the manifest and shows the Creative Package panel on arrival from the MCP bridge<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>MCP bridge button re-enables after a successful transfer (can resend)<div class="priority-med">MED</div></li>
   </ul>
   <h4>Full Campaign Path (Create + Adapt)</h4>
   <ul class="checklist">
@@ -1810,6 +1826,7 @@
     <li><div class="cb"></div>FC Execution: up to 4 fc_variation_generators run in parallel<div class="priority-high">HIGH</div></li>
     <li><div class="cb"></div>Consistency checker runs after all variation generators complete<div class="priority-high">HIGH</div></li>
     <li><div class="cb"></div>full_campaign_manifest.json download appears at the end (contains gen pop + 4 targeted audiences)<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>"Send to Creative Generator" MCP bridge button activates when full_campaign_manifest.json is saved<div class="priority-high">HIGH</div></li>
     <li><div class="cb"></div>full_campaign_manifest.json loads correctly in Creative Generator and shows 5 audience tabs<div class="priority-high">HIGH</div></li>
     <li><div class="cb"></div>Verify generation_manifest.json (gen pop only) is also available as a separate download from Phase 4<div class="priority-med">MED</div></li>
   </ul>
@@ -1820,6 +1837,7 @@
     <li><div class="cb"></div>All 3 parallel analysis agents complete before audience_mapper runs<div class="priority-high">HIGH</div></li>
     <li><div class="cb"></div>Up to 4 variation generators run in parallel during Delivery phase<div class="priority-high">HIGH</div></li>
     <li><div class="cb"></div>variation_output_complete.json download appears at end<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>"Send to Creative Generator" MCP bridge button activates when variation_output_complete.json is saved<div class="priority-high">HIGH</div></li>
   </ul>
   <h4>Error Handling</h4>
   <ul class="checklist">
@@ -1849,7 +1867,8 @@
   <p><strong>What it does:</strong> Creative Generator takes the <code>generation_manifest.json</code> produced by Agent Collective and executes it at scale, calling Vertex AI to generate AI images (Imagen 3.0) and videos (Veo 3.1) for each scene and audience. It manages the generation queue, tracks job status in real time, and hands off the final assets to Template Stamper when a template is in use.</p>
 
   <h3>How It Connects to Agent Collective</h3>
-  <p>The input to Creative Generator is always a JSON manifest file produced by Agent Collective. There are two manifest types, determined by which pipeline path was run:</p>
+  <p>The primary way to load a manifest is via the MCP bridge in Agent Collective. When the pipeline completes, a "Send to Creative Generator" button activates. Clicking it writes the manifest and creative package to a Firestore transfer doc and opens Creative Generator in a new tab with <code>?transfer={docId}&amp;market={code}</code> in the URL. Creative Generator reads the transfer doc on load and pre-populates the manifest and creative package automatically - no file upload required.</p>
+  <p>Alternatively, a manifest file can be uploaded manually using the drag-and-drop zone (for standalone use or re-runs from a saved file). There are two manifest types, determined by which pipeline path was run:</p>
   <table>
     <thead>
       <tr><th>Manifest File</th><th>Source Path</th><th>Contains</th></tr>
@@ -1930,8 +1949,8 @@
     <div class="flow-step">
       <div class="step-num">1</div>
       <div class="step-body">
-        <strong>Drop generation_manifest.json into the uploader</strong>
-        <span>System validates: manifest_version must be "1.1", all text items must have fits_limit=true, exactly one of brief_id or pipeline_run_id must be present. Any failure shows validation errors and blocks progress.</span>
+        <strong>Load manifest (via MCP bridge transfer or manual upload)</strong>
+        <span>When arriving from Agent Collective via the "Send to Creative Generator" button, the manifest is pre-loaded automatically from the Firestore transfer doc - no upload needed. For standalone use, drop the manifest JSON into the uploader. Either way, the system validates: manifest_version must be "1.1", all text items must have fits_limit=true, exactly one of brief_id or pipeline_run_id must be present. Any failure shows validation errors and blocks progress.</span>
       </div>
     </div>
     <div class="flow-arrow">&#8595;</div>
