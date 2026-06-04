@@ -825,7 +825,7 @@
     <span class="tag role">Agencies (upload only)</span>
   </div>
 
-  <p><strong>What it does:</strong> The Shorts Intel Hub is a trending topic aggregation and approval platform. It collects competitive intelligence from agencies and music teams, runs it through AI processing (normalization, deduplication, ranking), and presents a shortlist of top topics for marketing managers to approve each week. Approved topics are automatically handed off to the Agent Collective to generate campaign briefs.</p>
+  <p><strong>What it does:</strong> The Shorts Intel Hub is a trending topic matching and ranking platform. Internal analysts upload two CSV datasets -- Nyan Cat (YouTube-internal, video-level) and Vayner (externally-curated, trend-level) -- and click "Run Matching + Ranking" to run a two-stage topic matching pipeline. The result populates a three-track view: topics only in Nyan Cat (Internal track), topics matched across both sources (Matching track), and topics only in Vayner (External track). Managers can approve trends from any track, which stages them for use in Agent Collective campaign briefs.</p>
 
   <h3>Data Sources</h3>
   <table>
@@ -833,16 +833,15 @@
       <tr><th>Source</th><th>Method</th><th>Auth Required?</th><th>Status</th></tr>
     </thead>
     <tbody>
-      <tr><td><strong>Agency Upload</strong></td><td>CSV drag-and-drop on Upload tab</td><td>No (public-facing)</td><td style="color:var(--green)">Live</td></tr>
-      <tr><td><strong>Music Team Data</strong></td><td>CSV drag-and-drop on Upload tab</td><td>No (public-facing)</td><td style="color:var(--green)">Live</td></tr>
+      <tr><td><strong>Nyan Cat CSV (Internal)</strong></td><td>Manual CSV upload on Data Upload tab</td><td>Yes (Google SSO)</td><td style="color:var(--green)">Live</td></tr>
+      <tr><td><strong>Vayner CSV (External)</strong></td><td>Manual CSV upload on Data Upload tab</td><td>Yes (Google SSO)</td><td style="color:var(--green)">Live</td></tr>
       <tr><td><strong>YouTube Search API</strong></td><td>Automated pipeline</td><td>n/a</td><td style="color:var(--amber)">TBC - not yet built</td></tr>
-      <tr><td><strong>Nyan Cat Pipeline</strong></td><td>Automated video content filter</td><td>n/a</td><td style="color:var(--amber)">TBC - not yet built</td></tr>
     </tbody>
   </table>
 
   <div class="callout warn">
     <div class="callout-title">Data Source Scope for Launch</div>
-    <p>At launch, only Agency Upload and Music Team Data are active. YouTube Search API and Nyan Cat Pipeline are planned but not built. Do not test or validate those two sources - they do not exist in the current codebase.</p>
+    <p>At launch, only Nyan Cat CSV and Vayner CSV manual uploads are active. YouTube Search API is planned but not built. The automated weekly scheduler (Monday 06:00 UTC) is also a TODO stub -- ranking is currently triggered manually via the "Run Matching + Ranking" button.</p>
   </div>
 
   <h3>Application Screens &amp; Features</h3>
@@ -859,22 +858,30 @@
     </div>
     <div class="screen-card">
       <div class="screen-name">Top Topics &amp; Trends Sub-tab</div>
-      <div class="screen-desc">Three-track view of ranked, pending, and long-tail topics.</div>
+      <div class="screen-desc">Three-track view populated by the Nyan Cat + Vayner matching run.</div>
       <ul>
-        <li>Stats row: Trending Velocity, Top Demo Engagement, Approval Status</li>
-        <li>Track 1 - Shortlist: Top 10 approved topics with one-click approval</li>
-        <li>Track 2 - Pending: Ranked but not yet approved, with expandable details</li>
-        <li>Track 3 - Long Tail: Topics &gt;3 weeks old or negative velocity</li>
+        <li>Run controls: "Run Matching + Ranking" button -- fetches both uploaded CSVs from Storage, sends to `/api/match-and-rank`, writes result back to Storage + Firestore.</li>
+        <li>Week selector populated from the match result (ISO week IDs, newest first). Shows "No data yet" if no run has been completed.</li>
+        <li>Track 1 - Internal (Nyan Cat only): trends that appear only in the Nyan Cat dataset, ranked by IRS (Internal Ranking Score).</li>
+        <li>Track 2 - Matching: trends that matched across both sources (by keyword then semantic similarity), ranked by combined ERS score.</li>
+        <li>Track 3 - External (Vayner only): trends that appear only in Vayner, ranked by ERS (External Ranking Score).</li>
+        <li>Each trend card: expandable, shows velocity, sentiment, brand safety, demo, hashtags, reference link.</li>
+        <li>Hidden trends (brand unsafe, AI slop, negative sentiment) are filtered out by default. Toggle "Show hidden trends" to reveal them.</li>
+        <li>Approve button: stores approved trends locally (per market) -- staged for handoff to Agent Collective.</li>
       </ul>
     </div>
     <div class="screen-card">
       <div class="screen-name">Data Upload Tab</div>
-      <div class="screen-desc">No authentication required. Agencies upload CSV files here.</div>
+      <div class="screen-desc">Authenticated (Google SSO). Two separate upload slots -- one for Nyan Cat, one for Vayner.</div>
       <ul>
-        <li>Drag-and-drop CSV/TSV upload zone</li>
-        <li>Template download link (expected format)</li>
-        <li>Upload history log with timestamps and processing status</li>
-        <li>Rate limit: 20 uploads per hour</li>
+        <li>Nyan Cat CSV slot (internal, video-level): drag-and-drop or click to browse. Uploads directly to Firebase Storage.</li>
+        <li>Vayner CSV slot (external, trend-level): same drag-and-drop interface.</li>
+        <li>Both uploads write a file ref to Firestore `shorts_intel_hub/current` -- all viewers see the same uploaded dataset.</li>
+        <li>Template download buttons: "Nyan Cat template (.csv)" and "Vayner template (.csv)" -- each has a header row + one example row.</li>
+        <li>Full field reference table (tabs for Nyan Cat / Vayner) -- auto-generated from the parsers so it stays in sync.</li>
+        <li>Markdown guide download: combined spec for both formats.</li>
+        <li>File is auto-archived on upload so historical CSVs are always recoverable.</li>
+        <li>Server auto-detects format from headers -- no source flag to set.</li>
       </ul>
     </div>
     <div class="screen-card">
@@ -901,131 +908,100 @@
 
   <h3>Core User Journeys</h3>
 
-  <h4>Journey 1: Agency Submits Topics (No Login Required)</h4>
+  <h4>Journey 1: Upload Data and Run Matching</h4>
   <div class="flow">
     <div class="flow-step">
       <div class="step-num">1</div>
       <div class="step-body">
-        <strong>Agency opens the Data Upload tab</strong>
-        <span>No authentication required. The upload tab is publicly accessible so agencies do not need Google accounts.</span>
+        <strong>Sign in with Google SSO</strong>
+        <span>The entire app (including Data Upload) requires authentication. Access is restricted to @google.com email addresses plus a small explicit allowlist.</span>
       </div>
     </div>
     <div class="flow-arrow">&#8595;</div>
     <div class="flow-step">
       <div class="step-num">2</div>
       <div class="step-body">
-        <strong>Download template to see expected format</strong>
-        <span>Required fields: Topic Name, Description, Target Demo, Reference Link. Optional: Hashtags, Audio ID.</span>
+        <strong>Open the Data Upload tab and download templates if needed</strong>
+        <span>Two template downloads available: "Nyan Cat template (.csv)" (video-level, 28 columns) and "Vayner template (.csv)" (trend-level, 28 columns). A combined markdown guide is also downloadable. Field specs are auto-generated from the parsers so they stay in sync.</span>
       </div>
     </div>
     <div class="flow-arrow">&#8595;</div>
     <div class="flow-step">
       <div class="step-num">3</div>
       <div class="step-body">
-        <strong>Drag-drop prepared CSV into the upload zone</strong>
-        <span>The system accepts CSV and TSV formats. Rate limit is 20 uploads per hour. File is sent to the Cloud Function /api/upload endpoint.</span>
+        <strong>Drop the Nyan Cat CSV into the Nyan Cat slot</strong>
+        <span>Video-level data from YouTube. Rows grouped by audio_id into trends. Required fields include: external_video_id, audio_id, Song_title, Views_3D, watch_time_hour_3D, engagement_3D, downstream_uploads_3d, elmo_bucket, visual_quality_score, audio_quality_score, plus IRS window metrics. File uploads directly to Firebase Storage. Both slots are independent -- you can upload one without the other.</span>
       </div>
     </div>
     <div class="flow-arrow">&#8595;</div>
     <div class="flow-step">
       <div class="step-num">4</div>
       <div class="step-body">
-        <strong>AI processing runs in the background</strong>
-        <span>Gemini normalizes field names and formats, validates required fields and URL integrity, generates embeddings for deduplication via pgvector, and stores topics with status "raw".</span>
+        <strong>Drop the Vayner CSV into the Vayner slot</strong>
+        <span>Trend-level curated data. One row per trend. Required fields include: Topic Name, Description, Content Quality, Brand Safe, User Sentiment, Trend Velocity, Views, Likes, Comments. Server auto-detects the format from CSV headers -- no source flag needed. File uploads directly to Firebase Storage.</span>
       </div>
     </div>
     <div class="flow-arrow">&#8595;</div>
     <div class="flow-step">
       <div class="step-num">5</div>
       <div class="step-body">
-        <strong>Upload appears in history log</strong>
-        <span>Agency can see the upload record with file name, record count, and processing status. Processing is asynchronous and may take a few minutes for large files.</span>
+        <strong>Switch to the Marketing Dashboard and click "Run Matching + Ranking"</strong>
+        <span>The button fetches both uploaded CSVs from Firebase Storage, sends them to the Cloud Function `/api/match-and-rank` endpoint (base64-encoded), which runs two-stage matching (keyword then semantic similarity) and ranks each track. Result is written to Firebase Storage as JSON and summarised in Firestore `shorts_intel_hub/current`.</span>
+      </div>
+    </div>
+    <div class="flow-arrow">&#8595;</div>
+    <div class="flow-step">
+      <div class="step-num">6</div>
+      <div class="step-body">
+        <strong>Three-track view populates</strong>
+        <span>Week selector auto-defaults to the newest ISO week. Three tracks display: Internal (Nyan Cat only, IRS-ranked), Matching (keyword + semantic match, combined ERS-ranked), External (Vayner only, ERS-ranked). Hidden trends (brand unsafe, AI slop, negative sentiment) are filtered out by default.</span>
       </div>
     </div>
   </div>
 
-  <h4>Journey 2: Weekly Ranking Refresh (Automated - Every Monday 6 AM UTC)</h4>
-  <div class="flow">
-    <div class="flow-step">
-      <div class="step-num">1</div>
-      <div class="step-body">
-        <strong>Cloud Scheduler triggers weekly refresh</strong>
-        <span>Runs every Monday at 06:00 UTC. Memory: 1GiB, Timeout: 9 minutes (540s). Adjustable per market by admins.</span>
-      </div>
-    </div>
-    <div class="flow-arrow">&#8595;</div>
-    <div class="flow-step">
-      <div class="step-num">2</div>
-      <div class="step-body">
-        <strong>Ranking recalculated for all active topics</strong>
-        <span>Composite score = (Velocity x 40%) + (Creation Rate x 35%) + (Watchtime x 25%). These weights are configurable in the Scoring Settings tab.</span>
-      </div>
-    </div>
-    <div class="flow-arrow">&#8595;</div>
-    <div class="flow-step">
-      <div class="step-num">3</div>
-      <div class="step-body">
-        <strong>Status transitions applied</strong>
-        <span>Topics move from "raw" to "active" if valid. Topics older than 3 weeks, or with negative velocity, move to "expired".</span>
-      </div>
-    </div>
-    <div class="flow-arrow">&#8595;</div>
-    <div class="flow-step">
-      <div class="step-num">4</div>
-      <div class="step-body">
-        <strong>Dashboard refreshes with new rankings</strong>
-        <span>The next time a manager opens the dashboard, they see the updated shortlist ranked by the new scores.</span>
-      </div>
-    </div>
-  </div>
-
-  <h4>Journey 3: Manager Reviews and Approves Topics</h4>
+  <h4>Journey 2: Manager Reviews and Approves Trends</h4>
   <div class="flow">
     <div class="flow-step">
       <div class="step-num">1</div>
       <div class="step-body">
         <strong>Manager opens Marketing Dashboard, selects market and week</strong>
-        <span>Authenticated with Google SSO (@google.com). Selects market (JP, KR, IN, ID) from the dropdown and the relevant week.</span>
+        <span>Market selector: JP, KR, IN, ID. Week selector auto-populates from the last match run. If no run has been completed the week dropdown shows "No data yet -- run matching first".</span>
       </div>
     </div>
     <div class="flow-arrow">&#8595;</div>
     <div class="flow-step">
       <div class="step-num">2</div>
       <div class="step-body">
-        <strong>Reviews the Top 10 Shortlist in Track 1</strong>
-        <span>Topics are displayed with: name, description, target demo, reference link, and composite rank score. Expandable for detail view.</span>
+        <strong>Reviews each track in the three-track view</strong>
+        <span>Each trend card shows: rank, topic name, velocity (Trending/Emerging/Niche), sentiment pill, brand safety indicator, target demo, hashtags, and reference link. Expand any card for full details. Hidden trends are collapsed by default.</span>
       </div>
     </div>
     <div class="flow-arrow">&#8595;</div>
     <div class="flow-step">
       <div class="step-num">3</div>
       <div class="step-body">
-        <strong>Clicks the Approve button on a topic</strong>
-        <span>Topic status changes from "active" to "approved". Approved by email address is recorded with timestamp.</span>
+        <strong>Approves a trend from any track</strong>
+        <span>Clicking "Approve" stores the trend in the local approvedStore (per market, browser-side). The trend card highlights green. Approved trends accumulate in a sidebar for review before handoff.</span>
       </div>
     </div>
     <div class="flow-arrow">&#8595;</div>
     <div class="flow-step">
       <div class="step-num">4</div>
       <div class="step-body">
-        <strong>MCP Bridge push to Agent Collective</strong>
-        <span>Approval triggers an automatic push of the topic's 6 mandatory fields (Topic Name, Description, Target Demo, Reference Link, Status, Market) to the Agent Collective pipeline, which begins generating a campaign brief.</span>
+        <strong>Approved trends staged for Agent Collective handoff</strong>
+        <span>The Approved Sidebar shows all locally-approved trends. These are passed to Agent Collective to generate campaign briefs via the MCP bridge (see agentCollective.ts service).</span>
       </div>
     </div>
   </div>
 
-  <h3>Topic Status Lifecycle</h3>
+  <h3>Scoring Systems</h3>
   <table>
     <thead>
-      <tr><th>Status</th><th>Meaning</th><th>Next State</th></tr>
+      <tr><th>Score</th><th>Applied To</th><th>Key Inputs</th><th>Hard Filters (score = 0, hidden)</th></tr>
     </thead>
     <tbody>
-      <tr><td><code>raw</code></td><td>Just uploaded, not yet processed</td><td>processing or active</td></tr>
-      <tr><td><code>processing</code></td><td>AI normalization in progress</td><td>active (or raw if failed)</td></tr>
-      <tr><td><code>active</code></td><td>Ranked and visible in dashboard</td><td>approved or expired</td></tr>
-      <tr><td><code>approved</code></td><td>Manager approved, pushed to Agent Collective</td><td>archived (eventually)</td></tr>
-      <tr><td><code>expired</code></td><td>Older than 3 weeks OR negative velocity</td><td>archived</td></tr>
-      <tr><td><code>archived</code></td><td>No longer active, stored for reference</td><td>deleted (after 2 years)</td></tr>
+      <tr><td><strong>IRS</strong> (Internal Ranking Score)</td><td>Nyan Cat trends</td><td>1D/3D/7D views, watch-time, engagement, downstream uploads, monetization flag, geo, audio/visual quality, linear regression predictor</td><td>elmo_bucket not TRUSTED/LOW_RISK; avg visual_quality_score &lt; 0.3</td></tr>
+      <tr><td><strong>ERS</strong> (External Ranking Score)</td><td>Vayner trends (and Nyan Cat in Matching track)</td><td>Trend Velocity (Trending/Emerging/Niche), Views, Likes, Comments, Creator Subscriber Count (breakout multiplier), Platform Origin (YT Shorts origin boost), Content Quality, freshness</td><td>Brand Safe = No; Content Quality = AI Slop; User Sentiment = Negative</td></tr>
     </tbody>
   </table>
 
@@ -1035,14 +1011,14 @@
       <tr><th>Method</th><th>Endpoint</th><th>Auth</th><th>Purpose</th></tr>
     </thead>
     <tbody>
-      <tr><td><code>GET</code></td><td><code>/api/topics</code></td><td>Admin</td><td>List topics with filters (market, status, week)</td></tr>
-      <tr><td><code>GET</code></td><td><code>/api/topics/:id</code></td><td>Admin</td><td>Get full topic detail</td></tr>
-      <tr><td><code>POST</code></td><td><code>/api/topics</code></td><td>Admin</td><td>Create a single topic manually</td></tr>
-      <tr><td><code>PATCH</code></td><td><code>/api/topics/:id</code></td><td>Admin</td><td>Update topic fields or status</td></tr>
-      <tr><td><code>POST</code></td><td><code>/api/upload</code></td><td>None (public)</td><td>CSV batch upload (20/hour rate limit)</td></tr>
-      <tr><td><code>GET</code></td><td><code>/api/scoring-config</code></td><td>Admin</td><td>Get current scoring weights</td></tr>
-      <tr><td><code>POST</code></td><td><code>/api/scoring-config</code></td><td>Admin</td><td>Update scoring weights</td></tr>
-      <tr><td><code>POST</code></td><td><code>/api/approve/:id</code></td><td>Admin</td><td>Approve topic + trigger MCP push</td></tr>
+      <tr><td><code>POST</code></td><td><code>/api/upload</code></td><td>None</td><td>Single-file CSV upload (auto-detects Vayner or Nyan Cat from headers). 20/hour rate limit. Note: the frontend uploads directly to Firebase Storage; this endpoint is a fallback for programmatic callers.</td></tr>
+      <tr><td><code>POST</code></td><td><code>/api/match-and-rank</code></td><td>None</td><td>Dual-CSV batch: accepts base64-encoded nyanCatContent + vaynerContent, runs two-stage topic matching (keyword then semantic), returns three ranked tracks (internal/matching/external) + stats.</td></tr>
+      <tr><td><code>GET</code></td><td><code>/api/ranking/configs</code></td><td>None</td><td>Get current ERS scoring config and the default config.</td></tr>
+      <tr><td><code>PUT</code></td><td><code>/api/ranking/configs</code></td><td>None</td><td>Replace the full ERS scoring config (deep-merged over defaults).</td></tr>
+      <tr><td><code>GET</code></td><td><code>/api/topics</code></td><td>Admin</td><td>List topics with filters (market, status, week) -- TODO stub.</td></tr>
+      <tr><td><code>GET</code></td><td><code>/api/topics/top10</code></td><td>Admin</td><td>Get top 10 topics for a specific market/demo -- TODO stub.</td></tr>
+      <tr><td><code>POST</code></td><td><code>/api/topics/:id/approve</code></td><td>Admin</td><td>Approve topic + trigger MCP push -- TODO stub.</td></tr>
+      <tr><td><code>GET</code></td><td><code>/api/markets</code></td><td>None</td><td>Returns JP, KR, IN, ID with timezones.</td></tr>
     </tbody>
   </table>
 
@@ -1064,55 +1040,73 @@
   </div>
 
   <div class="callout info">
-    <div class="callout-title">MCP Bridge - Critical Integration</div>
-    <p>The approval action in the dashboard triggers a push to the Agent Collective via MCP Bridge. This integration must be verified end-to-end before launch. If the push fails silently, a topic appears approved in the UI but no campaign brief is generated.</p>
+    <div class="callout-title">No AI Processing in Upload Pipeline</div>
+    <p>Upload processing is entirely algorithmic -- no Gemini or AI calls are made when parsing or ranking CSVs. The parsers are deterministic: Nyan Cat rows are aggregated by audio_id, scored with IRS; Vayner rows are normalized and scored with ERS. There is no normalization, deduplication, or embedding step in the current codebase.</p>
   </div>
 
-  <div class="callout danger">
-    <div class="callout-title">Gemini AI Key Dependency</div>
-    <p>All AI processing (normalization, deduplication, embedding generation) depends on the GEMINI_API_KEY secret being configured correctly in Cloud Functions. If the key is missing or expired, uploads will fail at the processing stage. Topics will remain in "raw" status indefinitely and never appear in the dashboard.</p>
+  <div class="callout warn">
+    <div class="callout-title">Automated Weekly Scheduler - Not Built</div>
+    <p>The Monday 06:00 UTC weekly refresh job exists as a stub in the codebase (it logs and returns immediately). All ranking refreshes are currently manual: upload the CSVs on the Data Upload tab, then click "Run Matching + Ranking" on the Marketing Dashboard.</p>
   </div>
 
   <div class="callout info">
-    <div class="callout-title">Public Upload Tab - No Auth</div>
-    <p>The upload tab intentionally requires no authentication so external agencies can submit data without Google accounts. However, the /api/topics endpoints for read/write by managers are admin-only. These two access tiers are separate by design.</p>
+    <div class="callout-title">Auth Required for the Whole App</div>
+    <p>The entire Intel Hub app, including the Data Upload tab, requires Google SSO. Access is restricted to @google.com email addresses. There is no public-facing upload path for external agencies in the current build.</p>
+  </div>
+
+  <div class="callout info">
+    <div class="callout-title">Approvals Are Stored Client-Side</div>
+    <p>Clicking "Approve" on a trend stores it in the browser-side approvedStore (localStorage). It does not immediately write to Firestore or push to Agent Collective. The Approved Sidebar collects the batch before the handoff is sent. If the user clears localStorage, approvals are lost.</p>
   </div>
 
   <h3>QA Checklist - Shorts Intel Hub</h3>
-  <h4>Upload Tab (Public - No Auth)</h4>
+  <h4>Authentication</h4>
   <ul class="checklist">
-    <li><div class="cb"></div>Verify the Upload tab is accessible without signing in<div class="priority-high">HIGH</div></li>
-    <li><div class="cb"></div>Verify template download link works and shows correct required fields<div class="priority-high">HIGH</div></li>
-    <li><div class="cb"></div>Upload a valid CSV - verify it appears in the upload history with correct record count<div class="priority-high">HIGH</div></li>
-    <li><div class="cb"></div>Upload a CSV with missing required fields - verify a clear error message is shown<div class="priority-high">HIGH</div></li>
-    <li><div class="cb"></div>Upload a CSV with an invalid reference link - verify validation catches it<div class="priority-med">MED</div></li>
-    <li><div class="cb"></div>Upload 21 times within an hour - verify the 21st is rejected with a user-friendly message<div class="priority-med">MED</div></li>
-    <li><div class="cb"></div>Upload a duplicate topic - verify deduplication prevents it from appearing twice<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Non-google.com users cannot access any part of the app (including Data Upload tab)<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>@google.com users can sign in with Google SSO and access the full app<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Sign-out and return to the app -- verify auth gate re-appears<div class="priority-med">MED</div></li>
   </ul>
-  <h4>Marketing Dashboard (Authenticated)</h4>
+  <h4>Data Upload Tab</h4>
   <ul class="checklist">
-    <li><div class="cb"></div>Verify non-google.com users cannot access the dashboard<div class="priority-high">HIGH</div></li>
-    <li><div class="cb"></div>Market selector changes the topics displayed (JP, KR, IN, ID)<div class="priority-high">HIGH</div></li>
-    <li><div class="cb"></div>Week selector shows correct available weeks from the database<div class="priority-high">HIGH</div></li>
-    <li><div class="cb"></div>Top 10 shortlist in Track 1 is sorted by rank score (highest first)<div class="priority-high">HIGH</div></li>
-    <li><div class="cb"></div>Approve button changes topic status to "approved" (verify in API or Firestore)<div class="priority-high">HIGH</div></li>
-    <li><div class="cb"></div>Approved topic disappears from Track 2 (Pending) and moves to approved state<div class="priority-high">HIGH</div></li>
-    <li><div class="cb"></div>Topics older than 3 weeks appear in Archive sub-tab, not in active tracks<div class="priority-high">HIGH</div></li>
-    <li><div class="cb"></div>Stats row shows correct values (Trending Velocity, Top Demo Engagement, Approval Status)<div class="priority-med">MED</div></li>
+    <li><div class="cb"></div>Nyan Cat CSV slot and Vayner CSV slot both render with correct titles and subtitles<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>"Nyan Cat template (.csv)" download produces a CSV with the correct 28-column header<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>"Vayner template (.csv)" download produces a CSV with the correct 28-column header<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Full guide (.md) download includes both Nyan Cat and Vayner field specs<div class="priority-med">MED</div></li>
+    <li><div class="cb"></div>Drop a valid Nyan Cat CSV -- slot shows filename, size, and upload timestamp after upload<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Drop a valid Vayner CSV -- slot shows filename, size, and upload timestamp after upload<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Both uploads are visible in Firestore `shorts_intel_hub/current` with correct storagePaths<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Open a second browser -- verify the uploaded file refs appear for the second user (shared state)<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>X button on an uploaded file removes it from the slot and deletes the field from Firestore<div class="priority-med">MED</div></li>
+    <li><div class="cb"></div>Drop a non-CSV file -- verify it is rejected (accept=".csv,text/csv")<div class="priority-med">MED</div></li>
+    <li><div class="cb"></div>Field reference table tabs switch between Nyan Cat and Vayner specs correctly<div class="priority-med">MED</div></li>
+  </ul>
+  <h4>Run Matching + Ranking</h4>
+  <ul class="checklist">
+    <li><div class="cb"></div>"Run Matching + Ranking" button is disabled when no CSVs are uploaded<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Button activates once at least one CSV slot has a file<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>After clicking, spinner shows "Matching + ranking..." while the request is in flight<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>After completion, week selector populates with the ISO week from the result<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Three-track view populates: Internal, Matching, and External tracks all render<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Trends with Brand Safe=No, Content Quality=AI Slop, or User Sentiment=Negative are hidden by default<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>"Show hidden trends" checkbox reveals hidden trends with visual indication<div class="priority-med">MED</div></li>
+    <li><div class="cb"></div>Match run result is stored in Firebase Storage and summarised in Firestore `shorts_intel_hub/current`<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Run with only Nyan Cat CSV (no Vayner) -- Internal track populates, Matching and External are empty<div class="priority-med">MED</div></li>
+    <li><div class="cb"></div>Run with only Vayner CSV (no Nyan Cat) -- External track populates, Matching and Internal are empty<div class="priority-med">MED</div></li>
+  </ul>
+  <h4>Three-Track View &amp; Approvals</h4>
+  <ul class="checklist">
+    <li><div class="cb"></div>Market selector changes which cell is displayed (JP, KR, IN, ID)<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Week selector shows correct ISO weeks from the last match run<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Trend cards expand to show full details on click<div class="priority-med">MED</div></li>
+    <li><div class="cb"></div>Approve button marks the trend card green<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Approved trends appear in the Approved Sidebar<div class="priority-high">HIGH</div></li>
+    <li><div class="cb"></div>Approvals persist across page reload (browser localStorage)<div class="priority-med">MED</div></li>
   </ul>
   <h4>Scoring Settings</h4>
   <ul class="checklist">
-    <li><div class="cb"></div>Default weights shown: Velocity 40%, Creation Rate 35%, Watchtime 25%<div class="priority-med">MED</div></li>
-    <li><div class="cb"></div>Adjust sliders and save - verify config is stored (check /api/scoring-config)<div class="priority-med">MED</div></li>
-    <li><div class="cb"></div>Confirm weights do NOT immediately change current rankings (takes effect next Monday)<div class="priority-med">MED</div></li>
-  </ul>
-  <h4>AI Processing &amp; Automation</h4>
-  <ul class="checklist">
-    <li><div class="cb"></div>Verify GEMINI_API_KEY secret is configured in Cloud Functions environment<div class="priority-high">HIGH</div></li>
-    <li><div class="cb"></div>Upload a topic and verify it transitions from "raw" to "active" after processing<div class="priority-high">HIGH</div></li>
-    <li><div class="cb"></div>Verify approval triggers an MCP Bridge push (check Agent Collective receives it)<div class="priority-high">HIGH</div></li>
-    <li><div class="cb"></div>Confirm weekly scheduler fires on Monday 06:00 UTC (or test via manual trigger)<div class="priority-high">HIGH</div></li>
-    <li><div class="cb"></div>Verify scheduler completes within 9-minute timeout for expected data volume<div class="priority-med">MED</div></li>
+    <li><div class="cb"></div>Scoring Settings sub-tab renders with ERS config controls<div class="priority-med">MED</div></li>
+    <li><div class="cb"></div>Adjust config and save -- verify PUT /api/ranking/configs is called with the new values<div class="priority-med">MED</div></li>
+    <li><div class="cb"></div>Re-running matching after a config change uses the updated ERS weights<div class="priority-med">MED</div></li>
   </ul>
 </div>
 
