@@ -61,6 +61,10 @@
         "destination": "/template-stamper/index.html"
       },
       {
+        "source": "/qa-matrix",
+        "destination": "/qa-matrix.html"
+      },
+      {
         "source": "**",
         "destination": "/hub.html"
       }
