@@ -1049,6 +1049,7 @@ const App = ({ userEmail }) => {
   const [quarterStart, setQuarterStart] = useState("2026-02-01");  
   const [user, setUser] = useState(null);
   const [accessDenied, setAccessDenied] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   const isDataIngestionAdmin = DATA_INGESTION_ADMINS.includes((userEmail || '').toLowerCase());
 
@@ -1600,6 +1601,39 @@ const App = ({ userEmail }) => {
     return { ...prev, [s]: upd };  
   });
 
+  const handleExport = async () => {
+    if (isExporting) return;
+    setIsExporting(true);
+    try {
+      const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
+        import('html2canvas'),
+        import('jspdf'),
+      ]);
+      const canvas = await html2canvas(document.documentElement, {
+        backgroundColor: '#0a0a0a',
+        scale: 1.5,
+        useCORS: true,
+        logging: false,
+        windowWidth: document.documentElement.scrollWidth,
+        windowHeight: document.documentElement.scrollHeight,
+      });
+      const orientation = canvas.width >= canvas.height ? 'landscape' : 'portrait';
+      const pdf = new jsPDF({ orientation, unit: 'pt', format: 'a4' });
+      const pageW = pdf.internal.pageSize.getWidth();
+      const pageH = pdf.internal.pageSize.getHeight();
+      const ratio = Math.min(pageW / canvas.width, pageH / canvas.height);
+      const w = canvas.width * ratio;
+      const h = canvas.height * ratio;
+      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', (pageW - w) / 2, (pageH - h) / 2, w, h);
+      const safeTab = String(activeTab).replace(/\s+/g, '');
+      pdf.save(`ShortsBrain_${safeTab}_${latestGlobalDate || 'Snapshot'}.pdf`);
+    } catch (err) {
+      console.error('PDF export failed:', err);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   if (showIngestion) return <LandingPage uploadedFiles={uploadedFiles} handleFileUpload={handleFileUpload} startAnalysis={startAnalysis} isAnalyzing={isAnalyzing} />;
 
   return (  
@@ -1718,7 +1752,7 @@ const App = ({ userEmail }) => {
       <div className="flex-1 flex flex-col overflow-hidden relative">  
         <header className="px-8 py-5 border-b border-[#2a2a2a] flex items-center justify-between bg-[#0a0a0a]/80 backdrop-blur-md sticky top-0 z-40">  
           <h4 className="text-sm font-bold text-white uppercase tracking-widest">{activeTab}</h4>  
-          <button type="button" onClick={() => { const d = JSON.stringify({ globalData, regionalData, campaignHubData, latestGlobalDate, quarterStart }, null, 2); const b = new Blob([d], { type: 'application/json' }); const u = URL.createObjectURL(b); const a = document.createElement('a'); a.href = u; a.download = `ShortsBrain_${latestGlobalDate || 'Snapshot'}.json`; a.click(); }} className="bg-white text-black px-6 py-2.5 rounded-lg text-[10px] font-bold uppercase hover:bg-[#e0e0e0] shadow-xl flex items-center gap-2 transition-colors"><Download className="w-3.5 h-3.5" /> Export</button>  
+          <button type="button" onClick={handleExport} disabled={isExporting} className="bg-white text-black px-6 py-2.5 rounded-lg text-[10px] font-bold uppercase hover:bg-[#e0e0e0] shadow-xl flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-wait">{isExporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}{isExporting ? 'Exporting…' : 'Export PDF'}</button>
         </header>  
         <main className="flex-1 overflow-auto p-10 relative no-scrollbar">  
           {activeTab === 'OKR' && <OKRAndRecsView globalData={globalData} regionalData={regionalData} latestDate={latestGlobalDate} quarterStart={quarterStart} />}  
