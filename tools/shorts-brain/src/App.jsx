@@ -1367,8 +1367,13 @@ const App = ({ userEmail }) => {
 
               if (!instructionMap[mKey]) instructionMap[mKey] = {};  
               if (!instructionMap[mKey][cKey]) instructionMap[mKey][cKey] = {};  
-              if (!instructionMap[mKey][cKey][gK]) instructionMap[mKey][cKey][gK] = {};  
-              if (cleanStr(cols[iIdx]).toUpperCase() === 'PAUSE') instructionMap[mKey][cKey][gK][aK] = cleanStr(cols[dIdx]);  
+              if (!instructionMap[mKey][cKey][gK]) instructionMap[mKey][cKey][gK] = {};
+              const instr = cleanStr(cols[iIdx]).toUpperCase();
+              if (instr === 'PAUSE') {
+                instructionMap[mKey][cKey][gK][aK] = cleanStr(cols[dIdx]);
+              } else if (instr === 'RELIVE' || instr === 'RELAUNCH' || instr === 'LIVE') {
+                delete instructionMap[mKey][cKey][gK][aK];
+              }
             }  
           });  
         }  
