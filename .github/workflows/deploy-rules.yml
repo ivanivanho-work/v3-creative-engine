@@ -7,6 +7,7 @@ on:
       - 'firestore.rules'
       - 'firestore.indexes.json'
       - 'storage.rules'
+  workflow_dispatch:
 
 jobs:
   deploy-rules:
@@ -14,9 +15,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Firestore deploys FIRST and on its own: bundling it with storage meant
+      # the storage pre-flight 403 (CI service account lacks
+      # firebasestorage.defaultBucket.get) aborted the whole deploy, so
+      # firestore.rules changes never reached production.
       - name: Deploy Firestore rules and indexes
         uses: w9jds/firebase-action@master
         with:
-          args: deploy --only firestore:rules,firestore:indexes,storage
+          args: deploy --only firestore:rules,firestore:indexes
+        env:
+          GCP_SA_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_V3_CREATIVE_ENGINE }}
+
+      # Known-failing until the CI service account is granted the
+      # "Firebase Admin" or "Storage Admin" role in GCP IAM. Marked
+      # continue-on-error so it can't block Firestore rules again.
+      - name: Deploy Storage rules (requires firebasestorage IAM grant)
+        continue-on-error: true
+        uses: w9jds/firebase-action@master
+        with:
+          args: deploy --only storage
         env:
           GCP_SA_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_V3_CREATIVE_ENGINE }}
