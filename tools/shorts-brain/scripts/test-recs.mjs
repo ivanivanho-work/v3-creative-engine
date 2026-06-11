@@ -38,7 +38,9 @@ const CSV = [
   // S1: campaign with NO entry in the structural metadata CSV, negative lift both genders
   'NoMetaCamp,India,Ratio (%),Control,Male,18-24,2026-06-10,2026-05-01,-0.50',
   'NoMetaCamp,India,Ratio (%),Control,Female,18-24,2026-06-10,2026-05-01,-0.60',
-  // S2: campaign tagged to a Campaign Hub module — must be excluded from recs
+  // S2: campaign tagged to a Campaign Hub module — must STILL be evaluated
+  //      (the previous hub-tab exclusion zeroed out the matrix when 100% of
+  //       holdback campaigns carried a hub tag).
   'HubScaledCamp,India,Ratio (%),Control,Male,18-24,2026-06-10,2026-05-01,-0.70',
   'HubScaledCamp,India,Ratio (%),Control,Female,18-24,2026-06-10,2026-05-01,-0.80',
   // S3: campaign with stat-sig positive gen-pop lift, no metadata entry
@@ -88,8 +90,9 @@ check('male 18-24 lift parsed (not NA)', node('NoMetaCamp', 'DAU-SCT', 'male', '
 check('PAUSE recommendation emitted', byCamp('NoMetaCamp').some(r => r.recommendation === 'PAUSE' && r.age === '18-24'),
   `rows: ${JSON.stringify(byCamp('NoMetaCamp'))}`);
 
-console.log('\n[S2] Campaign Hub module rows stay excluded');
-check('no recs for hub-tagged campaign', byCamp('HubScaledCamp').length === 0,
+console.log('\n[S2] Campaign Hub module rows are NOW evaluated alongside others');
+check('PAUSE rec emitted for hub-tagged campaign with negative lift',
+  byCamp('HubScaledCamp').some(r => r.recommendation === 'PAUSE'),
   `rows: ${JSON.stringify(byCamp('HubScaledCamp'))}`);
 
 console.log('\n[S3] Stat-sig positive gen-pop lift produces SCALE');
@@ -106,8 +109,8 @@ check('female-only PAUSE emitted (no male/common row)',
   `rows: ${JSON.stringify(byCamp('FemTargetCamp'))}`);
 
 console.log('\n[S6] Guard-breakdown stats are reported correctly');
-check('stats: 5 scanned, 1 hub-tagged, 4 evaluated, 1 no-signal, 0 ended',
-  stats.total === 5 && stats.skippedHubTab === 1 && stats.evaluated === 4 && stats.noSignal === 1 && stats.skippedEnded === 0,
+check('stats: 5 scanned, 5 evaluated, 1 no-signal, 0 ended',
+  stats.total === 5 && stats.evaluated === 5 && stats.noSignal === 1 && stats.skippedEnded === 0,
   `got ${JSON.stringify(stats)}`);
 check('no recs for non-sig positive campaign', byCamp('QuietCamp').length === 0,
   `rows: ${JSON.stringify(byCamp('QuietCamp'))}`);
