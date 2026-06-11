@@ -445,7 +445,7 @@ const MetricControlHub = ({ activeMetrics, toggleMetric, handleAllToggle, allowe
   </div>  
 );
 
-const MasterTableView = ({ data, activeMetrics, latestGlobalDate, isCampaignView = false, hideDates = false, isAlwaysOn = false }) => {  
+const MasterTableView = ({ data, activeMetrics, latestGlobalDate, isCampaignView = false, hideDates = false, isAlwaysOn = false, ignorePaused = false }) => {
   const scrollRef = useRef(null);
 
   const themes = {  
@@ -523,7 +523,7 @@ const MasterTableView = ({ data, activeMetrics, latestGlobalDate, isCampaignView
             {data.map((row, ri) => {  
               const isAnchorRow = !!row.isAnchor;  
               const genPopNode = row.metrics?.[activeMetrics[0] || 'DAU-SCT']?.total?.total;  
-              const capDate = (genPopNode?.isPaused && genPopNode?.launchDate && genPopNode.launchDate !== 'Ended')  
+              const capDate = (!ignorePaused && genPopNode?.isPaused && genPopNode?.launchDate && genPopNode.launchDate !== 'Ended')
                 ? genPopNode.launchDate  
                 : null;
 
@@ -583,7 +583,7 @@ const MasterTableView = ({ data, activeMetrics, latestGlobalDate, isCampaignView
                             const node = row.metrics[m][g][a];  
                             const isEnd = ai === AGE_BUCKETS.length - 1 && activeMetrics.indexOf(m) === activeMetrics.length - 1;  
                             let style = "text-slate-500 font-medium", bg = "";  
-                            const showPaused = node.isPaused && !isAnchorRow;
+                            const showPaused = node.isPaused && !isAnchorRow && !ignorePaused;
 
                             if (showPaused) {  
                               style = "text-[#808080] font-bold";  
@@ -1841,7 +1841,7 @@ const App = ({ userEmail }) => {
                 
                 const specificRows = campaignHubData[activeTab]?.[mkt]?.[sub]?.[ss];  
                 return specificRows || [];  
-              })()} activeMetrics={activeMetrics} latestGlobalDate={latestGlobalDate} isCampaignView isAlwaysOn={activeTab === 'AlwaysOn'} />  
+              })()} activeMetrics={activeMetrics} latestGlobalDate={latestGlobalDate} isCampaignView isAlwaysOn={activeTab === 'AlwaysOn'} ignorePaused />
             </div>  
           )}  
         </main>  
