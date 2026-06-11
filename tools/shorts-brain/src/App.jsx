@@ -419,17 +419,23 @@ export const parseCSVData = (text, existingAcc = {}, metaMap = {}, searchPriorit
 
 // Pure recommendation engine for the OKR Strategic Guidance matrix.
 // Module-level (not a hook) so it can be exercised by scripts/test-recs.mjs.
-export const buildRecommendationRows = (regionalData) => {
+// Pass a statsOut object to receive a per-guard breakdown of why campaigns
+// were or weren't evaluated — surfaced in the UI when the matrix is empty.
+export const buildRecommendationRows = (regionalData, statsOut = null) => {
   const tableData = [];
   const scalingRestricted = ['SHELF', 'SSC', 'UTS', 'MVR', 'UTSSFV'];
+  const stats = { total: 0, skippedEnded: 0, skippedHubTab: 0, evaluated: 0, noSignal: 0 };
 
   MARKET_SEGMENTS.forEach(market => {
     const allCampsInMarket = regionalData[market] || [];
     allCampsInMarket.forEach((camp, ci) => {
-      if (isCampaignEnded(camp.optimisationEndDate, camp.campaignEndDate)) return;
+      stats.total += 1;
+      if (isCampaignEnded(camp.optimisationEndDate, camp.campaignEndDate)) { stats.skippedEnded += 1; return; }
       // Campaign Hub module rows are evaluated in their own tabs, not in pause/scale recs.
       const campTab = camp.meta?.tab ? cleanStr(camp.meta.tab) : null;
-      if (campTab && CAMPAIGN_CHILDREN.some(child => eq(child.id, campTab) || eq(child.label, campTab))) return;
+      if (campTab && CAMPAIGN_CHILDREN.some(child => eq(child.id, campTab) || eq(child.label, campTab))) { stats.skippedHubTab += 1; return; }
+      stats.evaluated += 1;
+      const emittedBefore = tableData.length;
       const metrics = camp.metrics?.['DAU-SCT'] || {};
 
       const daysLiveCount = calcDaysLive(camp.campaignStartDate, camp.optimisationEndDate);
@@ -503,8 +509,11 @@ export const buildRecommendationRows = (regionalData) => {
       common.forEach(a => addPauseOrMaintain('total', a, 'G'));
       mNeg.filter(a => !common.includes(a)).forEach(a => addPauseOrMaintain('male', a, 'M'));
       fNeg.filter(a => !common.includes(a)).forEach(a => addPauseOrMaintain('female', a, 'F'));
+
+      if (tableData.length === emittedBefore) stats.noSignal += 1;
     });
   });
+  if (statsOut) Object.assign(statsOut, stats);
   return tableData;
 };
 
@@ -766,10 +775,13 @@ const OKRAndRecsView = ({ globalData, regionalData, latestDate, quarterStart }) 
     });
   }, [globalData, quarterStart]);
 
-  const recommendationRows = useMemo(() => {
-    const tableData = buildRecommendationRows(regionalData);
+  const { rows: recommendationRows, stats: recStats } = useMemo(() => {
+    const stats = {};
+    const tableData = buildRecommendationRows(regionalData, stats);
     const merged = [...tableData, ...manualPointers].filter(r => !deletedRowIds.has(r.id));
-    return merged.map(r => editedRows[r.id] ? { ...r, ...editedRows[r.id] } : r);
+    const rows = merged.map(r => editedRows[r.id] ? { ...r, ...editedRows[r.id] } : r);
+    if (rows.length === 0) console.info('[StrategicGuidance] matrix empty — guard breakdown:', stats);
+    return { rows, stats };
   }, [regionalData, manualPointers, deletedRowIds, editedRows]);
 
   const handleAddNewManual = () => { if (!newManualForm.campaign) return; setManualPointers(p => [...p, { ...newManualForm, id: `MANUAL_${Date.now()}` }]); setIsAddingManual(false); setNewManualForm({ country: 'APAC', campaign: '', age: 'GenPop', gender: 'GenPop', recommendation: 'MAINTAIN', justification: '' }); };
@@ -883,7 +895,16 @@ const OKRAndRecsView = ({ globalData, regionalData, latestDate, quarterStart }) 
               ))}  
             </tbody>  
           </table>  
-          {recommendationRows.length === 0 && <div className="p-20 text-center text-[#555] font-bold uppercase tracking-widest text-[10px]">Matrix Empty</div>}  
+          {recommendationRows.length === 0 && (
+            <div className="p-20 text-center">
+              <div className="text-[#555] font-bold uppercase tracking-widest text-[10px]">Matrix Empty</div>
+              <div className="mt-3 text-[#777] text-[10px] uppercase tracking-wider leading-relaxed max-w-2xl mx-auto">
+                {recStats.total === 0
+                  ? 'No campaigns found in the Market Holdback data — check that the per-market Holdback CSVs were uploaded and analyzed.'
+                  : `${recStats.total} campaigns scanned — ${recStats.skippedEnded} ended, ${recStats.skippedHubTab} routed to Campaign Hub tabs (excluded from directives), ${recStats.noSignal} evaluated without a qualifying signal (no negative age-level lift and no stat-sig positive GenPop lift).`}
+              </div>
+            </div>
+          )}
         </div>  
       </div>  
     </div>  

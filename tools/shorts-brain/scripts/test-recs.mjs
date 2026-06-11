@@ -47,6 +47,8 @@ const CSV = [
   // S4: campaign explicitly targeted Female-only — male cells must stay NA-gated
   'FemTargetCamp,India,Ratio (%),Control,Male,18-24,2026-06-10,2026-05-01,-0.50',
   'FemTargetCamp,India,Ratio (%),Control,Female,18-24,2026-06-10,2026-05-01,-0.40',
+  // S6: campaign with positive but non-sig lift — evaluated, but no qualifying signal
+  'QuietCamp,India,Ratio (%),Control,Total,GenPop,2026-06-10,2026-05-01,0.20',
 ].join('\n');
 
 // metaMap shaped exactly like the app's metaLookup (campaignInfo CSV parse)
@@ -68,7 +70,8 @@ const metaMap = {
 const acc = parseCSVData(CSV, {}, metaMap, undefined, false, 'India', false, false);
 const rows = Object.values(acc);
 const regionalData = { India: rows };
-const recs = buildRecommendationRows(regionalData);
+const stats = {};
+const recs = buildRecommendationRows(regionalData, stats);
 
 const byCamp = (name) => recs.filter(r => r.campaign === name);
 const node = (name, m, g, a) => rows.find(r => r.country === name)?.metrics?.[m]?.[g]?.[a];
@@ -101,6 +104,13 @@ check('male cell NA for female-targeted campaign', node('FemTargetCamp', 'DAU-SC
 check('female-only PAUSE emitted (no male/common row)',
   byCamp('FemTargetCamp').length === 1 && byCamp('FemTargetCamp')[0].gender === 'FEMALE',
   `rows: ${JSON.stringify(byCamp('FemTargetCamp'))}`);
+
+console.log('\n[S6] Guard-breakdown stats are reported correctly');
+check('stats: 5 scanned, 1 hub-tagged, 4 evaluated, 1 no-signal, 0 ended',
+  stats.total === 5 && stats.skippedHubTab === 1 && stats.evaluated === 4 && stats.noSignal === 1 && stats.skippedEnded === 0,
+  `got ${JSON.stringify(stats)}`);
+check('no recs for non-sig positive campaign', byCamp('QuietCamp').length === 0,
+  `rows: ${JSON.stringify(byCamp('QuietCamp'))}`);
 
 console.log('\n[S5] CSV-paused campaigns are still evaluated (PR #58 behaviour)');
 const pausedRows = JSON.parse(JSON.stringify(rows));
