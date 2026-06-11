@@ -682,8 +682,6 @@ const OKRAndRecsView = ({ globalData, regionalData, latestDate, quarterStart }) 
         if (campTab && CAMPAIGN_CHILDREN.some(child => eq(child.id, campTab) || eq(child.label, campTab))) return;
         const metrics = camp.metrics?.['DAU-SCT'] || {};
 
-        if (metrics.total?.total?.isPaused) return;
-
         const daysLiveCount = calcDaysLive(camp.campaignStartDate, camp.optimisationEndDate);  
         const isMature = daysLiveCount >= 14;  
         const mKey = MARKET_KEYS[market] || market.toUpperCase();
@@ -695,7 +693,7 @@ const OKRAndRecsView = ({ globalData, regionalData, latestDate, quarterStart }) 
           if (metrics[gK]?.[aK]?.v === 'NA') return;  
           const node = metrics[gK]?.[aK];
 
-          if (!node || node.isPaused) return;
+          if (!node) return;
 
           const v = node.v || 0;  
           const isSigNeg = node.sig === -1;  
