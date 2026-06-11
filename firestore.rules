@@ -1,5 +1,8 @@
 rules_version = '2';
 
+// Deploy marker 2026-06-11: re-deploy via CI after deploy-rules.yml fix (#60) —
+// production rules predate the shortsbrain_data block, breaking Shorts Brain persistence.
+
 // Phase −1 lockdown: gate every read/write behind Firebase Auth allowlist.
 // allowlist = ivanho.wz@gmail.com OR @google.com.
 // Triggers (admin SDK) bypass rules — unaffected.
