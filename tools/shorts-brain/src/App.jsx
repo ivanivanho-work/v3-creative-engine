@@ -73,7 +73,7 @@ const CAMPAIGN_CHILDREN = [
 
 const cleanStr = (s) => (s || '').toString().replace(/['"]/g, '').replace(/\u00A0/g, ' ').trim();
 
-const superClean = (s) => {  
+export const superClean = (s) => {
   try {  
     return cleanStr(s).toUpperCase().replace(/[^\p{L}\p{N}]/gu, '');  
   } catch (e) {  
@@ -228,7 +228,7 @@ const decompressRow = (row) => {
 };
 
 // --- DATA PARSING ENGINE ---  
-const parseCSVData = (text, existingAcc = {}, metaMap = {}, searchPriority = ['Campaign', 'Campaign Name', 'Country', 'Market'], forceAbs = false, marketContext = null, isGlobalFile = false, isAlwaysOnData = false) => {  
+export const parseCSVData = (text, existingAcc = {}, metaMap = {}, searchPriority = ['Campaign', 'Campaign Name', 'Country', 'Market'], forceAbs = false, marketContext = null, isGlobalFile = false, isAlwaysOnData = false) => {
   try {  
     const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');  
     if (lines.length < 2) return existingAcc;  
@@ -356,13 +356,19 @@ const parseCSVData = (text, existingAcc = {}, metaMap = {}, searchPriority = ['C
 
         const targeting = acc[compositeKey].meta.targeting;
 
-        let isTargeted = false;  
-        if (isAnchorRow || isAlwaysOnData) {  
-          isTargeted = true;  
-        } else if (targeting) {  
-          const ageAllowed = targeting.ages.length === 0 || targeting.ages.includes(age);  
-          const genderAllowed = targeting.genders.length === 0 || targeting.genders.includes(gender);  
+        let isTargeted = false;
+        if (isAnchorRow || isAlwaysOnData) {
+          isTargeted = true;
+        } else if (targeting) {
+          const ageAllowed = targeting.ages.length === 0 || targeting.ages.includes(age);
+          const genderAllowed = targeting.genders.length === 0 || targeting.genders.includes(gender);
           isTargeted = ageAllowed && genderAllowed;
+        } else {
+          // No structural metadata for this campaign — fully permissive, no NA
+          // gating. Holdback CSVs routinely contain campaigns that aren't in the
+          // campaignInfo file; gating those to NA blanks the whole row and hides
+          // it from the OKR Strategic Guidance engine.
+          isTargeted = true;
         }
         // Impressions/CTR are volume metrics — not gated by demographic targeting.
         if (m === 'Impressions' || m === 'CTR') isTargeted = true;
@@ -411,7 +417,98 @@ const parseCSVData = (text, existingAcc = {}, metaMap = {}, searchPriority = ['C
   }  
 };
 
-const copyToClipboardFunc = (text) => {  
+// Pure recommendation engine for the OKR Strategic Guidance matrix.
+// Module-level (not a hook) so it can be exercised by scripts/test-recs.mjs.
+export const buildRecommendationRows = (regionalData) => {
+  const tableData = [];
+  const scalingRestricted = ['SHELF', 'SSC', 'UTS', 'MVR', 'UTSSFV'];
+
+  MARKET_SEGMENTS.forEach(market => {
+    const allCampsInMarket = regionalData[market] || [];
+    allCampsInMarket.forEach((camp, ci) => {
+      if (isCampaignEnded(camp.optimisationEndDate, camp.campaignEndDate)) return;
+      // Campaign Hub module rows are evaluated in their own tabs, not in pause/scale recs.
+      const campTab = camp.meta?.tab ? cleanStr(camp.meta.tab) : null;
+      if (campTab && CAMPAIGN_CHILDREN.some(child => eq(child.id, campTab) || eq(child.label, campTab))) return;
+      const metrics = camp.metrics?.['DAU-SCT'] || {};
+
+      const daysLiveCount = calcDaysLive(camp.campaignStartDate, camp.optimisationEndDate);
+      const isMature = daysLiveCount >= 14;
+      const mKey = MARKET_KEYS[market] || market.toUpperCase();
+
+      const currentCampaignNameSuper = superClean(camp.country);
+      const isScalingRestricted = scalingRestricted.some(cat => currentCampaignNameSuper.includes(cat));
+
+      const addPauseOrMaintain = (gK, aK, tag) => {
+        if (metrics[gK]?.[aK]?.v === 'NA') return;
+        const node = metrics[gK]?.[aK];
+
+        if (!node) return;
+
+        const v = node.v || 0;
+        const isSigNeg = node.sig === -1;
+        const rec = isMature ? "PAUSE" : "MAINTAIN";
+
+        const liftLabel = isSigNeg ? "stat sig negative" : "neutral negative";
+
+        let justification = "";
+        if (tag === 'G' && aK !== 'total' && v >= 0) {
+          const mNode = metrics['male']?.[aK];
+          const fNode = metrics['female']?.[aK];
+
+          if (mNode?.v !== 'NA' && fNode?.v !== 'NA' && (mNode?.v || 0) < -0.0001 && (fNode?.v || 0) < -0.0001) {
+            const actionWord = isMature ? "Pause" : "Maintain (Learning Phase)";
+            const maturitySuffix = isMature ? "" : ` observed but hasn't reached maturity (Current: ${daysLiveCount}d / Required: 14d)`;
+
+            if (isMature && isScalingRestricted) {
+              justification = `${mKey} ${camp.country} - Pause G${aK} given negative lift across both males (${mNode.v.toFixed(2)}%) and females (${fNode.v.toFixed(2)}%) - pause the current trend and wait for 5-7d and decide to rollout next trend or not`;
+            } else {
+              justification = `${mKey} ${camp.country} - ${actionWord} G${aK} given negative lift across both males (${mNode.v.toFixed(2)}%) and females (${fNode.v.toFixed(2)}%)${maturitySuffix}`;
+            }
+          }
+        }
+
+        if (!justification) {
+          if (isMature) {
+            if (isScalingRestricted) {
+              justification = `${mKey} ${camp.country} - Pause ${tag}${aK} given ${liftLabel} (${v.toFixed(2)}%) - pause the current trend and wait for 5-7d and decide to rollout next trend or not`;
+            } else {
+              justification = `${mKey} ${camp.country} - Pause ${tag}${aK} given ${liftLabel} (${v.toFixed(2)}%)`;
+            }
+          } else {
+            justification = `${mKey} ${camp.country} - Maintain ${tag}${aK} (Learning Phase): Negative lift (${v.toFixed(2)}%) observed but hasn't reached maturity (Current: ${daysLiveCount}d / Required: 14d).`;
+          }
+        }
+
+        tableData.push({ id: `CAMP_${market}_${ci}_P_${gK}_${aK}`, country: mKey, campaign: camp.country, age: aK === 'total' ? 'GenPop' : aK, gender: gK === 'total' ? 'GenPop' : gK.toUpperCase(), recommendation: rec, justification });
+      };
+
+      const gpNode = metrics.total?.total || { v: 0, sig: 0 };
+      if (!isScalingRestricted && gpNode.v !== 'NA' && gpNode.sig === 1 && gpNode.v > 0.001) {
+        tableData.push({ id: `CAMP_${market}_${ci}_SC`, country: mKey, campaign: camp.country, age: "GenPop", gender: "GenPop", recommendation: "SCALE", justification: `${mKey} ${camp.country} - Scale GenPop: Stat-sig positive lift (+${gpNode.v.toFixed(2)}%) observed.` });
+      }
+
+      const getAgesToTrack = (gK) => {
+        let dirs = [];
+        ['18-24', '25-34', '35+'].forEach(a => {
+          if (metrics[gK]?.[a]?.v !== 'NA' && (metrics[gK]?.[a]?.v || 0) < -0.0001) dirs.push(a);
+        });
+        return dirs;
+      };
+
+      const mNeg = getAgesToTrack('male');
+      const fNeg = getAgesToTrack('female');
+      const common = mNeg.filter(a => fNeg.includes(a));
+
+      common.forEach(a => addPauseOrMaintain('total', a, 'G'));
+      mNeg.filter(a => !common.includes(a)).forEach(a => addPauseOrMaintain('male', a, 'M'));
+      fNeg.filter(a => !common.includes(a)).forEach(a => addPauseOrMaintain('female', a, 'F'));
+    });
+  });
+  return tableData;
+};
+
+const copyToClipboardFunc = (text) => {
   const textArea = document.createElement("textarea");  
   textArea.value = text;  
   document.body.appendChild(textArea);  
@@ -669,94 +766,10 @@ const OKRAndRecsView = ({ globalData, regionalData, latestDate, quarterStart }) 
     });
   }, [globalData, quarterStart]);
 
-  const recommendationRows = useMemo(() => {  
-    const tableData = [];  
-    const scalingRestricted = ['SHELF', 'SSC', 'UTS', 'MVR', 'UTSSFV'];
-
-    MARKET_SEGMENTS.forEach(market => {  
-      const allCampsInMarket = regionalData[market] || [];  
-      allCampsInMarket.forEach((camp, ci) => {  
-        if (isCampaignEnded(camp.optimisationEndDate, camp.campaignEndDate)) return;
-        // Campaign Hub module rows are evaluated in their own tabs, not in pause/scale recs.
-        const campTab = camp.meta?.tab ? cleanStr(camp.meta.tab) : null;
-        if (campTab && CAMPAIGN_CHILDREN.some(child => eq(child.id, campTab) || eq(child.label, campTab))) return;
-        const metrics = camp.metrics?.['DAU-SCT'] || {};
-
-        const daysLiveCount = calcDaysLive(camp.campaignStartDate, camp.optimisationEndDate);  
-        const isMature = daysLiveCount >= 14;  
-        const mKey = MARKET_KEYS[market] || market.toUpperCase();
-
-        const currentCampaignNameSuper = superClean(camp.country);  
-        const isScalingRestricted = scalingRestricted.some(cat => currentCampaignNameSuper.includes(cat));
-
-        const addPauseOrMaintain = (gK, aK, tag) => {  
-          if (metrics[gK]?.[aK]?.v === 'NA') return;  
-          const node = metrics[gK]?.[aK];
-
-          if (!node) return;
-
-          const v = node.v || 0;  
-          const isSigNeg = node.sig === -1;  
-          const rec = isMature ? "PAUSE" : "MAINTAIN";
-
-          const liftLabel = isSigNeg ? "stat sig negative" : "neutral negative";
-
-          let justification = "";  
-          if (tag === 'G' && aK !== 'total' && v >= 0) {  
-            const mNode = metrics['male']?.[aK];  
-            const fNode = metrics['female']?.[aK];
-
-            if (mNode?.v !== 'NA' && fNode?.v !== 'NA' && (mNode?.v || 0) < -0.0001 && (fNode?.v || 0) < -0.0001) {  
-              const actionWord = isMature ? "Pause" : "Maintain (Learning Phase)";  
-              const maturitySuffix = isMature ? "" : ` observed but hasn't reached maturity (Current: ${daysLiveCount}d / Required: 14d)`;
-
-              if (isMature && isScalingRestricted) {  
-                justification = `${mKey} ${camp.country} - Pause G${aK} given negative lift across both males (${mNode.v.toFixed(2)}%) and females (${fNode.v.toFixed(2)}%) - pause the current trend and wait for 5-7d and decide to rollout next trend or not`;  
-              } else {  
-                justification = `${mKey} ${camp.country} - ${actionWord} G${aK} given negative lift across both males (${mNode.v.toFixed(2)}%) and females (${fNode.v.toFixed(2)}%)${maturitySuffix}`;  
-              }  
-            }  
-          }
-
-          if (!justification) {  
-            if (isMature) {  
-              if (isScalingRestricted) {  
-                justification = `${mKey} ${camp.country} - Pause ${tag}${aK} given ${liftLabel} (${v.toFixed(2)}%) - pause the current trend and wait for 5-7d and decide to rollout next trend or not`;  
-              } else {  
-                justification = `${mKey} ${camp.country} - Pause ${tag}${aK} given ${liftLabel} (${v.toFixed(2)}%)`;  
-              }  
-            } else {  
-              justification = `${mKey} ${camp.country} - Maintain ${tag}${aK} (Learning Phase): Negative lift (${v.toFixed(2)}%) observed but hasn't reached maturity (Current: ${daysLiveCount}d / Required: 14d).`;  
-            }  
-          }
-
-          tableData.push({ id: `CAMP_${market}_${ci}_P_${gK}_${aK}`, country: mKey, campaign: camp.country, age: aK === 'total' ? 'GenPop' : aK, gender: gK === 'total' ? 'GenPop' : gK.toUpperCase(), recommendation: rec, justification });  
-        };
-
-        const gpNode = metrics.total?.total || { v: 0, sig: 0 };  
-        if (!isScalingRestricted && gpNode.v !== 'NA' && gpNode.sig === 1 && gpNode.v > 0.001) {  
-          tableData.push({ id: `CAMP_${market}_${ci}_SC`, country: mKey, campaign: camp.country, age: "GenPop", gender: "GenPop", recommendation: "SCALE", justification: `${mKey} ${camp.country} - Scale GenPop: Stat-sig positive lift (+${gpNode.v.toFixed(2)}%) observed.` });  
-        }
-
-        const getAgesToTrack = (gK) => {  
-          let dirs = [];  
-          ['18-24', '25-34', '35+'].forEach(a => {  
-            if (metrics[gK]?.[a]?.v !== 'NA' && (metrics[gK]?.[a]?.v || 0) < -0.0001) dirs.push(a);  
-          });  
-          return dirs;  
-        };
-
-        const mNeg = getAgesToTrack('male');  
-        const fNeg = getAgesToTrack('female');  
-        const common = mNeg.filter(a => fNeg.includes(a));
-
-        common.forEach(a => addPauseOrMaintain('total', a, 'G'));  
-        mNeg.filter(a => !common.includes(a)).forEach(a => addPauseOrMaintain('male', a, 'M'));  
-        fNeg.filter(a => !common.includes(a)).forEach(a => addPauseOrMaintain('female', a, 'F'));  
-      });  
-    });  
-    const merged = [...tableData, ...manualPointers].filter(r => !deletedRowIds.has(r.id));  
-    return merged.map(r => editedRows[r.id] ? { ...r, ...editedRows[r.id] } : r);  
+  const recommendationRows = useMemo(() => {
+    const tableData = buildRecommendationRows(regionalData);
+    const merged = [...tableData, ...manualPointers].filter(r => !deletedRowIds.has(r.id));
+    return merged.map(r => editedRows[r.id] ? { ...r, ...editedRows[r.id] } : r);
   }, [regionalData, manualPointers, deletedRowIds, editedRows]);
 
   const handleAddNewManual = () => { if (!newManualForm.campaign) return; setManualPointers(p => [...p, { ...newManualForm, id: `MANUAL_${Date.now()}` }]); setIsAddingManual(false); setNewManualForm({ country: 'APAC', campaign: '', age: 'GenPop', gender: 'GenPop', recommendation: 'MAINTAIN', justification: '' }); };
