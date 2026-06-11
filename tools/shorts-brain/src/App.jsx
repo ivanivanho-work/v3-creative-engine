@@ -522,7 +522,7 @@ const copyToClipboardFunc = (text) => {
   textArea.value = text;  
   document.body.appendChild(textArea);  
   textArea.select();  
-  try { document.execCommand('copy'); } catch (err) { }  
+  try { document.execCommand('copy'); } catch { /* best-effort fallback */ }  
   document.body.removeChild(textArea);  
 };
 
@@ -1086,6 +1086,9 @@ const App = ({ userEmail }) => {
   const isDataIngestionAdmin = DATA_INGESTION_ADMINS.includes((userEmail || '').toLowerCase());
 
   const initialLoadDone = useRef(false);
+  // Points at the scrollable <main> so Export PDF can capture the full
+  // content height/width rather than just the visible viewport.
+  const exportRef = useRef(null);
 
   const [tabMarketFilter, setTabMarketFilter] = useState({ 'AlwaysOn': 'India', 'ScaledCreation': 'India', 'Effects': 'India', 'Trends': 'India', 'CultMo': 'India', 'ArtMo': 'India', 'GenAI Hub': 'India' });
   const [subTabFilter, setSubTabFilter] = useState({ 'AlwaysOn': 'SSC', 'ScaledCreation': '', 'Effects': '', 'Trends': '', 'CultMo': '', 'ArtMo': '', 'GenAI Hub': '' });
@@ -1220,13 +1223,18 @@ const App = ({ userEmail }) => {
           if (d.quarterStart) setQuarterStart(d.quarterStart);  
           setActiveTab('OKR');
           initialLoadDone.current = true;
-        }  
-      }  
-    });  
-    return () => unsub();  
+        }
+      }
+    }, (err) => {
+      // Most likely cause: Firestore rules not deployed for shortsbrain_data
+      // (permission-denied) — without this handler the failure is invisible
+      // and the app just looks like it forgot everything on refresh.
+      console.error('Persistent memory restore failed:', err);
+    });
+    return () => unsub();
   }, [user, rebuildState]);
 
-  const appId = typeof __app_id !== 'undefined' ? __app_id : 'shorts-brain-v2';
+  const appId = globalThis.__app_id ?? 'shorts-brain-v2';
 
   const allowed = useMemo(() =>  
     (activeTab === 'Global Hub' || activeTab === 'AlwaysOn')  
@@ -1599,31 +1607,39 @@ const App = ({ userEmail }) => {
       setActiveTab('OKR'); // EXPLICIT ROUTING SNAP FOR UPLOADER
       setShowIngestion(false);
 
-      // BUG FIX 1: ATOMIC WRITE SEQUENCE  
-      const batchId = Date.now().toString();  
-      const CHUNK_SIZE = 100;  
-      const chunks = [];  
-      for (let i = 0; i < masterList.length; i += CHUNK_SIZE) {  
-        chunks.push(masterList.slice(i, i + CHUNK_SIZE));  
+      // BUG FIX 1: ATOMIC WRITE SEQUENCE
+      // Scoped try/catch: a cloud-save failure must not look like a successful
+      // analysis — without this, permission errors were swallowed by the outer
+      // catch and uploads silently vanished on the next refresh.
+      try {
+        const batchId = Date.now().toString();
+        const CHUNK_SIZE = 100;
+        const chunks = [];
+        for (let i = 0; i < masterList.length; i += CHUNK_SIZE) {
+          chunks.push(masterList.slice(i, i + CHUNK_SIZE));
+        }
+
+        const uploadPromises = chunks.map((chunkData, i) =>
+          setDoc(doc(db, "shortsbrain_data", `chunk_${batchId}_${i}`), { data: chunkData })
+        );
+        await Promise.all(uploadPromises);
+
+        await setDoc(doc(db, "shortsbrain_data", "latest"), {
+          batchId: batchId,
+          chunkCount: chunks.length,
+          reportingDate: dGlobalD,
+          quarterStart: dQuarterStart,
+          lastUpdated: new Date().toISOString()
+        });
+
+        await saveSnapshotToCloud({ masterList, reportingDate: dGlobalD, quarterStart: dQuarterStart, batchId });
+        logUsageEvent('snapshot_saved', { week_id: getWeekId(dGlobalD) });
+      } catch (saveErr) {
+        console.error('Cloud save failed:', saveErr);
+        window.alert(`Analysis complete, but saving to cloud memory failed — this data will NOT survive a refresh.\n\nError: ${saveErr?.message || saveErr}`);
       }
 
-      const uploadPromises = chunks.map((chunkData, i) =>  
-        setDoc(doc(db, "shortsbrain_data", `chunk_${batchId}_${i}`), { data: chunkData })  
-      );  
-      await Promise.all(uploadPromises);
-
-      await setDoc(doc(db, "shortsbrain_data", "latest"), {  
-        batchId: batchId,  
-        chunkCount: chunks.length,  
-        reportingDate: dGlobalD,  
-        quarterStart: dQuarterStart,  
-        lastUpdated: new Date().toISOString()  
-      });
-
-      await saveSnapshotToCloud({ masterList, reportingDate: dGlobalD, quarterStart: dQuarterStart, batchId });
-      logUsageEvent('snapshot_saved', { week_id: getWeekId(dGlobalD) });
-
-    } catch (err) { console.error("Analysis failed:", err); } finally { setIsAnalyzing(false); }  
+    } catch (err) { console.error("Analysis failed:", err); } finally { setIsAnalyzing(false); }
   };
 
   const handleFileUpload = (s, t, f, k) => setUploadedFiles(prev => {  
@@ -1637,30 +1653,83 @@ const App = ({ userEmail }) => {
     if (isExporting) return;
     setIsExporting(true);
     try {
-      const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
+      const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
         import('html2canvas'),
         import('jspdf'),
       ]);
-      const canvas = await html2canvas(document.documentElement, {
+
+      // Capture the content pane, not document.documentElement: the app shell
+      // is h-screen/overflow-hidden, so the documentElement's scroll size IS
+      // the viewport — capturing it only ever grabbed what was on screen.
+      const target = exportRef.current;
+      if (!target) throw new Error('Content pane not mounted');
+
+      // Widest clipped child (the metric tables scroll horizontally) decides
+      // how wide the capture must be so off-screen columns are included.
+      let extraWidth = 0;
+      target.querySelectorAll('.overflow-x-auto, .overflow-auto').forEach(el => {
+        if (el.scrollWidth > el.clientWidth) {
+          extraWidth = Math.max(extraWidth, el.scrollWidth - el.clientWidth);
+        }
+      });
+      const captureWidth = target.scrollWidth + extraWidth;
+      const captureHeight = target.scrollHeight;
+      // "Zoom out" automatically: cap the render scale so huge tables stay
+      // inside browser canvas limits instead of failing the export.
+      const MAX_CANVAS_EDGE = 16000;
+      const scale = Math.max(0.5, Math.min(1.5, MAX_CANVAS_EDGE / captureWidth, MAX_CANVAS_EDGE / captureHeight));
+
+      const canvas = await html2canvas(target, {
         backgroundColor: '#0a0a0a',
-        scale: 1.5,
+        scale,
         useCORS: true,
         logging: false,
-        windowWidth: document.documentElement.scrollWidth,
-        windowHeight: document.documentElement.scrollHeight,
+        width: captureWidth,
+        height: captureHeight,
+        windowWidth: captureWidth,
+        windowHeight: captureHeight,
+        onclone: (doc) => {
+          // Release every clipping frame in the clone so the full content
+          // lays out: scroll containers, the h-screen app shell, and the
+          // sticky first column (which double-paints at full size).
+          doc.querySelectorAll('.overflow-hidden, .overflow-auto, .overflow-x-auto, .overflow-y-auto').forEach(el => {
+            el.style.overflow = 'visible';
+            el.style.maxHeight = 'none';
+          });
+          doc.querySelectorAll('.h-screen').forEach(el => { el.style.height = 'auto'; });
+          doc.querySelectorAll('table').forEach(el => {
+            el.style.width = 'max-content';
+            el.style.minWidth = '100%';
+          });
+          doc.querySelectorAll('.sticky').forEach(el => { el.style.position = 'static'; });
+        },
       });
-      const orientation = canvas.width >= canvas.height ? 'landscape' : 'portrait';
-      const pdf = new jsPDF({ orientation, unit: 'pt', format: 'a4' });
-      const pageW = pdf.internal.pageSize.getWidth();
-      const pageH = pdf.internal.pageSize.getHeight();
-      const ratio = Math.min(pageW / canvas.width, pageH / canvas.height);
-      const w = canvas.width * ratio;
-      const h = canvas.height * ratio;
-      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', (pageW - w) / 2, (pageH - h) / 2, w, h);
+
+      // Slice the tall canvas into A4-landscape-proportioned pages.
+      const pageHeightPx = Math.floor(canvas.width * (210 / 297));
+      const pageCount = Math.max(1, Math.ceil(canvas.height / pageHeightPx));
+      const pdf = new jsPDF({ orientation: 'landscape', unit: 'px', format: [canvas.width, pageHeightPx], hotfixes: ['px_scaling'] });
+
+      for (let i = 0; i < pageCount; i++) {
+        if (i > 0) pdf.addPage([canvas.width, pageHeightPx], 'landscape');
+        const slice = document.createElement('canvas');
+        slice.width = canvas.width;
+        slice.height = Math.min(pageHeightPx, canvas.height - i * pageHeightPx);
+        const ctx = slice.getContext('2d');
+        ctx.fillStyle = '#0a0a0a';
+        ctx.fillRect(0, 0, slice.width, slice.height);
+        ctx.drawImage(canvas, 0, i * pageHeightPx, canvas.width, slice.height, 0, 0, canvas.width, slice.height);
+        pdf.addImage(slice.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, slice.width, slice.height);
+      }
+
       const safeTab = String(activeTab).replace(/\s+/g, '');
       pdf.save(`ShortsBrain_${safeTab}_${latestGlobalDate || 'Snapshot'}.pdf`);
+      logUsageEvent('pdf_exported', { tab_id: activeTab, pages: pageCount });
     } catch (err) {
+      // Surface the failure — a silent catch here is indistinguishable from
+      // the button doing nothing.
       console.error('PDF export failed:', err);
+      window.alert(`PDF export failed: ${err?.message || err}`);
     } finally {
       setIsExporting(false);
     }
@@ -1786,7 +1855,7 @@ const App = ({ userEmail }) => {
           <h4 className="text-sm font-bold text-white uppercase tracking-widest">{activeTab}</h4>  
           <button type="button" onClick={handleExport} disabled={isExporting} className="bg-white text-black px-6 py-2.5 rounded-lg text-[10px] font-bold uppercase hover:bg-[#e0e0e0] shadow-xl flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-wait">{isExporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}{isExporting ? 'Exporting…' : 'Export PDF'}</button>
         </header>  
-        <main className="flex-1 overflow-auto p-10 relative no-scrollbar">  
+        <main ref={exportRef} className="flex-1 overflow-auto p-10 relative no-scrollbar">
           {activeTab === 'OKR' && <OKRAndRecsView globalData={globalData} regionalData={regionalData} latestDate={latestGlobalDate} quarterStart={quarterStart} />}  
           {(activeTab === 'Global Hub' || activeTab === 'Market Hub') && (
             <div className="space-y-8 animate-in fade-in duration-500">
