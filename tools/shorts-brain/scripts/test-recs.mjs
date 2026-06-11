@@ -115,7 +115,7 @@ check('stats: 5 scanned, 5 evaluated, 1 no-signal, 0 ended',
 check('no recs for non-sig positive campaign', byCamp('QuietCamp').length === 0,
   `rows: ${JSON.stringify(byCamp('QuietCamp'))}`);
 
-console.log('\n[S5] CSV-paused campaigns are still evaluated (PR #58 behaviour)');
+console.log('\n[S5] Cells already paused via the instruction CSV are skipped from directives');
 const pausedRows = JSON.parse(JSON.stringify(rows));
 pausedRows.forEach(r => {
   Object.values(r.metrics).forEach(genders =>
@@ -123,9 +123,23 @@ pausedRows.forEach(r => {
       Object.values(ages).forEach(n => { n.isPaused = true; })));
 });
 const pausedRecs = buildRecommendationRows({ India: pausedRows });
-check('PAUSE rec still emitted when CSV pauses the campaign',
-  pausedRecs.some(r => r.campaign === 'NoMetaCamp' && r.recommendation === 'PAUSE'),
+check('no PAUSE rec emitted for fully-paused campaign (team already decided)',
+  !pausedRecs.some(r => r.campaign === 'NoMetaCamp' && r.recommendation === 'PAUSE'),
   `rows: ${JSON.stringify(pausedRecs.filter(r => r.campaign === 'NoMetaCamp'))}`);
+check('no SCALE rec emitted for paused stat-sig winner (team already decided)',
+  !pausedRecs.some(r => r.campaign === 'WinnerCamp' && r.recommendation === 'SCALE'),
+  `rows: ${JSON.stringify(pausedRecs.filter(r => r.campaign === 'WinnerCamp'))}`);
+
+// Partial pause: male 18-24 paused, female 18-24 still active with negative lift.
+// Only the female cell should fire; we should NOT emit a GenPop "both negative" row.
+const partialRows = JSON.parse(JSON.stringify(rows));
+const camp = partialRows.find(r => r.country === 'NoMetaCamp');
+camp.metrics['DAU-SCT']['male']['18-24'].isPaused = true;
+const partialRecs = buildRecommendationRows({ India: partialRows });
+const noMetaPartial = partialRecs.filter(r => r.campaign === 'NoMetaCamp');
+check('partial pause: only female 18-24 surfaces, no male or GenPop row',
+  noMetaPartial.length === 1 && noMetaPartial[0].gender === 'FEMALE' && noMetaPartial[0].age === '18-24',
+  `rows: ${JSON.stringify(noMetaPartial)}`);
 
 console.log(failures === 0 ? '\nALL CHECKS PASSED' : `\n${failures} CHECK(S) FAILED`);
 process.exit(failures === 0 ? 0 : 1);

@@ -487,14 +487,19 @@ export const buildRecommendationRows = (regionalData, statsOut = null) => {
       };
 
       const gpNode = metrics.total?.total || { v: 0, sig: 0 };
-      if (!isScalingRestricted && gpNode.v !== 'NA' && gpNode.sig === 1 && gpNode.v > 0.001) {
+      if (!isScalingRestricted && !gpNode.isPaused && gpNode.v !== 'NA' && gpNode.sig === 1 && gpNode.v > 0.001) {
         tableData.push({ id: `CAMP_${market}_${ci}_SC`, country: mKey, campaign: camp.country, age: "GenPop", gender: "GenPop", recommendation: "SCALE", justification: `${mKey} ${camp.country} - Scale GenPop: Stat-sig positive lift (+${gpNode.v.toFixed(2)}%) observed.` });
       }
 
+      // Cells already paused via the instruction CSV are skipped — the team
+      // has already decided to pull that demographic; re-surfacing it as a
+      // PAUSE directive is noise. Cells without explicit instructions still
+      // flow through normally.
       const getAgesToTrack = (gK) => {
         let dirs = [];
         ['18-24', '25-34', '35+'].forEach(a => {
-          if (metrics[gK]?.[a]?.v !== 'NA' && (metrics[gK]?.[a]?.v || 0) < -0.0001) dirs.push(a);
+          const node = metrics[gK]?.[a];
+          if (node?.v !== 'NA' && !node?.isPaused && (node?.v || 0) < -0.0001) dirs.push(a);
         });
         return dirs;
       };
