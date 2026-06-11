@@ -424,16 +424,13 @@ export const parseCSVData = (text, existingAcc = {}, metaMap = {}, searchPriorit
 export const buildRecommendationRows = (regionalData, statsOut = null) => {
   const tableData = [];
   const scalingRestricted = ['SHELF', 'SSC', 'UTS', 'MVR', 'UTSSFV'];
-  const stats = { total: 0, skippedEnded: 0, skippedHubTab: 0, evaluated: 0, noSignal: 0 };
+  const stats = { total: 0, skippedEnded: 0, evaluated: 0, noSignal: 0 };
 
   MARKET_SEGMENTS.forEach(market => {
     const allCampsInMarket = regionalData[market] || [];
     allCampsInMarket.forEach((camp, ci) => {
       stats.total += 1;
       if (isCampaignEnded(camp.optimisationEndDate, camp.campaignEndDate)) { stats.skippedEnded += 1; return; }
-      // Campaign Hub module rows are evaluated in their own tabs, not in pause/scale recs.
-      const campTab = camp.meta?.tab ? cleanStr(camp.meta.tab) : null;
-      if (campTab && CAMPAIGN_CHILDREN.some(child => eq(child.id, campTab) || eq(child.label, campTab))) { stats.skippedHubTab += 1; return; }
       stats.evaluated += 1;
       const emittedBefore = tableData.length;
       const metrics = camp.metrics?.['DAU-SCT'] || {};
@@ -901,7 +898,7 @@ const OKRAndRecsView = ({ globalData, regionalData, latestDate, quarterStart }) 
               <div className="mt-3 text-[#777] text-[10px] uppercase tracking-wider leading-relaxed max-w-2xl mx-auto">
                 {recStats.total === 0
                   ? 'No campaigns found in the Market Holdback data — check that the per-market Holdback CSVs were uploaded and analyzed.'
-                  : `${recStats.total} campaigns scanned — ${recStats.skippedEnded} ended, ${recStats.skippedHubTab} routed to Campaign Hub tabs (excluded from directives), ${recStats.noSignal} evaluated without a qualifying signal (no negative age-level lift and no stat-sig positive GenPop lift).`}
+                  : `${recStats.total} campaigns scanned — ${recStats.skippedEnded} ended, ${recStats.evaluated} evaluated, ${recStats.noSignal} of those without a qualifying signal (no negative age-level lift and no stat-sig positive GenPop lift).`}
               </div>
             </div>
           )}
