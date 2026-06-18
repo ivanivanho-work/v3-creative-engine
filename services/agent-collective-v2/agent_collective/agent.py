@@ -101,7 +101,7 @@ TEMPLATE_CATALOG: dict[str, dict] = {
     #       note          Guidance for the prompter on how to populate this field
     #     note          Prose guidance for the creative director / prompter
     # -----------------------------------------------------------------------
-    "Photo to Video": {
+    "Ingredients to Video": {
         "template_id": "veo_shorts_v1",
         "template_version": "1.0",
         "selected_image_count": 2,
