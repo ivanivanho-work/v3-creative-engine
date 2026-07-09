@@ -313,7 +313,8 @@ That's it. The pipeline reads the catalog and handles the rest.
 
 ---
 
-## Checklist before submitting a catalog entry
+## Checklist before submittin
+g a catalog entry
 
 - [ ] `template_id` matches the Remotion template identifier exactly (case-sensitive)
 - [ ] Every AI-generated slot has a corresponding entry in `slots`
